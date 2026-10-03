@@ -91,11 +91,13 @@ export const updateStatusHandlers: GatewayRequestHandlers = {
           context?.logGateway?.warn(
             `update.status checkout refresh failed: ${formatErrorMessage(err)}`,
           );
-          respond(false, undefined, {
-            code: "UNAVAILABLE",
-            message: "Could not check the latest update. Try again.",
-          });
-          return;
+          if (params.refreshCheckout === true) {
+            respond(false, undefined, {
+              code: "UNAVAILABLE",
+              message: "Could not check the latest update. Try again.",
+            });
+            return;
+          }
         }
       }
       mark("reconciliation");

@@ -161,14 +161,14 @@ class SidebarUpdateCard extends OpenClawLightDomContentsElement {
     }
   };
 
-  private readonly prepareUpdate = async () => {
+  private readonly startUpdate = async () => {
     const campaign = this.updateSchedule?.campaign;
     const busy = this.updateBusy || campaign?.state === "applying";
     const viaNativeApp = hasNativeUpdateBridge();
     const canStart = () => (viaNativeApp ? this.canNativeUpdate : this.canUpdate);
     // Native-app updates own their discovery; Gateway freshness cannot gate them.
     if (busy || !canStart() || (!viaNativeApp && !(await this.checkTarget()))) {
-      return false;
+      return;
     }
     if (
       !this.isConnected ||
@@ -180,19 +180,12 @@ class SidebarUpdateCard extends OpenClawLightDomContentsElement {
       this.updateSchedule?.campaign?.state === "applying" ||
       !isUpdateActionable(this.updateAvailable, this.updateSchedule, false)
     ) {
-      return false;
+      return;
     }
-    return true;
+    this.confirmUpdate(undefined, viaNativeApp);
   };
 
-  private readonly startUpdate = async () => {
-    if (await this.prepareUpdate()) {
-      this.confirmUpdate();
-    }
-  };
-
-  private confirmUpdate(existingRun?: UpdateRunRecord) {
-    const viaNativeApp = hasNativeUpdateBridge();
+  private confirmUpdate(existingRun?: UpdateRunRecord, viaNativeApp = hasNativeUpdateBridge()) {
     void confirmAndStartUpdate({
       existingRun,
       prepareRetry: viaNativeApp ? undefined : this.prepareRetry,
@@ -205,8 +198,8 @@ class SidebarUpdateCard extends OpenClawLightDomContentsElement {
       watchUpdateProgress: this.watchUpdateProgress,
       updateAvailable: this.updateAvailable,
       updateSchedule: this.updateSchedule,
-      // Read the bridge at click time: a Mac app that installed it
-      // after the last availability event still owns this update.
+      // Keep the preflight owner; a lost native bridge must use the
+      // runtime's fresh Gateway fallback and require reconfirmation.
       viaNativeApp,
     });
   }

@@ -323,11 +323,13 @@ describe("interactive Dev update discovery", () => {
   );
 
   it.each([
-    { tag: "v2026.10.0-beta.1", channel: "beta" },
-    { tag: "v2026.9.30", channel: "stable" },
+    { tag: "v2026.10.0-beta.1", channel: "beta", fetchOk: true },
+    { tag: "v2026.9.30", channel: "stable", fetchOk: true },
+    { tag: "v2026.10.0-beta.1", channel: "beta", fetchOk: false },
+    { tag: "v2026.9.30", channel: "stable", fetchOk: false },
   ])(
-    "retires an announced Dev campaign after discovering $channel Git identity",
-    async ({ tag, channel }) => {
+    "retires an announced Dev campaign after discovering $channel Git identity (fetchOk=$fetchOk)",
+    async ({ tag, channel, fetchOk }) => {
       const cfg: OpenClawConfig = { update: { auto: { enabled: true } } };
       const published = vi.fn();
       mockDevGitStatus({ upstreamSha: "obsolete-dev-target" });
@@ -341,10 +343,19 @@ describe("interactive Dev update discovery", () => {
       expect(campaign.getState()?.state).toBe("countdown");
       published.mockClear();
       lifecycle.onUpdateScheduleChange = published;
-      const fresh = createDevGitStatus({ branch: "HEAD" });
+      const fresh = createDevGitStatus({
+        branch: "HEAD",
+        fetchOk,
+        ...(fetchOk ? {} : { upstreamSha: null, ahead: null, behind: null }),
+      });
       vi.mocked(checkUpdateStatus).mockResolvedValue({ ...fresh, git: { ...fresh.git, tag } });
 
-      await refreshGatewayUpdateStatus(() => cfg);
+      const refresh = refreshGatewayUpdateStatus(() => cfg);
+      if (fetchOk) {
+        await refresh;
+      } else {
+        await expect(refresh).rejects.toThrow("could not be checked");
+      }
 
       expect(getUpdateSchedule()?.channel).toBe(channel);
       expect(getUpdateSchedule()?.target).toBeUndefined();

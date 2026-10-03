@@ -72,6 +72,79 @@ afterEach(() => {
 
 describe("SidebarUpdateCard", () => {
   it.each([false, true])(
+    "retains admitted native ownership when the bridge disappears before confirmation=%s",
+    async (bridgeLost) => {
+      const restoreDialog = installDialogPolyfill();
+      const postMessage = vi.fn();
+      Object.defineProperty(window, "webkit", {
+        configurable: true,
+        value: { messageHandlers: { openclawUpdate: { postMessage } } },
+      });
+      const check = createDeferred<boolean>();
+      const update: UpdateAvailable = {
+        channel: "dev",
+        currentVersion: "1.0.0",
+        latestVersion: "1.0.0",
+        currentSha: "a".repeat(40),
+        upstreamSha: "b".repeat(40),
+        upstreamRef: "origin/main",
+        commitsBehind: 7,
+      };
+      const fresh = { ...update, upstreamSha: "c".repeat(40), commitsBehind: 9 };
+      const element = await mount(update);
+      element.canNativeUpdate = true;
+      element.compact = true;
+      element.onUpdate = vi.fn();
+      element.onCheckStatus = vi.fn(async () => false);
+      element.prepareRetry = vi.fn(async () =>
+        (await check.promise) ? { updateAvailable: fresh, updateSchedule: null } : null,
+      );
+      await element.updateComplete;
+      try {
+        element.querySelector<HTMLButtonElement>(".sidebar-update-card__action")!.click();
+        // Remove the bridge in the same turn, before any preflight promise continuation.
+        if (bridgeLost) {
+          Reflect.deleteProperty(window, "webkit");
+        }
+        await vi.dynamicImportSettled();
+        const { modal } = await getRenderedModalDialog(document.body);
+        const nativeConfirm = [...modal.querySelectorAll("button")].find(
+          (button) => button.textContent?.trim() === "Update Mac app and restart",
+        );
+        expect(nativeConfirm).toBeDefined();
+        expect(element.onCheckStatus).not.toHaveBeenCalled();
+        nativeConfirm!.click();
+        if (bridgeLost) {
+          await vi.waitFor(() => expect(element.prepareRetry).toHaveBeenCalledOnce());
+          expect(element.onUpdate).not.toHaveBeenCalled();
+          check.resolve(true);
+          await vi.dynamicImportSettled();
+          const refreshed = await getRenderedModalDialog(document.body);
+          expect(refreshed.modal.textContent).toContain("cccccccc");
+          expect(refreshed.modal.textContent).toContain("9 commits behind");
+          expect(refreshed.modal.textContent).not.toContain("bbbbbbbb");
+          expect(element.onUpdate).not.toHaveBeenCalled();
+          const gatewayConfirm = [...refreshed.modal.querySelectorAll("button")].find(
+            (button) => button.textContent?.trim() === "Update and restart",
+          );
+          expect(gatewayConfirm).toBeDefined();
+          gatewayConfirm!.click();
+          await vi.waitFor(() => expect(element.onUpdate).toHaveBeenCalledOnce());
+          expect(postMessage).not.toHaveBeenCalled();
+        } else {
+          await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+          expect(element.prepareRetry).not.toHaveBeenCalled();
+          expect(element.onUpdate).not.toHaveBeenCalled();
+        }
+      } finally {
+        check.resolve(false);
+        await vi.dynamicImportSettled();
+        document.querySelector("openclaw-modal-dialog")?.dispatchEvent(new Event("modal-cancel"));
+        restoreDialog();
+      }
+    },
+  );
+  it.each([false, true])(
     "rechecks the target before retrying a failed run with successful discovery=%s",
     async (successful) => {
       const restoreDialog = installDialogPolyfill();

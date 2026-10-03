@@ -715,3 +715,56 @@ it.each([false, true])(
     expect(unowned.schedule.install).toEqual({ kind: "unknown" });
   },
 );
+
+it.each([false, true])(
+  "preserves immutable status after optional discovery fails (refreshCheckout=%s)",
+  async (refreshCheckout) => {
+    const immutable = {
+      root: "/opt/openclaw",
+      currentSha: "a".repeat(40),
+      currentPath: `/opt/openclaw/releases/${"a".repeat(40)}`,
+    };
+    install.mockResolvedValueOnce({
+      root: immutable.currentPath,
+      installReceipt: null,
+      status: {
+        root: immutable.currentPath,
+        installKind: "immutable",
+        packageManager: "unknown",
+        immutable,
+      },
+    });
+    await lifecycle.initialize();
+    install.mockRejectedValueOnce(new Error("discovery unavailable"));
+    const respond = vi.fn();
+    const warn = vi.fn();
+
+    await updateStatusHandlers["update.status"]!({
+      params: { refreshCheckout },
+      respond,
+      context: { getRuntimeConfig: () => ({}), logGateway: { warn } },
+    } as never);
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(resolveManager).not.toHaveBeenCalled();
+    if (refreshCheckout) {
+      expect(respond).toHaveBeenCalledWith(false, undefined, {
+        code: "UNAVAILABLE",
+        message: "Could not check the latest update. Try again.",
+      });
+      expect(history).not.toHaveBeenCalled();
+    } else {
+      expect(respond).toHaveBeenCalledWith(
+        true,
+        expect.objectContaining({
+          schedule: {
+            channel: "dev",
+            autoEnabled: false,
+            install: { kind: "immutable", immutable },
+          },
+        }),
+      );
+      expect(history).toHaveBeenCalledOnce();
+    }
+  },
+);

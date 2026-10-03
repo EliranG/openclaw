@@ -117,7 +117,12 @@ export function refreshGatewayUpdateStatus(getConfig: () => OpenClawConfig): Pro
         status.error ||
         (channel === "dev" && status.installKind === "unknown") ||
         resolveGitScheduleStatus(status, installReceipt, root)?.status === "unavailable";
-      const refreshedChannel = unavailable
+      // A failed remote fetch does not invalidate freshly read local Git identity.
+      const identityUnavailable =
+        status.error ||
+        status.installKind === "unknown" ||
+        (status.installKind === "git" && (!status.git || status.git.error));
+      const refreshedChannel = identityUnavailable
         ? channel
         : resolveEffectiveUpdateChannel({
             configChannel: normalizeUpdateChannel(getConfig().update?.channel),
@@ -148,9 +153,23 @@ export function refreshGatewayUpdateStatus(getConfig: () => OpenClawConfig): Pro
           next: published,
           onUpdateScheduleChange: lifecycle.onUpdateScheduleChange,
         });
+      const retireGitTarget = () => {
+        lifecycle.publicationGeneration += 1;
+        setUpdateAvailableCache({
+          next: null,
+          onUpdateAvailableChange: lifecycle.onUpdateAvailableChange,
+        });
+        // Retire the schedule first so the campaign callback cannot republish its old target.
+        publishSchedule(withoutUpdateTarget(next));
+        lifecycle.campaign?.clear();
+      };
       if (unavailable) {
-        // A failed observation cannot revoke the last announced campaign.
-        publishSchedule(next);
+        if (refreshedChannel !== channel) {
+          retireGitTarget();
+        } else {
+          // A failed observation alone cannot revoke the last announced campaign.
+          publishSchedule(next);
+        }
         throw new Error("The latest Dev update could not be checked. Try again.");
       }
       if (refreshedChannel !== "dev" || status.installKind !== "git") {
@@ -167,14 +186,7 @@ export function refreshGatewayUpdateStatus(getConfig: () => OpenClawConfig): Pro
           publishSchedule(next);
           return;
         }
-        lifecycle.publicationGeneration += 1;
-        setUpdateAvailableCache({
-          next: null,
-          onUpdateAvailableChange: lifecycle.onUpdateAvailableChange,
-        });
-        // Retire the schedule first so the campaign callback cannot republish its old target.
-        publishSchedule(withoutUpdateTarget(next));
-        lifecycle.campaign?.clear();
+        retireGitTarget();
         return;
       }
       const update = await resolveDevGitUpdate(status, signal);
