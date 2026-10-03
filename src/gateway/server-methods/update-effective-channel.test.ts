@@ -159,7 +159,7 @@ describe("update.status effective channel", () => {
     const schedule = { channel: "dev" as const, autoEnabled: false };
     try {
       await vi.waitFor(() => expect(refreshGatewayUpdateStatusMock).toHaveBeenCalledOnce());
-      expect(refreshGatewayUpdateStatusMock.mock.calls[0]?.[0]).toBe(config);
+      expect(refreshGatewayUpdateStatusMock.mock.calls[0]?.[0]).toBe(context.getRuntimeConfig);
       expect(getUpdateScheduleMock).not.toHaveBeenCalled();
       expect(respond).not.toHaveBeenCalled();
       getUpdateScheduleMock.mockReturnValue(schedule);

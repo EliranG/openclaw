@@ -81,9 +81,9 @@ export const updateStatusHandlers: GatewayRequestHandlers = {
       }
       mark("checkout");
       const config = context?.getRuntimeConfig?.();
-      if (params.refreshCheckout === true && config) {
+      if (params.refreshCheckout === true && context?.getRuntimeConfig) {
         try {
-          await refreshGatewayUpdateStatus(config);
+          await refreshGatewayUpdateStatus(context.getRuntimeConfig);
         } catch (err) {
           context?.logGateway?.warn(
             `update.status checkout refresh failed: ${formatErrorMessage(err)}`,

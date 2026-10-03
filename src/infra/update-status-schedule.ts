@@ -56,7 +56,8 @@ export function getGatewayUpdateSchedule(
 }
 
 /** Refreshes read-only checkout and immutable-generation facts used by update.status. */
-export function refreshGatewayUpdateStatus(cfg: OpenClawConfig): Promise<void> {
+export function refreshGatewayUpdateStatus(getConfig: () => OpenClawConfig): Promise<void> {
+  const cfg = getConfig();
   const lifecycle = currentUpdateCheckLifecycle();
   const pending = lifecycle.refreshes.get(cfg);
   if (pending) {
@@ -72,14 +73,33 @@ export function refreshGatewayUpdateStatus(cfg: OpenClawConfig): Promise<void> {
           currentVersion: VERSION,
           ...(await lifecycle.initialize()).status,
         }).channel;
-      if (channel !== "dev" && (await lifecycle.initialize()).status.installKind !== "immutable") {
+      // A config change must not be confused with install-kind adoption below.
+      const channelIdentity =
+        channel === "dev" ? lifecycle.installStatus?.status : (await lifecycle.initialize()).status;
+      const currentChannel = (discoveredStatus = channelIdentity) => {
+        // Compare config policy against the same identity across every await.
+        // Fresh installation facts are adopted separately after this guard.
+        const status = channelIdentity ?? discoveredStatus;
+        return (
+          normalizeUpdateChannel(getConfig().update?.channel) ??
+          (status
+            ? resolveEffectiveUpdateChannel({ currentVersion: VERSION, ...status }).channel
+            : channel)
+        );
+      };
+      if (channel !== "dev" && channelIdentity?.installKind !== "immutable") {
+        // Even a no-op refresh must not confirm a channel changed during initialization.
+        if (currentChannel() !== channel) {
+          throw new Error("Update check was superseded by a channel change. Try again.");
+        }
         return;
       }
       const generation = lifecycle.publicationGeneration;
-      const assertCurrent = () => {
+      const assertCurrent = (discoveredStatus = channelIdentity) => {
         const schedule = getUpdateSchedule();
         const campaign = lifecycle.campaign?.getState();
         if (
+          currentChannel(discoveredStatus) !== channel ||
           generation !== lifecycle.publicationGeneration ||
           campaign?.state === "applying" ||
           !lifecycle.isCurrent() ||
@@ -92,14 +112,26 @@ export function refreshGatewayUpdateStatus(cfg: OpenClawConfig): Promise<void> {
       };
       assertCurrent();
       const { root, status, installReceipt } = await resolveStartupInstallStatus(true, signal);
-      assertCurrent();
+      assertCurrent(status);
+      const unavailable =
+        status.error ||
+        (channel === "dev" && status.installKind === "unknown") ||
+        resolveGitScheduleStatus(status, installReceipt, root)?.status === "unavailable";
+      const refreshedChannel = unavailable
+        ? channel
+        : resolveEffectiveUpdateChannel({
+            configChannel: normalizeUpdateChannel(getConfig().update?.channel),
+            currentVersion: VERSION,
+            ...status,
+          }).channel;
       // Repair failed discovery and invalidate generation facts when the adopted
       // installation or prepared receipt changes, including loss of ownership.
       if (
         (lifecycle.installStatus?.status.error && !status.error) ||
         (!status.error &&
           status.installKind !== "unknown" &&
-          lifecycle.installStatus?.status.installKind !== status.installKind) ||
+          (lifecycle.installStatus?.status.installKind !== status.installKind ||
+            refreshedChannel !== channel)) ||
         lifecycle.installStatus?.status.installKind === "immutable" ||
         status.installKind === "immutable"
       ) {
@@ -107,29 +139,25 @@ export function refreshGatewayUpdateStatus(cfg: OpenClawConfig): Promise<void> {
       }
       const schedule = getUpdateSchedule();
       const current =
-        schedule?.channel === channel
+        schedule?.channel === refreshedChannel
           ? schedule
-          : { channel, autoEnabled: Boolean(cfg.update?.auto?.enabled) };
+          : { channel: refreshedChannel, autoEnabled: Boolean(getConfig().update?.auto?.enabled) };
       const next = withUpdateInstallStatus(current, status, true, installReceipt, root);
       const publishSchedule = (published: UpdateScheduleState) =>
         setUpdateScheduleCache({
           next: published,
           onUpdateScheduleChange: lifecycle.onUpdateScheduleChange,
         });
-      if (
-        status.error ||
-        (channel === "dev" && status.installKind === "unknown") ||
-        resolveGitScheduleStatus(status, installReceipt, root)?.status === "unavailable"
-      ) {
+      if (unavailable) {
         // A failed observation cannot revoke the last announced campaign.
         publishSchedule(next);
         throw new Error("The latest Dev update could not be checked. Try again.");
       }
-      if (channel !== "dev" || status.installKind !== "git") {
+      if (refreshedChannel !== "dev" || status.installKind !== "git") {
         // A package check preserves supported package availability, never a
         // target or campaign owned by a Git checkout that no longer exists.
-        if (status.installKind === "package" && current.target?.kind !== "git") {
-          if (schedule && schedule.channel !== channel) {
+        if (status.installKind === "package" && schedule?.target?.kind !== "git") {
+          if (schedule && schedule.channel !== refreshedChannel) {
             lifecycle.publicationGeneration += 1;
             setUpdateAvailableCache({
               next: null,
@@ -140,16 +168,17 @@ export function refreshGatewayUpdateStatus(cfg: OpenClawConfig): Promise<void> {
           return;
         }
         lifecycle.publicationGeneration += 1;
-        lifecycle.campaign?.clear();
         setUpdateAvailableCache({
           next: null,
           onUpdateAvailableChange: lifecycle.onUpdateAvailableChange,
         });
+        // Retire the schedule first so the campaign callback cannot republish its old target.
         publishSchedule(withoutUpdateTarget(next));
+        lifecycle.campaign?.clear();
         return;
       }
       const update = await resolveDevGitUpdate(status, signal);
-      assertCurrent();
+      assertCurrent(status);
       lifecycle.publicationGeneration += 1;
       const campaign = lifecycle.campaign;
       if (!update) {
@@ -167,7 +196,7 @@ export function refreshGatewayUpdateStatus(cfg: OpenClawConfig): Promise<void> {
       });
       publishSchedule({ ...next, target: update.target });
       if (
-        getGatewayUpdateSchedule(cfg, channel).autoEnabled &&
+        getGatewayUpdateSchedule(getConfig(), refreshedChannel).autoEnabled &&
         !isGatewayExternallySupervised() &&
         canRunDevGitCampaign(update.git)
       ) {

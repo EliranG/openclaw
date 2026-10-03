@@ -1033,7 +1033,7 @@ describe("update-startup", () => {
       cfg: { update: { channel: "dev" } },
     });
     const initializing = check.initialize().catch((error: unknown) => error);
-    const refreshing = refreshGatewayUpdateStatus({ update: { channel: "dev" } }).catch(
+    const refreshing = refreshGatewayUpdateStatus(() => ({ update: { channel: "dev" } })).catch(
       (error: unknown) => error,
     );
     let stopped = false;
@@ -1083,8 +1083,8 @@ describe("update-startup", () => {
       isNixMode: false,
     };
     createTestUpdateCheck(params);
-    const oldRefresh = refreshGatewayUpdateStatus(params.cfg);
-    expect(refreshGatewayUpdateStatus(params.cfg)).toBe(oldRefresh);
+    const oldRefresh = refreshGatewayUpdateStatus(() => params.cfg);
+    expect(refreshGatewayUpdateStatus(() => params.cfg)).toBe(oldRefresh);
     const refreshing = oldRefresh.catch((error: unknown) => error);
     let initializing: Promise<unknown> | undefined;
     let newRefreshing: Promise<unknown> | undefined;
@@ -1094,9 +1094,9 @@ describe("update-startup", () => {
       const oldSignal = vi.mocked(checkUpdateStatus).mock.calls[0]?.[0].signal;
       const replacement = createTestUpdateCheck(params);
       initializing = replacement.initialize().catch((error: unknown) => error);
-      const newRefresh = refreshGatewayUpdateStatus(params.cfg);
+      const newRefresh = refreshGatewayUpdateStatus(() => params.cfg);
       expect(newRefresh).not.toBe(oldRefresh);
-      expect(refreshGatewayUpdateStatus(params.cfg)).toBe(newRefresh);
+      expect(refreshGatewayUpdateStatus(() => params.cfg)).toBe(newRefresh);
       newRefreshing = newRefresh.catch((error: unknown) => error);
       let stopped = false;
       stopping = replacement.stop().then(() => {
