@@ -22,6 +22,11 @@ vi.mock("../../version.js", () => ({ VERSION: "2026.9.7" }));
 
 const history = vi.hoisted(() => vi.fn(async () => ({ activeRun: undefined, lastRun: undefined })));
 const install = vi.hoisted(() => vi.fn());
+const resolveManager = vi.hoisted(() => vi.fn());
+vi.mock("../../infra/ocm-update-client.js", async (original) => ({
+  ...(await original<typeof import("../../infra/ocm-update-client.js")>()),
+  resolveOcmUpdateManager: resolveManager,
+}));
 vi.mock("../../infra/update-run-ledger.js", () => ({
   getUpdateRunStatusAsync: history,
   reconcileAbandonedUpdateRunsAsync: async () => {},
@@ -47,6 +52,7 @@ beforeEach(() => {
   history.mockClear();
   vi.mocked(resolveDevGitCommits).mockReset().mockResolvedValue([]);
   install.mockReset().mockRejectedValue(new Error("discovery unavailable"));
+  resolveManager.mockReset().mockResolvedValue(null);
 });
 afterEach(async () => {
   await lifecycle.stop();
@@ -617,5 +623,95 @@ it.for([
       expect(scheduleChanged).toHaveBeenCalledExactlyOnceWith(getUpdateSchedule());
       expect(announce).not.toHaveBeenCalled();
     }
+  },
+);
+
+it.each([false, true])(
+  "refreshes native immutable facts on ordinary status without consulting OCM (enabled=%s)",
+  async (enabled) => {
+    const immutable = {
+      root: "/opt/openclaw",
+      currentSha: "a".repeat(40),
+      currentPath: `/opt/openclaw/releases/${"a".repeat(40)}`,
+      ...(enabled
+        ? {
+            activationEnabled: true,
+            activation: {
+              operationId: "10000000-0000-4000-8000-000000000001",
+              phase: "starting",
+              previousSha: "a".repeat(40),
+              candidateSha: "b".repeat(40),
+            },
+            lastActivation: {
+              operationId: "10000000-0000-4000-8000-000000000002",
+              outcome: "succeeded",
+              selectedSha: "a".repeat(40),
+              verifiedAtMs: 100,
+            },
+          }
+        : {}),
+    };
+    const discovered = {
+      root: immutable.currentPath,
+      installReceipt: null,
+      status: {
+        root: immutable.currentPath,
+        installKind: "immutable",
+        packageManager: "unknown",
+        immutable,
+      },
+    };
+    install.mockResolvedValue(discovered);
+    await lifecycle.initialize();
+    setUpdateScheduleCache({
+      next: {
+        channel: "stable",
+        autoEnabled: true,
+        install: { kind: "package" },
+        target: { kind: "package", version: "99.0.0" },
+      },
+    });
+    const prepared = {
+      sha: "b".repeat(40),
+      path: `/opt/openclaw/releases/${"b".repeat(40)}`,
+      buildDigest: "c".repeat(64),
+      preparedAtMs: 123,
+    };
+    const refreshed = {
+      ...immutable,
+      prepared,
+      ...(immutable.activation
+        ? { activation: { ...immutable.activation, phase: "verifying" } }
+        : {}),
+    };
+    install.mockResolvedValue({
+      ...discovered,
+      status: { ...discovered.status, immutable: refreshed },
+    });
+    const privateStatus = vi.fn().mockResolvedValue(null);
+    resolveManager.mockResolvedValue({ canStart: true, status: privateStatus });
+
+    const result = await status({ update: { channel: "stable", auto: { enabled: true } } });
+
+    expect(result.schedule).toEqual({
+      channel: "stable",
+      autoEnabled: false,
+      install: { kind: "immutable", immutable: refreshed },
+    });
+    expect(result.updateAvailable).toBeNull();
+    expect((await lifecycle.initialize()).status.immutable?.prepared).toEqual(prepared);
+    expect(resolveManager).not.toHaveBeenCalled();
+    expect(privateStatus).not.toHaveBeenCalled();
+
+    install.mockResolvedValue({
+      root: immutable.currentPath,
+      installReceipt: null,
+      status: { root: immutable.currentPath, installKind: "unknown", packageManager: "unknown" },
+    });
+    const unowned = await status(
+      { update: { channel: "stable", auto: { enabled: false } } },
+      { refreshCheckout: true },
+    );
+    expect(unowned.schedule.install).toEqual({ kind: "unknown" });
   },
 );
