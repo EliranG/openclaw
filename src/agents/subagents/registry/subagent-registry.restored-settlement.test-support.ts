@@ -76,9 +76,15 @@ export function registerRestoredRollbackPublicationTest({
     const now = Date.now();
     mockSingleCollectorConcurrency();
     mockRestoredRuns(() => [
-      makeQueuedRun({ runId: "run-restored-stop-one", groupId: "restore-stop", createdAt: now }),
+      makeQueuedRun({
+        runId: "run-restored-stop-one",
+        childSessionIdentity: { sessionId: "one", lifecycleRevision: "revision-one" },
+        groupId: "restore-stop",
+        createdAt: now,
+      }),
       makeQueuedRun({
         runId: "run-restored-stop-two",
+        childSessionIdentity: { sessionId: "two", lifecycleRevision: "revision-two" },
         groupId: "restore-stop",
         createdAt: now + 1,
       }),
@@ -89,7 +95,11 @@ export function registerRestoredRollbackPublicationTest({
         lifecycleRevision: "revision-one",
         updatedAt: now,
       },
-      "agent:main:subagent:run-restored-stop-two": { sessionId: "two", updatedAt: now },
+      "agent:main:subagent:run-restored-stop-two": {
+        sessionId: "two",
+        lifecycleRevision: "revision-two",
+        updatedAt: now,
+      },
     };
     let agentCalls = 0;
     const dispatchedSessionKeys: unknown[] = [];
@@ -209,6 +219,10 @@ export function registerRestoredSessionReadTests({
     const runId = "run-restored-orphan-routing";
     const restored = createSubagentRunRecord({
       runId,
+      childSessionIdentity: {
+        sessionId: "sess-child",
+        lifecycleRevision: "revision-child",
+      },
       execution: {
         status: "running",
         lifecycleGeneration: "retired-generation",
@@ -216,6 +230,7 @@ export function registerRestoredSessionReadTests({
     });
     mocks.entries = {
       "agent:main:subagent:child": createSessionEntry({
+        lifecycleRevision: "revision-child",
         lifecycleRunId: "newer-run",
         abortedLastRun: false,
       }),
@@ -298,6 +313,10 @@ export function registerRestoredRequesterWakeSettlementTests({
         createSubagentRunRecord({
           runId,
           childSessionKey: `agent:main:subagent:${runId}`,
+          childSessionIdentity: {
+            sessionId: `session-${runId}`,
+            lifecycleRevision: `revision-${runId}`,
+          },
           requesterAgentId: "main",
           task: "restore requester settle wake",
           cleanup: "delete",

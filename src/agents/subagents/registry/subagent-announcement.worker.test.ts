@@ -95,6 +95,11 @@ async function registerCompletion(
   await registerSubagentRun({
     runId,
     childSessionKey,
+    childAgentId: "main",
+    sessionEntry: {
+      sessionId: "ordinary-child-session",
+      lifecycleRevision: "ordinary-child-revision",
+    },
     requesterSessionKey: "agent:main:main",
     requesterAgentId: "main",
     requesterDisplayKey: "main",
@@ -273,6 +278,8 @@ it.each(["not-committed", "unknown", "successor"] as const)(
         registration = registerSubagentRun({
           runId: `${run.runId}-successor`,
           childSessionKey: run.childSessionKey,
+          childAgentId: "main",
+          sessionEntry: entry.childSessionIdentity,
           requesterSessionKey: "agent:main:main",
           requesterAgentId: "main",
           requesterDisplayKey: "main",
@@ -406,6 +413,8 @@ it.each(["current", "revoked", "source switched", "yielded"] as const)(
     await registerSubagentRun({
       runId,
       childSessionKey,
+      childAgentId: "main",
+      sessionEntry: { sessionId: "suspended-child-session" },
       requesterSessionKey: "agent:main:main",
       requesterAgentId: "main",
       requesterDisplayKey: "main",
@@ -642,6 +651,8 @@ it.each([false, true])(
           registerSubagentRun({
             runId: run.runId,
             childSessionKey: run.childSessionKey,
+            childAgentId: "main",
+            sessionEntry: entry.childSessionIdentity,
             requesterSessionKey: "agent:main:main",
             requesterAgentId: "main",
             requesterDisplayKey: "main",

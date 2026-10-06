@@ -15,6 +15,7 @@ import { resolveIncognitoOpenClawAgentSqlitePath } from "../../../state/openclaw
 import { runOpenClawAgentWriteAdmission } from "../../../state/openclaw-agent-write-admission.js";
 import type { AgentRunSessionTarget } from "../../run-session-target.types.js";
 import { resolveSubagentChildSessionOwner } from "./subagent-child-session-owner.js";
+import type { SubagentRunRecord } from "./subagent-registry.types.js";
 
 export type SubagentKillSession = {
   agentId: string;
@@ -33,6 +34,7 @@ export async function prepareSubagentKillSession(
   assertOwner: () => void,
   expected?: AgentRunSessionTarget,
   childAgentId?: string,
+  original?: SubagentRunRecord["childSessionIdentity"],
 ): Promise<SubagentKillSession> {
   const childOwner = resolveSubagentChildSessionOwner(
     { childSessionKey: sessionKey, childAgentId },
@@ -56,10 +58,19 @@ export async function prepareSubagentKillSession(
         }
         const entry = read.value;
         if (
+          !original?.sessionId ||
+          (entry &&
+            (entry.sessionId !== original.sessionId ||
+              entry.lifecycleRevision !== original.lifecycleRevision))
+        ) {
+          throw new Error(
+            "Subagent original session incarnation is unresolved or changed; no child work was changed.",
+          );
+        }
+        if (
           selected?.sessionId &&
           (entry?.sessionId !== selected.sessionId ||
-            (selected.expectedLifecycleRevision !== undefined &&
-              entry?.lifecycleRevision !== selected.expectedLifecycleRevision))
+            entry?.lifecycleRevision !== selected.expectedLifecycleRevision)
         ) {
           throw new Error("Subagent session changed during cancellation preparation");
         }
