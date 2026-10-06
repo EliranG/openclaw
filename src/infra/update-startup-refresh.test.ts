@@ -834,6 +834,69 @@ describe("interactive Dev update discovery", () => {
     }
   });
 
+  it.each([
+    { disabledBy: "config", discovery: "manual" },
+    { disabledBy: "environment", discovery: "manual" },
+    { disabledBy: "config", discovery: "background" },
+    { disabledBy: "environment", discovery: "background" },
+    { disabledBy: "config", discovery: "background-reenabled" },
+    { disabledBy: "environment", discovery: "background-reenabled" },
+  ] as const)(
+    "disabled background checks preserve $discovery discovery policy ($disabledBy)",
+    async ({ disabledBy, discovery }) => {
+      const cfg = {
+        update: { channel: "dev" as const, auto: { enabled: true }, checkOnStart: true },
+      };
+      const disable = () => {
+        if (disabledBy === "config") {
+          cfg.update.checkOnStart = false;
+        } else {
+          vi.stubEnv("OPENCLAW_NO_AUTO_UPDATE", "1");
+        }
+      };
+      if (discovery === "manual") {
+        disable();
+      }
+      const started = createDeferred();
+      const remote = createDeferred<UpdateCheckResult>();
+      vi.mocked(checkUpdateStatus).mockImplementationOnce(() => {
+        started.resolve();
+        return remote.promise;
+      });
+      const params = { cfg, log: { info: vi.fn() }, isNixMode: false, allowInTests: true };
+      const pending = (
+        discovery === "manual"
+          ? refreshGatewayUpdateStatus(() => cfg)
+          : runGatewayUpdateCheck(params)
+      ).catch((error: unknown) => error);
+      try {
+        await started.promise;
+        disable();
+        await runGatewayUpdateCheck(params);
+        expect(checkUpdateStatus).toHaveBeenCalledTimes(1);
+        if (discovery === "background-reenabled") {
+          cfg.update.checkOnStart = true;
+          vi.stubEnv("OPENCLAW_NO_AUTO_UPDATE", undefined);
+        }
+        remote.resolve(createDevGitStatus({ upstreamSha: "fresh-upstream", behind: 4 }));
+        expect(await pending).toBeUndefined();
+        if (discovery === "manual") {
+          expect(getUpdateSchedule()?.target).toMatchObject({ upstreamSha: "fresh-upstream" });
+          expect(getUpdateAvailable()?.upstreamSha).toBe("fresh-upstream");
+        } else {
+          expect(getUpdateSchedule()?.target).toBeUndefined();
+          expect(getUpdateAvailable()).toBeNull();
+        }
+        expect(campaign.getState()?.state).toBeUndefined();
+        expect(checkTelemetryUpdate).not.toHaveBeenCalled();
+        expect(runCampaignUpdate).not.toHaveBeenCalled();
+      } finally {
+        remote.resolve(createDevGitStatus());
+        await pending;
+      }
+    },
+  );
+
   it("does not confirm freshness when newer background discovery supersedes a manual check", async () => {
     const cfg = { update: { channel: "dev" as const } };
     const started = createDeferred();

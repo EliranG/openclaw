@@ -1,3 +1,4 @@
+import type { Result } from "@openclaw/normalization-core/result";
 import type { ProgressCard } from "../../../packages/gateway-protocol/src/index.js";
 import type {
   BuildSessionEntryOptions,
@@ -56,6 +57,7 @@ import type {
   readSessionTranscriptModelContext,
   SessionModelContextLimits,
 } from "./session-accessor.sqlite-model-context.js";
+import type { SessionParticipantRecord } from "./session-accessor.sqlite-participant-projection.js";
 import type { listSessionPendingInputReceipts } from "./session-accessor.sqlite-pending-input-receipts.js";
 import type { SessionTranscriptMessageEvent } from "./session-accessor.sqlite-projection-read.js";
 import type {
@@ -371,10 +373,7 @@ export type SessionExactEntriesWorkerResult = {
     birthtime?: string;
   };
   members?: Record<string, SessionMember[]>;
-  participantRecords?: Record<
-    string,
-    import("./session-accessor.sqlite-participant-projection.js").SessionParticipantRecord[]
-  >;
+  participantRecords?: Record<string, SessionParticipantRecord[]>;
   replacement?: SessionEntryReplacementState & { databaseIdentity: string };
   creation?: import("./session-accessor.sqlite-creation-read.js").SessionCreationSnapshot & {
     databaseIdentity: string;
@@ -718,10 +717,7 @@ export type SessionHistoryWorkerDatabase = SessionTranscriptInventoryReaders & {
   >;
   readEntryResult: SessionHistoryReader<
     SessionEntryReadWorkerInput,
-    import("@openclaw/normalization-core/result").Result<
-      SessionEntryReadWorkerResult["entry"],
-      unknown
-    >
+    Result<SessionEntryReadWorkerResult["entry"], unknown>
   >;
   readEntryCurrent: SessionHistoryReader<
     SessionEntryCurrentWorkerInput,

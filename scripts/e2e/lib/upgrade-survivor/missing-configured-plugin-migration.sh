@@ -29,6 +29,7 @@ run_missing_configured_plugin_migration() {
     echo "Missing Codex must leave a successful update, not a repair-required result" >&2
     return 1
   }
+  phase assert-public-setup-migrations node "$helper" setup-outcomes
   phase assert-deferred-update node "$helper" pending post-update
   phase start-with-missing-plugin start_gateway
   phase missing-plugin-health check_gateway_probes
