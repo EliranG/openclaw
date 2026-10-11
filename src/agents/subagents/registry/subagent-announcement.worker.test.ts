@@ -397,6 +397,7 @@ it.each(["current", "revoked", "source switched", "yielded"] as const)(
       agentId: "main",
       sessionKey: childSessionKey,
       defaultSessionId: "suspended-child-session",
+      lifecycleRevision: "suspended-child-revision",
     });
     const waitResult = createDeferredCore<Record<string, unknown>>();
     const waitStarted = createDeferredCore();
@@ -414,7 +415,10 @@ it.each(["current", "revoked", "source switched", "yielded"] as const)(
       runId,
       childSessionKey,
       childAgentId: "main",
-      sessionEntry: { sessionId: "suspended-child-session" },
+      sessionEntry: {
+        sessionId: "suspended-child-session",
+        lifecycleRevision: "suspended-child-revision",
+      },
       requesterSessionKey: "agent:main:main",
       requesterAgentId: "main",
       requesterDisplayKey: "main",

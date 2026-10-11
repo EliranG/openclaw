@@ -38,6 +38,7 @@ const fixture = useSubagentControlFixture();
 
 it.each([
   "owned",
+  "legacy-owned",
   "other-controller",
   "new-generation",
   "admin-root",
@@ -69,6 +70,7 @@ it.each([
     const alternate = selection.startsWith("alternate-");
     const shouldCancel =
       selection === "owned" ||
+      selection === "legacy-owned" ||
       selection === "postaccept-revoked" ||
       selection === "gateway" ||
       selection === "gateway-error" ||
@@ -166,6 +168,9 @@ it.each([
         delivery: { status: "not_required" },
       });
     const original = completed("completed-command-run", 1);
+    if (selection === "legacy-owned") {
+      delete original.childSessionIdentity!.lifecycleRevision;
+    }
     const publish = async (entry: typeof original) =>
       mutateSubagentRuns([entry.runId], () => ({
         value: undefined,

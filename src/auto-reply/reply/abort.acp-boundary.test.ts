@@ -229,8 +229,17 @@ it.each([
         childAdmission = await beginSessionWorkAdmission({
           scope: storePath,
           identities: [runningKey, "running-session"],
+          run: {
+            runId: "running",
+            sessionKey: runningKey,
+            sessionId: "running-session",
+            agentId: "main",
+          },
           assertAllowed: () => {},
-          onInterrupt: () => nativeInterrupted.resolve(),
+          onInterrupt: () => {
+            nativeInterrupted.resolve();
+            return { runId: "running" };
+          },
         });
       }
       for (const [runId, childSessionKey] of [

@@ -73,7 +73,7 @@ function writeSessionStoreFixture(label: string, store: Record<string, unknown>)
         typeof entry === "object" &&
         "sessionId" in entry &&
         typeof entry.sessionId === "string"
-          ? withFixtureRevision(entry)
+          ? withFixtureRevision({ ...entry, sessionId: entry.sessionId })
           : entry,
       ]),
     ),

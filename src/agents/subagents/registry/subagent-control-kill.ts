@@ -632,7 +632,7 @@ export async function killSubagentRunAdmin(
   }
 
   const authority = resolveSubagentChildAuthority(entry);
-  if (authority.status !== "verified") {
+  if (authority.status === "mismatch") {
     return publish({
       found: true,
       killed: false,

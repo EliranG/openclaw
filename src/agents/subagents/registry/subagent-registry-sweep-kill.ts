@@ -65,7 +65,8 @@ export async function reconcileDurableSubagentKillIntent(params: {
   warn: (message: string, meta?: Record<string, unknown>) => void;
 }): Promise<boolean> {
   const killIntent = params.entry.killIntent;
-  if (!killIntent || resolveSubagentChildAuthority(params.entry).status !== "verified") {
+  const authority = resolveSubagentChildAuthority(params.entry);
+  if (!killIntent || authority.status === "mismatch") {
     return false;
   }
   if (!isSameSubagentRunOwner(params.runs.get(params.runId), params.entry)) {
@@ -128,6 +129,9 @@ export async function reconcileDurableSubagentKillIntent(params: {
     );
     return true;
   };
+  if (authority.status === "legacy-unverified") {
+    return await completeKill(true);
+  }
   if (
     killIntent.lifecycleGeneration === undefined ||
     !isAgentEventLifecycleGenerationCurrent(killIntent.lifecycleGeneration)
@@ -231,7 +235,8 @@ export async function reconcileProvisionalSubagentKill(params: {
 }): Promise<boolean> {
   const { entry, now, runId, runs } = params;
   const killReconciliation = entry.killReconciliation;
-  if (!killReconciliation || resolveSubagentChildAuthority(entry).status !== "verified") {
+  const authority = resolveSubagentChildAuthority(entry);
+  if (!killReconciliation || authority.status === "mismatch") {
     return false;
   }
   // The child-session index stays current across awaits. Re-read it at each
@@ -260,17 +265,20 @@ export async function reconcileProvisionalSubagentKill(params: {
   if (killedAt + PROVISIONAL_KILL_RECONCILIATION_MS > now) {
     return false;
   }
-  const completion = await resolveSubagentSessionCompletion({
-    childSessionKey: entry.childSessionKey,
-    childAgentId: entry.childAgentId,
-    fallbackEndedAt: now,
-    notBeforeMs: entry.execution.startedAt ?? entry.createdAt,
-    assertCurrent: () => {
-      if (!isCurrentKill()) {
-        throw new Error("Subagent completion read lost its provisional kill owner.");
-      }
-    },
-  });
+  const completion =
+    authority.status === "legacy-unverified"
+      ? undefined
+      : await resolveSubagentSessionCompletion({
+          childSessionKey: entry.childSessionKey,
+          childAgentId: entry.childAgentId,
+          fallbackEndedAt: now,
+          notBeforeMs: entry.execution.startedAt ?? entry.createdAt,
+          assertCurrent: () => {
+            if (!isCurrentKill()) {
+              throw new Error("Subagent completion read lost its provisional kill owner.");
+            }
+          },
+        });
   if (!isCurrentKill()) {
     return false;
   }

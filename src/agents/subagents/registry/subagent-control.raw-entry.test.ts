@@ -16,6 +16,13 @@ import {
   replaceSessionEntry,
 } from "../../../config/sessions/session-accessor.js";
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
+import { runWithChatAbortExecution } from "../../../gateway/chat-abort-lifecycle-internal.js";
+import { registerChatAbortController } from "../../../gateway/chat-abort.js";
+import { createDirectChatContext } from "../../../gateway/server-chat.agent-events.test-helpers.js";
+import {
+  bindGatewayContextResolver,
+  clearGatewayContextResolver,
+} from "../../../plugins/runtime/gateway-request-scope.js";
 import { clearCommandLane, enqueueCommandInLane } from "../../../process/command-queue.js";
 import { beginSessionWorkAdmission } from "../../../sessions/session-lifecycle-admission.js";
 import { AgentSelectionRequiredError, resolveSessionAgentId } from "../../agent-scope.js";
@@ -32,6 +39,7 @@ import { createSessionsSendTool } from "../../tools/sessions-send-tool.js";
 import { createSubagentsTool } from "../../tools/subagents-tool.js";
 import { captureSubagentCompletionReply } from "../announce/subagent-announce-output.js";
 import { killAllControlledSubagentRuns, killSubagentRunAdmin } from "./subagent-control.js";
+import { SUBAGENT_ENDED_REASON_KILLED } from "./subagent-lifecycle-events.js";
 import { createSubagentRunManager } from "./subagent-registry-run-manager.js";
 import { writeSubagentSessionEntry } from "./subagent-registry.persistence.test-support.js";
 import { addSubagentRunForTests, getSubagentRunByRunId } from "./subagent-registry.test-helpers.js";
@@ -553,11 +561,11 @@ it.each(["admin", "bulk", "tool"] as const)(
 );
 
 it.each([
-  { sessionKey: "global", childAgentId: "main" },
-  { sessionKey: "agent:main:subagent:legacy", childAgentId: undefined },
+  { sessionKey: "global", childAgentId: "main", bindNativeRun: true },
+  { sessionKey: "agent:main:subagent:legacy", childAgentId: undefined, bindNativeRun: false },
 ])(
-  "refuses exact cancellation of $sessionKey without its original incarnation despite a newer owned run",
-  async ({ sessionKey, childAgentId }) => {
+  "cancels only the legacy task on $sessionKey despite a newer owned incarnation (native=$bindNativeRun)",
+  async ({ sessionKey, childAgentId, bindNativeRun }) => {
     const storePath = await writeSubagentSessionEntry({
       stateDir: fixture.stateDir,
       sessionKey,
@@ -583,37 +591,88 @@ it.each([
       childSessionIdentity: sessionBefore,
       generation: 2,
     });
-    const before = structuredClone(getSubagentRunByRunId("unbound-incarnation"));
+    const legacyRun = getSubagentRunByRunId("unbound-incarnation")!;
     const nextBefore = structuredClone(getSubagentRunByRunId("next-incarnation"));
-    fixture.worker.mockClear();
-    expect(
-      await killSubagentRunAdmin({
-        cfg,
-        sessionKey,
-        agentId: "main",
-        expectedRunId: "unbound-incarnation",
-      }),
-    ).toMatchObject({
-      found: true,
-      killed: false,
-      runId: "unbound-incarnation",
-      cascadeKilled: 0,
-      error: expect.stringContaining("original session incarnation is unresolved"),
+    const context = createDirectChatContext({ getRuntimeConfig: () => cfg });
+    const nativeRun = registerChatAbortController({
+      chatAbortControllers: context.chatAbortControllers,
+      runId: legacyRun.runId,
+      sessionKey,
+      sessionId: "original-session",
+      kind: "agent",
+      timeoutMs: 60_000,
     });
-    expect(getSubagentRunByRunId("unbound-incarnation")).toEqual(before);
-    expect(getSubagentRunByRunId("next-incarnation")).toEqual(nextBefore);
-    expect(loadSessionEntry({ agentId: "main", storePath, sessionKey })).toEqual(sessionBefore);
-    expect(fixture.worker).not.toHaveBeenCalled();
-    expect(fixture.cleanup).not.toHaveBeenCalled();
-    expect(fixture.gateway).not.toHaveBeenCalled();
-    expect(fixture.capture).not.toHaveBeenCalled();
-    expect(fixture.announce).not.toHaveBeenCalled();
-    expect(fixture.wake).not.toHaveBeenCalled();
+    const successorRun = registerChatAbortController({
+      chatAbortControllers: context.chatAbortControllers,
+      runId: "next-incarnation",
+      sessionKey,
+      sessionId: sessionBefore!.sessionId,
+      kind: "agent",
+      timeoutMs: 60_000,
+    });
+    const nativeReleased = createDeferred();
+    nativeRun.controller.signal.addEventListener("abort", () => nativeReleased.resolve(), {
+      once: true,
+    });
+    const nativeExecution = runWithChatAbortExecution(
+      nativeRun.entry,
+      () => nativeReleased.promise,
+      nativeRun.cleanup,
+    );
+    if (bindNativeRun) {
+      bindGatewayContextResolver(legacyRun, () => context);
+    }
+    const followup = createQueueTestRun({ prompt: "Successor's queued followup" });
+    Object.assign(followup.run, {
+      agentId: "main",
+      sessionKey,
+      sessionId: sessionBefore!.sessionId,
+    });
+    enqueueFollowupRun(sessionKey, followup, { mode: "followup" }, "none", undefined, false);
+    fixture.worker.mockClear();
+    try {
+      expect(
+        await killSubagentRunAdmin({
+          cfg,
+          sessionKey,
+          agentId: "main",
+          expectedRunId: "unbound-incarnation",
+        }),
+      ).toMatchObject({
+        found: true,
+        killed: true,
+        runId: "unbound-incarnation",
+        cascadeKilled: 0,
+      });
+      expect(getSubagentRunByRunId("unbound-incarnation")).toMatchObject({
+        childSessionIdentity: undefined,
+        endedReason: SUBAGENT_ENDED_REASON_KILLED,
+        execution: { status: "terminal", suppressSessionEffects: true },
+      });
+      expect(nativeRun.controller.signal.aborted).toBe(bindNativeRun);
+      expect(successorRun.controller.signal.aborted).toBe(false);
+      expect(getSubagentRunByRunId("next-incarnation")).toEqual(nextBefore);
+      expect(loadSessionEntry({ agentId: "main", storePath, sessionKey })).toEqual(sessionBefore);
+      expect(getExistingFollowupQueue(sessionKey)?.items).toContain(followup);
+      expect(fixture.cleanup).not.toHaveBeenCalled();
+      expect(fixture.gateway).not.toHaveBeenCalled();
+      expect(fixture.capture).not.toHaveBeenCalled();
+      expect(fixture.announce).not.toHaveBeenCalled();
+      expect(fixture.wake).not.toHaveBeenCalled();
+    } finally {
+      clearGatewayContextResolver(legacyRun);
+      nativeReleased.resolve();
+      await nativeExecution;
+      nativeRun.cleanup();
+      successorRun.cleanup();
+      context.chatAbortControllers.clear();
+      clearFollowupQueue(sessionKey);
+    }
   },
 );
 
 it.each(["registration", "execution target"] as const)(
-  "refuses cancellation when the %s omitted the successor's lifecycle revision",
+  "limits cancellation when the %s omitted the current session's lifecycle revision",
   async (identitySource) => {
     const sessionKey = "agent:main:subagent:revision-reused-id";
     const sessionId = "reused-session-id";
@@ -666,20 +725,26 @@ it.each(["registration", "execution target"] as const)(
         }),
       ).toMatchObject({
         found: true,
-        killed: false,
+        killed: identitySource === "registration",
         runId,
         cascadeKilled: 0,
-        error: expect.stringContaining(
-          identitySource === "registration"
-            ? "original session incarnation is unresolved"
-            : "session changed during cancellation preparation",
-        ),
+        ...(identitySource === "execution target"
+          ? { error: expect.stringContaining("session changed during cancellation preparation") }
+          : {}),
       });
-      expect(getSubagentRunByRunId(runId)).toEqual(before);
+      if (identitySource === "registration") {
+        expect(getSubagentRunByRunId(runId)).toMatchObject({
+          childSessionIdentity: { sessionId, lifecycleRevision: undefined },
+          endedReason: SUBAGENT_ENDED_REASON_KILLED,
+          execution: { status: "terminal", suppressSessionEffects: true },
+        });
+      } else {
+        expect(getSubagentRunByRunId(runId)).toEqual(before);
+        expect(fixture.worker).not.toHaveBeenCalled();
+      }
       expect(loadSessionEntry(scope)).toEqual(sessionBefore);
       expect(getExistingFollowupQueue(sessionKey)?.items).toContain(followup);
-      expect(abort).not.toHaveBeenCalled();
-      expect(fixture.worker).not.toHaveBeenCalled();
+      expect(abort).toHaveBeenCalledTimes(identitySource === "registration" ? 1 : 0);
       expect(fixture.cleanup).not.toHaveBeenCalled();
       expect(fixture.gateway).not.toHaveBeenCalled();
       expect(fixture.capture).not.toHaveBeenCalled();

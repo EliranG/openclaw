@@ -232,6 +232,12 @@ for (const { name, fault, replaceParent } of [
             await beginSessionWorkAdmission({
               scope: storePath,
               identities: [sessionKey(runId), `${runId}-session`],
+              run: {
+                runId,
+                sessionKey: sessionKey(runId),
+                sessionId: `${runId}-session`,
+                agentId: "main",
+              },
               assertAllowed: () => {},
               onInterrupt: () => {
                 interrupted.push(runId);
@@ -240,6 +246,7 @@ for (const { name, fault, replaceParent } of [
                 if (runId === failedRunId) {
                   throw new Error("synthetic sibling interruption failure");
                 }
+                return { runId };
               },
             }),
           );

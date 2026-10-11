@@ -97,7 +97,7 @@ it.each(["durable", "incognito"] as const)(
       const entry = makeRunRecord({
         runId: "missing-store-run",
         childSessionKey,
-        childSessionIdentity: { sessionId: "lost-session" },
+        childSessionIdentity: { sessionId: "lost-session", lifecycleRevision: "lost-revision" },
         execution: { status: "interrupted", startedAt: Date.now() - 1_000 },
       });
       const recover = (candidate: SubagentRunRecord) =>
@@ -540,17 +540,19 @@ describe("subagent orphan recovery — faithful restart path", () => {
       const runId = "interrupted-commit-race";
       const childSessionKey = "agent:main:subagent:interrupted-commit-race";
       const sessionId = "interrupted-commit-race-session";
+      const lifecycleRevision = "interrupted-commit-race-revision";
       const storePath = await writeSubagentSessionEntry({
         stateDir: fixture.stateDir,
         agentId: "main",
         sessionKey: childSessionKey,
         defaultSessionId: sessionId,
+        lifecycleRevision,
         abortedLastRun: true,
       });
       const entry = makeRunRecord({
         runId,
         childSessionKey,
-        childSessionIdentity: { sessionId },
+        childSessionIdentity: { sessionId, lifecycleRevision },
       });
       await addSubagentRunForTests(entry);
       const entered = createDeferred();
@@ -735,6 +737,7 @@ describe("subagent orphan recovery — faithful restart path", () => {
         agentId: "main",
         sessionKey: childSessionKey,
         sessionId: "sess-fresh-aborted",
+        lifecycleRevision: "fresh-aborted-revision",
         updatedAt: now - sessionAgeMs,
         abortedLastRun: true,
         defaultSessionId: "sess-fresh-aborted",
@@ -742,7 +745,10 @@ describe("subagent orphan recovery — faithful restart path", () => {
       const record = makeRunRecord({
         runId,
         childSessionKey,
-        childSessionIdentity: { sessionId: "sess-fresh-aborted" },
+        childSessionIdentity: {
+          sessionId: "sess-fresh-aborted",
+          lifecycleRevision: "fresh-aborted-revision",
+        },
         createdAt: now - runAgeMs,
         startedAt: now - runAgeMs,
         runTimeoutSeconds,
@@ -788,11 +794,13 @@ describe("subagent orphan recovery — faithful restart path", () => {
       const runId = "held-hidden-cleanup-source";
       const nextRunId = "held-hidden-cleanup-successor";
       const sessionId = "held-hidden-cleanup-visible";
+      const lifecycleRevision = "held-hidden-cleanup-revision";
       const storePath = await writeSubagentSessionEntry({
         stateDir: fixture.stateDir,
         agentId: "main",
         sessionKey: childSessionKey,
         defaultSessionId: sessionId,
+        lifecycleRevision,
       });
       const visible = { agentId: "main", storePath, sessionKey: childSessionKey, sessionId };
       const retired = await prepareInternalSessionEffectsSession({
@@ -818,6 +826,7 @@ describe("subagent orphan recovery — faithful restart path", () => {
         makeRunRecord({
           runId,
           childSessionKey,
+          childSessionIdentity: { sessionId, lifecycleRevision },
           expectsCompletionMessage: false,
           execution: { status: "running", startedAt: Date.now(), transcriptTarget: retired },
         }),

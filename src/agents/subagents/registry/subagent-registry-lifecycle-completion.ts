@@ -154,7 +154,7 @@ export async function completeSubagentRunAttempt(
     throw new SubagentRegistryMutationRejectedError("Subagent terminal execution changed");
   }
   try {
-    warnLegacySubagentAuthority(selected, params.warn);
+    warnLegacySubagentAuthority(selected, (message, meta) => params.warn(message, meta));
     const assertCurrent = () => {
       assertSubagentRegistryWriteSourceCurrent(stateContext);
       if (

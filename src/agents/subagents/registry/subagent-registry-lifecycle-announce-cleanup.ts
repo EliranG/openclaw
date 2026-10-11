@@ -128,7 +128,7 @@ export const startSubagentAnnounceCleanupFlow = (
     return false;
   }
   let entry = publishedEntry;
-  warnLegacySubagentAuthority(entry, params.warn);
+  warnLegacySubagentAuthority(entry, (message, meta) => params.warn(message, meta));
   let runId = entry.runId;
   const runtimeKey = getSubagentRunRuntimeKey(observedEntry);
   if (entry.killReconciliation) {

@@ -177,8 +177,9 @@ ownership without migration. An explicit
 owner must agree with the key's namespace. Current defaults and the requester's
 agent never supply missing child ownership.
 
-Cancellation requires both recorded ownership and the original child session
-incarnation. An explicitly selected run whose owner or incarnation is unresolved
+Child-session mutation requires both recorded ownership and the original child
+session incarnation. An explicitly selected run whose owner is unresolved or whose
+recorded incarnation conflicts with the current session
 returns `found: true`, `killed: false`, and an explanation without touching child
 work. Bulk cancellation reports unresolved members and continues independently
 authorized siblings. Inspect the retained run and original execution evidence;
@@ -187,7 +188,9 @@ child-session cleanup obligations are not guessed after ordinary cleanup deadlin
 Child authority has three states: verified, legacy-unverified, or mismatch.
 Legacy-unverified records have resolvable child and requester owners but lack the
 original session identity or lifecycle revision. They can settle, deliver,
-finish cleanup bookkeeping, and resume under the authorized requester. OpenClaw
+finish cleanup bookkeeping, resume, and stop under the authorized requester.
+Legacy Stop cancels the exact task and its registered execution, when available;
+it does not guess which current session or successor to interrupt. OpenClaw
 warns once per retained run and suppresses child-session mutations, including
 deletion, reset, and transcript cleanup. Missing historical identity is never
 backfilled. A conflicting recorded identity remains a mismatch, not a legacy exception.

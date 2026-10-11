@@ -7,6 +7,8 @@ import {
   clearGatewayContextResolver,
   getGatewayContextResolver,
 } from "../../../plugins/runtime/gateway-request-scope.js";
+import { resolveActiveEmbeddedRunOwnerByRunId } from "../../embedded-agent-runner/runs.js";
+import { resolveSubagentChildAuthority } from "./subagent-child-owner-match.js";
 import type { SubagentKillSession } from "./subagent-control-session.js";
 import { getCurrentSubagentRunOwner, subagentRuns } from "./subagent-registry-memory.js";
 import type { SubagentRunRecord } from "./subagent-registry.types.js";
@@ -24,6 +26,18 @@ type ExecutionCleanupObservation = {
 // Immutable row publications preserve their existing physical execution owner.
 const executionCleanups = new WeakMap<object, ExecutionCleanupObservation>();
 
+export function captureSubagentEmbeddedExecution(entry: SubagentRunRecord) {
+  if (resolveSubagentChildAuthority(entry).status === "mismatch") {
+    return undefined;
+  }
+  const owner = resolveActiveEmbeddedRunOwnerByRunId(entry.runId);
+  return owner?.sessionKey === entry.childSessionKey &&
+    (!entry.childSessionIdentity?.sessionId ||
+      owner.sessionId === entry.childSessionIdentity.sessionId)
+    ? owner
+    : undefined;
+}
+
 export function captureSubagentExecution(params: {
   entry: SubagentRunRecord;
   session: SubagentKillSession;
@@ -37,7 +51,11 @@ export function captureSubagentExecution(params: {
       entries: context.chatAbortControllers,
       runId: entry.runId,
       sessionKey: entry.childSessionKey,
-      sessionId: params.session.entry?.sessionId,
+      sessionId:
+        resolveSubagentChildAuthority(entry).status === "legacy-unverified"
+          ? (entry.childSessionIdentity?.sessionId ??
+            context.chatAbortControllers.get(entry.runId)?.sessionId)
+          : params.session.entry?.sessionId,
       lifecycleGeneration: entry.execution.lifecycleGeneration,
     });
   return context && execution

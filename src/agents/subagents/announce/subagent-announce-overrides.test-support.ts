@@ -17,13 +17,13 @@ type AnnounceTestDeps = Pick<typeof announceRuntime, "getRuntimeConfig"> & {
 
 type OutputTestDeps = Pick<
   typeof announceRuntime,
-  | "getRuntimeConfig"
-  | "readSessionMessagesAsync"
-  | "resolveSessionStorePathCore"
+  "getRuntimeConfig" | "readSessionMessagesAsync" | "resolveSessionStorePathCore"
 > & {
   readSubagentSessionEntry: (
     ...args: Parameters<typeof announceRuntime.readSubagentSessionEntry>
-  ) => Awaited<ReturnType<typeof announceRuntime.readSubagentSessionEntry>>;
+  ) =>
+    | ReturnType<typeof announceRuntime.readSubagentSessionEntry>
+    | Awaited<ReturnType<typeof announceRuntime.readSubagentSessionEntry>>;
   callGateway: AnnounceTestDeps["callGateway"];
   findTranscriptEvent: typeof sessionAccessor.findTranscriptEvent;
   findSessionTranscriptArchiveEventReadOnly: typeof sessionHistory.findSessionTranscriptArchiveEventReadOnly;

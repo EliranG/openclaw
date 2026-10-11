@@ -64,6 +64,7 @@ async function createYieldedChild(withSibling = false) {
       agentId: "main",
       sessionKey,
       defaultSessionId: `${sessionKey}-session`,
+      lifecycleRevision: "initial-transfer",
     });
   }
   for (const child of children) {

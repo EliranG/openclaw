@@ -21,7 +21,7 @@ export function registerRequesterWakeOwnershipTests({
   persistOwner: (input: ReturnType<typeof records>) => unknown;
 }) {
   it.each(["owner", "incarnation"] as const)(
-    "retains an aged cancellation marker with unresolved child %s at the native boundary",
+    "reconciles aged cancellation only with known child ownership (missing: %s)",
     (missing) => {
       const database = getDatabase();
       const input = failedRecords("cancelled", { status: "error", error: "stopped" });
@@ -50,8 +50,15 @@ export function registerRequesterWakeOwnershipTests({
         { database },
       );
 
-      expect(result.records).toEqual([]);
-      expect(loadSubagentRegistryFromSqlite().get(input.subagent.runId)).toEqual(before);
+      const after = loadSubagentRegistryFromSqlite().get(input.subagent.runId);
+      if (missing === "owner") {
+        expect(result.records).toEqual([]);
+        expect(after).toEqual(before);
+      } else {
+        expect(result.records).toHaveLength(1);
+        expect(after).toEqual({ ...before, killReconciliation: undefined });
+        expect(after?.childSessionIdentity).toBeUndefined();
+      }
     },
   );
 

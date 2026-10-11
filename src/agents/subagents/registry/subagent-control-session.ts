@@ -36,6 +36,7 @@ export async function prepareSubagentKillSession(
   expected?: AgentRunSessionTarget,
   childAgentId?: string,
   original?: SubagentRunRecord["childSessionIdentity"],
+  requesterOwnedRun?: SubagentRunRecord,
 ): Promise<SubagentKillSession> {
   const childOwner = resolveSubagentChildSessionOwner(
     { childSessionKey: sessionKey, childAgentId },
@@ -45,6 +46,22 @@ export async function prepareSubagentKillSession(
   const env = cloneEnvWithPlatformSemantics(process.env);
   const selected = expected?.sessionKey === sessionKey ? { ...expected } : undefined;
   const storePath = selected?.storePath ?? childOwner.storePath;
+  const taskAuthority = requesterOwnedRun && resolveSubagentChildAuthority(requesterOwnedRun);
+  if (
+    requesterOwnedRun?.childSessionKey === sessionKey &&
+    taskAuthority?.status === "legacy-unverified" &&
+    taskAuthority.childAgentId === agentId
+  ) {
+    assertOwner();
+    return {
+      agentId,
+      storePath,
+      assertCurrent: assertOwner,
+      prepareRead: () => undefined,
+      withPublication: (run) => run(),
+      release: () => {},
+    };
+  }
   let releaseLifetime: (() => void) | undefined;
   const release = () => {
     releaseLifetime?.();

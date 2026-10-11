@@ -118,8 +118,17 @@ it.each([false, true].flatMap((reset) => [true, false].map((completed) => ({ res
     const admission = await sessionLifecycle.beginSessionWorkAdmission({
       scope: storePath,
       identities: [activeKey, "active-session"],
+      run: {
+        runId: "active",
+        sessionKey: activeKey,
+        sessionId: "active-session",
+        agentId: "main",
+      },
       assertAllowed: () => {},
-      onInterrupt: () => admission.release(),
+      onInterrupt: () => {
+        admission.release();
+        return { runId: "active" };
+      },
     });
     const mutateSession = sessionLifecycle.runExclusiveSessionLifecycleMutation;
     let holdEndedMutation = !completed;

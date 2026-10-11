@@ -4,11 +4,13 @@ import { isAgentEventLifecycleGenerationCurrent } from "../../../infra/agent-eve
 import { formatErrorMessage } from "../../../infra/errors.js";
 import { hasSqliteWorkerOutcomeUnknown } from "../../../infra/sqlite-worker-contract.js";
 import {
+  captureSessionWorkRunInterruptions,
   runExclusiveSessionLifecycleMutation,
   startSessionWorkAdmissionInterruption,
 } from "../../../sessions/session-lifecycle-admission.js";
 import type { OpenClawStateWorkerContext } from "../../../state/openclaw-state-worker-context.types.js";
 import { createAgentRunDirectAbortError } from "../../run-termination.js";
+import { resolveSubagentChildAuthority } from "./subagent-child-owner-match.js";
 import { captureSubagentCommands } from "./subagent-control-commands.js";
 import { createSubagentKillAcceptance } from "./subagent-control-kill-acceptance.js";
 import { matchesSubagentKillIntent } from "./subagent-control-kill-intent.js";
@@ -20,7 +22,10 @@ import type {
 } from "./subagent-control.types.js";
 import { SUBAGENT_ENDED_REASON_KILLED } from "./subagent-lifecycle-events.js";
 import { resolveSubagentKillTargetState } from "./subagent-registry-completion.js";
-import type { captureSubagentExecution } from "./subagent-registry-execution-cleanup.js";
+import {
+  captureSubagentEmbeddedExecution,
+  captureSubagentExecution,
+} from "./subagent-registry-execution-cleanup.js";
 import { getCurrentSubagentRunOwner, subagentRuns } from "./subagent-registry-memory.js";
 import {
   assertSubagentRegistryWriteOutcomeKnown,
@@ -165,6 +170,8 @@ export async function mutateSubagentRunForKill(
   }
   const childSessionKey = params.entry.childSessionKey;
   const resolved = params.session;
+  const legacy = resolveSubagentChildAuthority(initial).status === "legacy-unverified";
+  const embeddedExecution = legacy ? captureSubagentEmbeddedExecution(initial) : undefined;
   const sessionId = resolved.entry?.sessionId;
   const commands = params.commands ?? captureSubagentCommands(initial, resolved);
   const sessionLifecycleRevision = resolved.entry?.lifecycleRevision;
@@ -345,13 +352,13 @@ export async function mutateSubagentRunForKill(
       assertState();
       // The session fence is active before resolving/signaling other owners.
       // A refused full-session Stop must not interrupt their admissions or this collector.
-      if (params.beforeSessionKill) {
+      if (!legacy && params.beforeSessionKill) {
         commands?.observe(currentEntry());
       }
       const execution = captureExecution()?.execution;
       const alreadyAborted = execution?.controller.signal.aborted;
       try {
-        if (params.beforeSessionKill?.() === false) {
+        if (!legacy && params.beforeSessionKill?.() === false) {
           admission = "declined";
           return;
         }
@@ -407,6 +414,61 @@ export async function mutateSubagentRunForKill(
       }
       captureExecution();
       commands?.observe(currentEntry());
+      if (legacy) {
+        const reason = createAgentRunDirectAbortError();
+        const ownedAdmissions = captureSessionWorkRunInterruptions({
+          scope: resolved.storePath,
+          identities: [childSessionKey, embeddedExecution?.sessionId],
+          accept: (run) =>
+            run.runId === params.entry.runId &&
+            run.sessionKey === childSessionKey &&
+            run.agentId === resolved.agentId &&
+            (!params.entry.childSessionIdentity?.sessionId ||
+              run.sessionId === params.entry.childSessionIdentity.sessionId),
+        });
+        const captured = captureExecution();
+        if (captured) {
+          if (
+            captureSubagentExecution({ entry: params.entry, session: params.session })
+              ?.execution !== captured.execution
+          ) {
+            preparationResult = killClaim
+              ? await releaseChangedSessionKill(killClaim)
+              : { killed: false, superseded: true };
+            return;
+          }
+          captured.execution.controller.abort(reason);
+          acceptance.accept(true);
+        } else if (embeddedExecution) {
+          acceptance.accept(embeddedExecution.abort());
+        }
+        if (!stopAcceptance.accepted && commands) {
+          acceptance.accept(
+            commands.cancel(() => {
+              params.cancellationControl.assertCurrent();
+              assertSelectedRun();
+            }),
+          );
+        }
+        const interrupted = ownedAdmissions.map((owned) => owned.released);
+        for (const owned of ownedAdmissions) {
+          if (acceptance.callerFailure) {
+            break;
+          }
+          params.cancellationControl.assertCurrent();
+          assertSelectedRun();
+          acceptance.accept(owned.interrupt(reason));
+        }
+        if (interrupted.length > 0) {
+          admission = (await acceptance.drain(
+            Promise.all(interrupted).then(() => {}),
+            () => stopAcceptance.accepted,
+          ))
+            ? "ready"
+            : "busy";
+        }
+        return;
+      }
       const interruption = startSessionWorkAdmissionInterruption({
         scope: resolved.storePath,
         identities: [childSessionKey, sessionId],
@@ -579,6 +641,13 @@ export async function mutateSubagentRunForKill(
         }
         return { killed: marked > 0 };
       };
+      if (legacy) {
+        if (!stopAcceptance.accepted) {
+          params.cancellationControl.assertCurrent();
+        }
+        assertSelectedRun();
+        return await settleTargetCancellation();
+      }
       try {
         if (!ownsSessionIncarnation()) {
           return releaseChangedSessionKill(claimedKill);

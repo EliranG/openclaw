@@ -220,11 +220,18 @@ export function resolveRegisteredSubagentTimeoutSeconds(params: {
   const registeredRun = params.sessionKey
     ? getLatestLiveSubagentRunByChildSessionKey(params.sessionKey, undefined, params.agentId)
     : undefined;
+  const authority = registeredRun
+    ? resolveSubagentChildAuthority(registeredRun, params.admittedSessionEntry)
+    : undefined;
   // Admission may adopt a replacement; retained rows must match its final identity.
   const inherits =
     registeredRun &&
-    !registeredRun.execution.suppressSessionEffects &&
+    (!registeredRun.execution.suppressSessionEffects ||
+      authority?.status === "legacy-unverified") &&
     params.admittedSessionEntry?.sessionId === params.admittedSessionId &&
-    resolveSubagentChildAuthority(registeredRun, params.admittedSessionEntry).status === "verified";
+    registeredRun.childSessionIdentity?.sessionId === params.admittedSessionId &&
+    registeredRun.childSessionIdentity?.lifecycleRevision ===
+      params.admittedSessionEntry?.lifecycleRevision &&
+    authority?.status !== "mismatch";
   return inherits ? (registeredRun.runTimeoutSeconds ?? 0) : undefined;
 }

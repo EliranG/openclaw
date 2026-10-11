@@ -344,6 +344,7 @@ it.each(["during drain", "after abort"] as const)(
     const admission = await beginSessionWorkAdmission({
       scope: child.storePath,
       identities: [child.sessionKey, child.sessionId],
+      run: { runId, sessionKey: child.sessionKey, sessionId: child.sessionId, agentId: "ops" },
       assertAllowed: () => {},
       onInterrupt,
     });

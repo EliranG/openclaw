@@ -534,8 +534,17 @@ describe("descendant cascade ownership", () => {
         ? await beginSessionWorkAdmission({
             scope: resolveSessionStorePathCore(undefined, { agentId: "main" }),
             identities: ["agent:main:subagent:orchestrator"],
+            run: {
+              runId: "orchestrator",
+              sessionKey: "agent:main:subagent:orchestrator",
+              sessionId: "orchestrator",
+              agentId: "main",
+            },
             assertAllowed: () => {},
-            onInterrupt: () => entered.resolve(),
+            onInterrupt: () => {
+              entered.resolve();
+              return { runId: "orchestrator" };
+            },
           })
         : undefined;
     const append = vi

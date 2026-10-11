@@ -58,7 +58,7 @@ export function createSessionWorkAdmissionQueries<T extends ReleasableSessionWor
     scope: string;
     identities: Iterable<string | undefined>;
     accept: (run: SessionWorkRun) => boolean;
-  }): Array<{ run: SessionWorkRun; interrupt: (reason: Error) => boolean }> {
+  }): Array<{ run: SessionWorkRun; released: Promise<void>; interrupt: (reason: Error) => boolean }> {
     const identities = normalizeSessionIdentities(params.scope, params.identities);
     const current = currentAdmissions();
     const isCurrent = (admission: T) =>
@@ -76,6 +76,7 @@ export function createSessionWorkAdmissionQueries<T extends ReleasableSessionWor
       return [
         {
           run,
+          released: admission.released,
           interrupt: (reason: Error) => {
             // Awaited preparation cannot transfer Stop to a released or replaced owner.
             if (!isCurrent(admission)) {

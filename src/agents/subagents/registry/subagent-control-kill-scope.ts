@@ -136,8 +136,16 @@ export async function withSubagentKillScope<T>(
     const controller = owner ? { ...owner } : undefined;
     for (const snapshot of runs) {
       assertCurrent();
+      if (
+        parent &&
+        resolveSubagentChildAuthority(parent.entry).status === "legacy-unverified" &&
+        !isCurrentSubagentRun(parent.entry, params.cfg) &&
+        snapshot.requesterTurnRunId !== parent.entry.runId
+      ) {
+        continue;
+      }
       const authority = resolveSubagentChildAuthority(snapshot);
-      if (authority.status !== "verified") {
+      if (authority.status === "mismatch") {
         if (
           !unresolvedRunIds.has(snapshot.runId) &&
           (!controller ||
@@ -160,9 +168,17 @@ export async function withSubagentKillScope<T>(
         continue;
       }
       const childOwner = resolveSubagentChildAgentId(snapshot);
-      const entry = getLatestOwnedSubagentRun(snapshot.childSessionKey, childOwner, params.cfg);
+      const legacy = authority.status === "legacy-unverified";
+      const entry = legacy
+        ? subagentRuns.get(snapshot.runId)
+        : getLatestOwnedSubagentRun(snapshot.childSessionKey, childOwner, params.cfg);
       const selectedForChild = selected.get(snapshot.childSessionKey) ?? new Set();
-      if (!entry || !isSameSubagentRunOwner(entry, snapshot) || selectedForChild.has(childOwner)) {
+      const selectedOwner = legacy ? `${childOwner}\0${snapshot.runId}` : childOwner;
+      if (
+        !entry ||
+        !isSameSubagentRunOwner(entry, snapshot) ||
+        selectedForChild.has(selectedOwner)
+      ) {
         continue;
       }
       const ownerCurrent = (candidate: SubagentRunRecord, requirePreparedSession = true) =>
@@ -171,10 +187,10 @@ export async function withSubagentKillScope<T>(
         ownsRoot?.(candidate) !== false &&
         (!controller ||
           !ensureSubagentControllerOwnsRun({ cfg: params.cfg, controller, entry: candidate }));
-      if (!ownerCurrent(entry, false) || !isCurrentSubagentRun(entry, params.cfg)) {
+      if (!ownerCurrent(entry, false) || (!legacy && !isCurrentSubagentRun(entry, params.cfg))) {
         continue;
       }
-      selectedForChild.add(childOwner);
+      selectedForChild.add(selectedOwner);
       selected.set(entry.childSessionKey, selectedForChild);
       selectedCount += 1;
       const errors = new Set<string>();
@@ -196,7 +212,7 @@ export async function withSubagentKillScope<T>(
       const { childSessionKey } = entry;
       const latest = () => getLatestOwnedSubagentRun(childSessionKey, childOwner, params.cfg);
       const retirement = subagentRuns.captureRetirement(entry, (candidate) =>
-        isSameSubagentRunOwner(latest(), candidate),
+        isSameSubagentRunOwner(legacy ? subagentRuns.get(candidate.runId) : latest(), candidate),
       );
       retirements.push(retirement);
       const selectedEntry = () => retirement.observation.entry;
@@ -219,7 +235,7 @@ export async function withSubagentKillScope<T>(
           isSameSubagentRunOwner(current, entry) &&
           ownsRun() &&
           ownerCurrent(current, requirePreparedSession) &&
-          isCurrentSubagentRun(current, params.cfg) &&
+          (legacy || isCurrentSubagentRun(current, params.cfg)) &&
           (!requirePreparedSession || ownsSessionIncarnation())
         );
       };
@@ -230,7 +246,8 @@ export async function withSubagentKillScope<T>(
         }
         const replacement = latest();
         return (
-          (isSameSubagentRunOwner(replacement, current) ||
+          (legacy ||
+            isSameSubagentRunOwner(replacement, current) ||
             (retirement.observation.state === "retired" &&
               (!replacement || compareSubagentRunGeneration(replacement, current) < 0))) &&
           (!requirePreparedSession || ownsSessionIncarnation())
@@ -307,6 +324,7 @@ export async function withSubagentKillScope<T>(
               selectedRun.execution.transcriptTarget,
               selectedRun.childAgentId,
               selectedRun.childSessionIdentity,
+              selectedRun,
             );
             releaseSessions.push(session.release);
             if (!tree.canTraverse(false)) {

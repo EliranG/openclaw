@@ -248,8 +248,8 @@ Current configuration locates a known owner's store; it does not identify the
 original owner. Unknown-owner records remain unchanged and ineligible for ordinary
 cleanup. Historical records with resolvable child and requester owners but no
 original session identity or lifecycle revision are legacy-unverified. Requester
-settlement, delivery, bookkeeping, and authorized resume remain available, while
-child-session mutations are suppressed. Conflicting recorded identities remain
+settlement, delivery, bookkeeping, and authorized resume or exact-task Stop remain
+available, while child-session mutations are suppressed. Conflicting recorded identities remain
 mismatches; missing identity is not backfilled.
 
 Same-version rollback is not a guarantee that older writers preserve this
