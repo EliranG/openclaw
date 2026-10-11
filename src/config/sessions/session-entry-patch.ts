@@ -255,6 +255,7 @@ export async function runSessionEntryWorkerOperation<
   ): Promise<Result>;
   onAcknowledged?: (candidate: Candidate) => void;
   onTransactionFacts?: (facts: unknown) => boolean;
+  readRolledBackResult?: (value: unknown) => { value: Result } | undefined;
   onCommitted(
     candidate: Candidate,
     published: ReturnType<ReturnType<typeof retainSessionEntryWorkerPublication>["settle"]>,
@@ -274,6 +275,10 @@ export async function runSessionEntryWorkerOperation<
   let settlement: {
     candidate?: Candidate;
     admitted?: {
+      admission: SqliteWorkerOperationAdmission;
+      retained: RetainedWorkerTransactionAdmission;
+    };
+    transaction?: {
       admission: SqliteWorkerOperationAdmission;
       retained: RetainedWorkerTransactionAdmission;
     };
@@ -318,6 +323,23 @@ export async function runSessionEntryWorkerOperation<
           transferred = false;
           committing = true;
           const outcome = await send().then(ok, err);
+          const rolledBack = outcome.ok && params.readRolledBackResult?.(outcome.value);
+          if (
+            rolledBack &&
+            settlement.transaction &&
+            !params.nativeSettlement &&
+            !settlement.candidate &&
+            !transferId &&
+            !settlement.admitted
+          ) {
+            await settlement.transaction.retained.settled;
+            const native = settlement.transaction.admission.settlement;
+            if (native?.kind === "completed" && !native.committed) {
+              transcriptPublication?.settle(false, false);
+              publication?.settle(undefined, false);
+              return rolledBack.value;
+            }
+          }
           let acknowledged = outcome.ok && matchesReceipt(outcome.value);
           let unknown = !outcome.ok && hasSqliteWorkerOutcomeUnknown(outcome.error);
           if (settlement.admitted) {
@@ -476,7 +498,12 @@ export async function runSessionEntryWorkerOperation<
         throw new Error("Session patch returned unexpected transaction facts");
       }
     },
-    params.nativeSettlement?.onAdmission,
+    (admission, retained, request, grant) => {
+      if (committing && request.stage === "transaction") {
+        settlement.transaction = { admission, retained };
+      }
+      return params.nativeSettlement?.onAdmission(admission, retained, request, grant) ?? false;
+    },
     params.releaseSource,
   );
 }
