@@ -723,6 +723,7 @@ describe("private subagent completion processing receipts", () => {
         agentId: "main",
         sessionKey: childSessionKey,
         defaultSessionId: childSessionId,
+        lifecycleRevision: "private-descendant-original",
       });
       agentCommandMock.mockImplementationOnce(async (input) => {
         const command = input as AgentCommandOpts;
@@ -784,7 +785,7 @@ describe("private subagent completion processing receipts", () => {
           runId: descendantRunId,
           childSessionKey,
           childAgentId: "main",
-          sessionEntry: { sessionId: childSessionId },
+          sessionEntry: loadSessionEntry(childSessionKey).entry,
           requesterSessionKey: sessionKey,
           requesterAgentId: "main",
           requesterTurnRunId: runId,
