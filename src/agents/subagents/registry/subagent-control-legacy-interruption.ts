@@ -4,7 +4,7 @@ import type { captureSubagentCommands } from "./subagent-control-commands.js";
 import type { createSubagentKillAcceptance } from "./subagent-control-kill-acceptance.js";
 import type { SubagentKillSession } from "./subagent-control-session.js";
 import {
-  type captureSubagentEmbeddedExecution,
+  captureSubagentEmbeddedExecution,
   captureSubagentExecution,
   type captureSubagentReplyExecution,
 } from "./subagent-registry-execution-cleanup.js";
@@ -35,16 +35,29 @@ export async function interruptLegacySubagentRun(params: {
         run.sessionId === entry.childSessionIdentity.sessionId),
   });
   const captured = params.captureExecution();
+  let refusedRuntimeStillCurrent: (() => boolean) | undefined;
   if (captured) {
     if (captureSubagentExecution({ entry, session })?.execution !== captured.execution) {
       return "superseded";
     }
+    const alreadyAborted = captured.execution.controller.signal.aborted;
     captured.execution.controller.abort(reason);
-    acceptance.accept(true);
+    acceptance.accept(!alreadyAborted && captured.execution.controller.signal.aborted);
   } else if (embeddedExecution) {
-    acceptance.accept(embeddedExecution.abort());
+    const aborted = embeddedExecution.abort();
+    acceptance.accept(aborted);
+    if (!aborted) {
+      refusedRuntimeStillCurrent = () => {
+        const current = captureSubagentEmbeddedExecution(entry);
+        return current?.sessionId === embeddedExecution.sessionId;
+      };
+    }
   } else if (replyExecution) {
-    acceptance.accept(replyExecution.abort());
+    const aborted = replyExecution.abort();
+    acceptance.accept(aborted);
+    if (!aborted) {
+      refusedRuntimeStillCurrent = replyExecution.isCurrent;
+    }
   }
   if (!stopAcceptance.accepted && params.commands) {
     acceptance.accept(
@@ -66,11 +79,11 @@ export async function interruptLegacySubagentRun(params: {
     params.assertSelectedRun();
     acceptance.accept(owned.interrupt(reason));
   }
-  return interrupted.length === 0 ||
+  const drained =
+    interrupted.length === 0 ||
     (await acceptance.drain(
       Promise.all(interrupted).then(() => {}),
       () => stopAcceptance.accepted,
-    ))
-    ? "ready"
-    : "busy";
+    ));
+  return !drained || refusedRuntimeStillCurrent?.() ? "busy" : "ready";
 }

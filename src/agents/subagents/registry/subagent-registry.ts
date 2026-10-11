@@ -475,6 +475,7 @@ function retireSupersededSubagentRun(
     entry.execution.status === "terminal" &&
     !entry.requesterTurnRunId &&
     !wake &&
+    !entry.cleanupHandled &&
     !entry.cleanupCompletedAt
   ) {
     startSubagentAnnounceCleanupFlow(entry);
@@ -485,8 +486,14 @@ function retireSupersededSubagentRun(
     isRequesterCompletionCohortCurrent(entry, getLatestLiveSubagentRunByChildSessionKey);
   const inRequesterCohort =
     Boolean(entry.requesterTurnRunId) || wake?.batchRunIds?.includes(entry.runId) === true;
-  if (owesCompletion && inRequesterCohort && isCurrent()) {
-    // A newer task owns session effects, but this cohort still owes the older result.
+  const pendingAdmittedCleanup =
+    entry.execution.status === "terminal" &&
+    entry.cleanupHandled === true &&
+    entry.cleanupCompletedAt === undefined &&
+    !entry.killIntent &&
+    !entry.killReconciliation;
+  if (((owesCompletion && inRequesterCohort) || pendingAdmittedCleanup) && isCurrent()) {
+    // A newer task owns session effects, but this run still owes requester settlement.
     if (entry.cleanupCompletedAt !== undefined) {
       resumeRequesterSettleWake(runId, entry);
       return Promise.resolve();

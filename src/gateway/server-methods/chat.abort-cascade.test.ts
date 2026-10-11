@@ -541,10 +541,7 @@ describe("descendant cascade ownership", () => {
               agentId: "main",
             },
             assertAllowed: () => {},
-            onInterrupt: () => {
-              entered.resolve();
-              return { runId: "orchestrator" };
-            },
+            onInterrupt: () => entered.resolve(),
           })
         : undefined;
     const append = vi

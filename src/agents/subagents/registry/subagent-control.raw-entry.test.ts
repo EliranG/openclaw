@@ -637,6 +637,16 @@ it.each([
           sessionKey,
           agentId: "main",
           expectedRunId: "unbound-incarnation",
+          expectedGeneration: 1,
+        }),
+      ).toEqual({ found: false, killed: false });
+      expect(getSubagentRunByRunId("unbound-incarnation")?.execution.status).toBe("running");
+      expect(
+        await killSubagentRunAdmin({
+          cfg,
+          sessionKey,
+          agentId: "main",
+          expectedRunId: "unbound-incarnation",
         }),
       ).toMatchObject({
         found: true,

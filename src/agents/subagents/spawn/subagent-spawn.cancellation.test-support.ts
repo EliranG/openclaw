@@ -228,6 +228,12 @@ export function registerNativeCancellationCases<
           blockedAdmission = await beginSessionWorkAdmission({
             scope: bound.storePath,
             identities: [targetKey, target.sessionId],
+            run: {
+              runId: targetRunId,
+              sessionKey: targetKey,
+              sessionId: target.sessionId,
+              agentId: "main",
+            },
             assertAllowed: () => {},
           });
         }

@@ -105,6 +105,7 @@ it.each(["exact", "session cascade", "typed stop", "channel stop", "embedded sto
         agentId: childAgentId,
         sessionKey: childSessionKey,
         defaultSessionId: `${runId}-session`,
+        lifecycleRevision: "original-child",
       });
       await registerSubagentRun({
         runId,
@@ -269,6 +270,7 @@ it.each([
         agentId: runId === "bad" ? "broken" : "main",
         sessionKey: childSessionKey,
         defaultSessionId: `${runId}-session`,
+        lifecycleRevision: "original-child",
       });
       await registerSubagentRun({
         runId,
@@ -441,6 +443,7 @@ it.for(["cascade native new", "RPC reset", "RPC delete"])(
       { storePath: childStore, sessionKey: childKey },
       {
         sessionId: "incarnation-child",
+        lifecycleRevision: "original-child",
         updatedAt: Date.now(),
       },
     );

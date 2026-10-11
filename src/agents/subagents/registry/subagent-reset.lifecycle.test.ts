@@ -257,7 +257,10 @@ it.each(["chat", "rpc", "chat-rebind"] as const)(
     });
     const parentInterrupted = createDeferredCore();
     const childInterrupted = createDeferredCore();
-    const interruptChild = vi.fn(() => childInterrupted.resolve());
+    const interruptChild = vi.fn(() => {
+      childInterrupted.resolve();
+      return { runId: "draining" };
+    });
     const parentAdmission = await beginSessionWorkAdmission({
       scope: storePath,
       identities: [parentKey, "parent"],
@@ -267,6 +270,12 @@ it.each(["chat", "rpc", "chat-rebind"] as const)(
     const childAdmission = await beginSessionWorkAdmission({
       scope: storePath,
       identities: [childKey("draining"), "draining"],
+      run: {
+        runId: "draining",
+        sessionKey: childKey("draining"),
+        sessionId: "draining",
+        agentId: "main",
+      },
       assertAllowed: () => {},
       onInterrupt: interruptChild,
     });

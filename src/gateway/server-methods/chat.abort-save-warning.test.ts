@@ -182,7 +182,11 @@ it.each([
     sessionKey: "agent:main:subagent:save-warning",
     sessionId: "save-warning-session",
   };
-  await replaceSessionEntry(scope, { sessionId: scope.sessionId, updatedAt: Date.now() });
+  await replaceSessionEntry(scope, {
+    sessionId: scope.sessionId,
+    lifecycleRevision: "save-warning-original",
+    updatedAt: Date.now(),
+  });
   const runId = "run-save-failure";
   const active: ChatAbortControllerEntry = createActiveRun(scope.sessionKey, scope);
   const refusal = new SessionMutationAuthorizationChangedError({

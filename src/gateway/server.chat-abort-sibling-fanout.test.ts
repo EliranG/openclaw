@@ -246,7 +246,6 @@ for (const { name, fault, replaceParent } of [
                 if (runId === failedRunId) {
                   throw new Error("synthetic sibling interruption failure");
                 }
-                return { runId };
               },
             }),
           );

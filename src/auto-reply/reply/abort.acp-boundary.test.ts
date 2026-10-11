@@ -236,10 +236,7 @@ it.each([
             agentId: "main",
           },
           assertAllowed: () => {},
-          onInterrupt: () => {
-            nativeInterrupted.resolve();
-            return { runId: "running" };
-          },
+          onInterrupt: () => nativeInterrupted.resolve(),
         });
       }
       for (const [runId, childSessionKey] of [

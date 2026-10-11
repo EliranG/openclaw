@@ -569,6 +569,7 @@ async function seedChild(id: string, turn: string, queued = true, requester = pa
     agentId: "main",
     sessionKey: childKey(id),
     defaultSessionId: id,
+    lifecycleRevision: `${id}-original`,
   });
   await registerSubagentRun({
     runId: id,

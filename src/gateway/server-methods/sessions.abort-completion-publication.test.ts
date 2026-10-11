@@ -37,6 +37,7 @@ it.for(["before commit", "after commit"] as const)(
       agentId: "main",
       sessionKey: childKey,
       defaultSessionId: sessionId,
+      lifecycleRevision: "completion-publication-original",
     });
     await registerSubagentRun({
       runId,

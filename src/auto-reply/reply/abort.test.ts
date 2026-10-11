@@ -476,6 +476,13 @@ describe("abort detection", () => {
       });
     });
     enqueueQueuedFollowupRun({ root, cfg, sessionId, sessionKey });
+    await replaceSessionEntry(
+      { storePath, agentId: "main", sessionKey: childKey },
+      {
+        ...loadSessionEntry({ storePath, agentId: "main", sessionKey: childKey })!,
+        lifecycleRevision: "slow-persistence-child-revision",
+      },
+    );
     await addSubagentFixture({
       runId: "slow-child-run",
       childSessionKey: childKey,
@@ -757,11 +764,26 @@ describe("abort detection", () => {
     const sessionKey = "telegram:persistence-failure-parent";
     const firstChildKey = "agent:main:subagent:persistence-failure-first";
     const secondChildKey = "agent:main:subagent:persistence-failure-second";
+    const { storePath, cfg } = await createAbortConfig({
+      sessionIdsByKey: {
+        [sessionKey]: "persistence-failure-parent",
+        [firstChildKey]: "run-persistence-failure-first",
+        [secondChildKey]: "run-persistence-failure-second",
+      },
+    });
+    for (const childSessionKey of [firstChildKey, secondChildKey]) {
+      const scope = { storePath, agentId: "main", sessionKey: childSessionKey };
+      const entry = loadSessionEntry(scope)!;
+      await replaceSessionEntry(scope, {
+        ...entry,
+        lifecycleRevision: `${entry.sessionId}-revision`,
+      });
+    }
     const run = (runId: string, childSessionKey: string): SubagentRunFixture => ({
       runId,
       childSessionKey,
       childAgentId: "main",
-      sessionEntry: { sessionId: runId },
+      sessionEntry: loadSessionEntry({ storePath, agentId: "main", sessionKey: childSessionKey }),
       requesterSessionKey: sessionKey,
       requesterDisplayKey: sessionKey,
       task: "stop despite persistence failure",
@@ -791,7 +813,7 @@ describe("abort detection", () => {
 
     await expect(
       stopSubagentsForRequester({
-        cfg: {} as OpenClawConfig,
+        cfg,
         requesterSessionKey: sessionKey,
       }),
     ).resolves.toEqual({ stopped: 1, failed: 1 });

@@ -125,10 +125,7 @@ it.each([false, true].flatMap((reset) => [true, false].map((completed) => ({ res
         agentId: "main",
       },
       assertAllowed: () => {},
-      onInterrupt: () => {
-        admission.release();
-        return { runId: "active" };
-      },
+      onInterrupt: () => admission.release(),
     });
     const mutateSession = sessionLifecycle.runExclusiveSessionLifecycleMutation;
     let holdEndedMutation = !completed;
@@ -284,6 +281,7 @@ it.each(["child", "ancestor"])(
         agentId: "broken",
         sessionKey: ancestorKey,
         defaultSessionId: "ancestor-session",
+        lifecycleRevision: "original-ancestor",
       });
       await registerSubagentRun({
         runId: "ancestor",
@@ -309,6 +307,7 @@ it.each(["child", "ancestor"])(
       agentId: childAgent,
       sessionKey: badKey,
       defaultSessionId: "bad-session",
+      lifecycleRevision: "original-child",
     });
     for (const [runId, childSessionKey] of [
       ["bad", badKey],
@@ -320,6 +319,7 @@ it.each(["child", "ancestor"])(
         agentId: childAgentId,
         sessionKey: childSessionKey,
         defaultSessionId: `${runId}-session`,
+        lifecycleRevision: "original-child",
       });
       await registerSubagentRun({
         runId,

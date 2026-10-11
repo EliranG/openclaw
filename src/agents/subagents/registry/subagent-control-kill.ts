@@ -20,6 +20,7 @@ import {
 import {
   ensureSubagentControllerOwnsRun,
   getLatestOwnedSubagentRun,
+  isCurrentSubagentRun,
   type captureExecRequestSubagentSelection,
 } from "./subagent-control-scope.js";
 import {
@@ -650,6 +651,10 @@ export async function killSubagentRunAdmin(
       runs: [entry],
       assertCurrent: control?.assertCurrent,
       prepareRead: control?.prepareRead,
+      ownsRoot:
+        params.expectedGeneration === undefined
+          ? undefined
+          : (candidate) => isCurrentSubagentRun(candidate, params.cfg),
     },
     async (scope, [tree]) => {
       if (!tree) {

@@ -62,13 +62,12 @@ export async function captureSubagentReplyExecution(entry: SubagentRunRecord) {
     return undefined;
   }
   const backend = getAttachedBackend(operation);
+  const isCurrent = () => current() === operation && getAttachedBackend(operation) === backend;
   return {
     sessionId: operation.sessionId,
     settlement: operation.ownerSettlement,
-    abort: () =>
-      current() === operation &&
-      getAttachedBackend(operation) === backend &&
-      operation.abortByUser(),
+    isCurrent,
+    abort: () => isCurrent() && operation.abortByUser(),
   };
 }
 
