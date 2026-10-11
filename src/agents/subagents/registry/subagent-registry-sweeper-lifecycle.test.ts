@@ -42,7 +42,7 @@ async function register(runId: string) {
     createSubagentRunParams({
       runId,
       childSessionKey: `agent:main:subagent:${runId}`,
-      sessionEntry: { sessionId: `sess-${runId}` },
+      sessionEntry: { sessionId: `sess-${runId}`, lifecycleRevision: `revision-${runId}` },
     }),
   );
 }
