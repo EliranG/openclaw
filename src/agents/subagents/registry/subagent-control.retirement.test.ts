@@ -80,12 +80,14 @@ it.each([
       agentId: "main",
       sessionKey: ancestorKey,
       defaultSessionId: "ancestor-session",
+      lifecycleRevision: "ancestor-revision",
     });
     await writeSubagentSessionEntry({
       stateDir: fixture.stateDir,
       agentId: "main",
       sessionKey: childKey,
       defaultSessionId: "child-session",
+      lifecycleRevision: "child-revision",
     });
     if (transition === "retirement with retained predecessor") {
       await registerSubagentRun({
@@ -260,11 +262,21 @@ it.each([
               worker.mockImplementation(runSubagentStateWorkerOperation);
             }
           } else if (transition === "new direct child after retirement") {
+            await writeSubagentSessionEntry({
+              stateDir: fixture.stateDir,
+              agentId: "main",
+              sessionKey: "agent:main:subagent:late-child",
+              defaultSessionId: "late-child-session",
+              lifecycleRevision: "late-child-revision",
+            });
             await registerSubagentRun({
               runId: "late",
               childSessionKey: "agent:main:subagent:late-child",
               childAgentId: "main",
-              sessionEntry: { sessionId: "late-child-session" },
+              sessionEntry: {
+                sessionId: "late-child-session",
+                lifecycleRevision: "late-child-revision",
+              },
               requesterSessionKey: ancestorKey,
               requesterAgentId: "main",
               requesterDisplayKey: "main",
@@ -335,12 +347,14 @@ it.each([
     agentId: "main",
     sessionKey: ancestorKey,
     defaultSessionId: "draining-ancestor-session",
+    lifecycleRevision: "draining-ancestor-revision",
   });
   await writeSubagentSessionEntry({
     stateDir: fixture.stateDir,
     agentId: "main",
     sessionKey: childKey,
     defaultSessionId: "draining-child-session",
+    lifecycleRevision: "draining-child-revision",
   });
   for (const [runId, childSessionKey, owner, collect] of [
     ["draining-ancestor", ancestorKey, controllerSessionKey, false],
@@ -477,7 +491,7 @@ it("signals the non-main runtime owner in a template session store", async () =>
   );
   await replaceSessionEntry(
     { storePath, sessionKey: childSessionKey },
-    { sessionId, updatedAt: Date.now() },
+    { sessionId, lifecycleRevision: `${sessionId}-revision`, updatedAt: Date.now() },
   );
   await registerSubagentRun({
     runId: "fixed-store-child",
@@ -524,7 +538,10 @@ it("does not create a missing child database while binding cancellation", async 
     runId: "unprepared",
     childSessionKey,
     childAgentId: "missing",
-    sessionEntry: { sessionId: "unprepared-session" },
+    sessionEntry: {
+      sessionId: "unprepared-session",
+      lifecycleRevision: "unprepared-revision",
+    },
     requesterSessionKey: "agent:main:main",
     requesterAgentId: "main",
     requesterDisplayKey: "main",

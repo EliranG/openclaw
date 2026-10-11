@@ -19,7 +19,8 @@ import { resolveSwarmConfig } from "../swarm/swarm-config.js";
 import { bindSwarmRunReservation, enqueueSwarmRun } from "../swarm/swarm-scheduler.js";
 import {
   resolveSubagentChildAgentId,
-  resolveSubagentChildAuthorityError,
+  resolveSubagentChildAuthority,
+  warnLegacySubagentAuthority,
 } from "./subagent-child-owner-match.js";
 import { shouldSuppressSubagentRecoverySessionEffects } from "./subagent-recovery-state.js";
 import { callSubagentRegistryGateway } from "./subagent-registry-deps.js";
@@ -188,7 +189,7 @@ export function createSubagentRegistryRestorer(config: {
         assertCurrent();
       }
       const selected = getCurrentSubagentRunOwner(runs, snapshot);
-      if (!selected || selected.runId !== runId || resolveSubagentChildAuthorityError(selected)) {
+      if (!selected || selected.runId !== runId || resolveSubagentChildAuthority(selected).status === "mismatch") {
         continue;
       }
       assertReadCurrent();
@@ -210,12 +211,19 @@ export function createSubagentRegistryRestorer(config: {
       if (entry.execution.restartRecovery || entry.killIntent || entry.killReconciliation) {
         continue;
       }
+      const authority = resolveSubagentChildAuthority(entry, sessionEntry);
+      if (authority.status === "mismatch") {
+        continue;
+      }
+      warnLegacySubagentAuthority(entry, warn);
       if (entry.collect && entry.execution.status === "queued") {
         const { childSessionIdentity: cleanupSessionEntry, queuedLaunch: launch } = entry;
-        if (!launch) {
+        if (!launch || authority.status === "legacy-unverified") {
           void failAndCleanupRestoredQueuedRun(
             entry,
-            "queued collector launch state was unavailable after restart",
+            !launch
+              ? "queued collector launch state was unavailable after restart"
+              : "queued collector original session identity was unavailable after restart; launch was not resumed",
             getAgentEventLifecycleGeneration(),
             cleanupSessionEntry?.sessionId,
             cleanupSessionEntry?.lifecycleRevision,
@@ -409,9 +417,11 @@ export function createSubagentRegistryRestorer(config: {
       warn(message, { runId, childSessionKey: entry.childSessionKey, error: failure });
     // Root custody includes the terminal commit and final cleanup publication.
     return runWithGatewayIndependentRootWorkAdmission(async () => {
-      if (resolveSubagentChildAuthorityError(entry)) {
+      const authority = resolveSubagentChildAuthority(entry);
+      if (authority.status === "mismatch") {
         return false;
       }
+      warnLegacySubagentAuthority(entry, warn);
       // Descriptorless restore failures enter here without onStartFailure; their
       // provisional session must survive the same pending cancellation receipt.
       for (
@@ -437,6 +447,7 @@ export function createSubagentRegistryRestorer(config: {
         const current = currentEntry();
         return (
           current !== undefined &&
+          authority.status === "verified" &&
           isSameSubagentRunOwner(current, entry) &&
           isAgentEventLifecycleGenerationCurrent(lifecycleGeneration) &&
           !shouldSuppressSubagentRecoverySessionEffects(current) &&
@@ -475,6 +486,9 @@ export function createSubagentRegistryRestorer(config: {
       let sessionCleanup: Awaited<ReturnType<typeof deleteSubagentSessionForCleanup>> | undefined;
       try {
         const cleanupComplete = await (async () => {
+          if (authority.status === "legacy-unverified") {
+            return true;
+          }
           if (!ownsCleanup() || !expectedSessionId || !expectedLifecycleRevision) {
             return false;
           }
