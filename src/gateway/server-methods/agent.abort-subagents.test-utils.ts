@@ -128,6 +128,7 @@ export function registerAgentAbortSubagentTests() {
         });
         childOperation.attachBackend({
           kind: "embedded",
+          runId: ownedChildSessionKey,
           isStreaming: () => true,
           cancel: () => {
             if (!releaseOnParent) {

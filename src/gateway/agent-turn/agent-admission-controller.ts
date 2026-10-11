@@ -191,6 +191,7 @@ export function createAgentAdmissionController(params: {
         runId: params.runId,
         stopReason,
       });
+      return { runId: params.runId };
     }
     return undefined;
   };
