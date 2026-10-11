@@ -4,7 +4,6 @@ import { isAgentEventLifecycleGenerationCurrent } from "../../../infra/agent-eve
 import { formatErrorMessage } from "../../../infra/errors.js";
 import { hasSqliteWorkerOutcomeUnknown } from "../../../infra/sqlite-worker-contract.js";
 import {
-  captureSessionWorkRunInterruptions,
   runExclusiveSessionLifecycleMutation,
   startSessionWorkAdmissionInterruption,
 } from "../../../sessions/session-lifecycle-admission.js";
@@ -14,6 +13,7 @@ import { resolveSubagentChildAuthority } from "./subagent-child-owner-match.js";
 import { captureSubagentCommands } from "./subagent-control-commands.js";
 import { createSubagentKillAcceptance } from "./subagent-control-kill-acceptance.js";
 import { matchesSubagentKillIntent } from "./subagent-control-kill-intent.js";
+import { interruptLegacySubagentRun } from "./subagent-control-legacy-interruption.js";
 import type { SubagentKillSession } from "./subagent-control-session.js";
 import * as runtime from "./subagent-control.runtime.js";
 import type {
@@ -418,62 +418,24 @@ export async function mutateSubagentRunForKill(
       captureExecution();
       commands?.observe(currentEntry());
       if (legacy) {
-        const reason = createAgentRunDirectAbortError();
-        const ownedAdmissions = captureSessionWorkRunInterruptions({
-          scope: resolved.storePath,
-          identities: [childSessionKey, embeddedExecution?.sessionId, replyExecution?.sessionId],
-          accept: (run) =>
-            run.runId === params.entry.runId &&
-            run.sessionKey === childSessionKey &&
-            run.agentId === resolved.agentId &&
-            (!params.entry.childSessionIdentity?.sessionId ||
-              run.sessionId === params.entry.childSessionIdentity.sessionId),
+        const interrupted = await interruptLegacySubagentRun({
+          entry: params.entry,
+          session: resolved,
+          embeddedExecution,
+          replyExecution,
+          captureExecution,
+          commands,
+          acceptance,
+          stopAcceptance,
+          assertCallerCurrent: params.cancellationControl.assertCurrent,
+          assertSelectedRun,
         });
-        const captured = captureExecution();
-        if (captured) {
-          if (
-            captureSubagentExecution({ entry: params.entry, session: params.session })
-              ?.execution !== captured.execution
-          ) {
-            preparationResult = killClaim
-              ? await releaseChangedSessionKill(killClaim)
-              : { killed: false, superseded: true };
-            return;
-          }
-          captured.execution.controller.abort(reason);
-          acceptance.accept(true);
-        } else if (embeddedExecution) {
-          acceptance.accept(embeddedExecution.abort());
-        } else if (replyExecution) {
-          acceptance.accept(replyExecution.abort());
-        }
-        if (!stopAcceptance.accepted && commands) {
-          acceptance.accept(
-            commands.cancel(() => {
-              params.cancellationControl.assertCurrent();
-              assertSelectedRun();
-            }),
-          );
-        }
-        const interrupted = ownedAdmissions.map((owned) => owned.released);
-        if (replyExecution?.settlement && stopAcceptance.accepted) {
-          interrupted.push(replyExecution.settlement);
-        }
-        for (const owned of ownedAdmissions) {
-          if (acceptance.callerFailure) {
-            break;
-          }
-          params.cancellationControl.assertCurrent();
-          assertSelectedRun();
-          acceptance.accept(owned.interrupt(reason));
-        }
-        if (interrupted.length > 0) {
-          admission = (await acceptance.drain(
-            Promise.all(interrupted).then(() => {}),
-            () => stopAcceptance.accepted,
-          ))
-            ? "ready"
-            : "busy";
+        if (interrupted === "superseded") {
+          preparationResult = killClaim
+            ? await releaseChangedSessionKill(killClaim)
+            : { killed: false, superseded: true };
+        } else {
+          admission = interrupted;
         }
         return;
       }

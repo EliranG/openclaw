@@ -25,6 +25,7 @@ import {
 } from "./subagent-control-scope.js";
 import {
   prepareSubagentKillSession,
+  prepareSubagentKillSessionReads,
   type SubagentKillSession,
 } from "./subagent-control-session.js";
 import type {
@@ -253,49 +254,10 @@ export async function withSubagentKillScope<T>(
           (!requirePreparedSession || ownsSessionIncarnation())
         );
       };
-      const prepareRead = (): Promise<void> | undefined => {
-        const failures: unknown[] = [];
-        const publications = [parent?.prepareRead, session?.prepareRead].flatMap((prepare) => {
-          try {
-            const publication = prepare?.();
-            return publication ? [publication] : [];
-          } catch (error) {
-            // The synchronous ownership check handles a known-revoked generation.
-            if (!isSessionDeliveryGenerationRevokedError(error)) {
-              failures.push(error);
-            }
-            return [];
-          }
-        });
-        const throwFailures = () => {
-          if (failures.length === 1) {
-            throw failures[0];
-          }
-          if (failures.length > 1) {
-            throw new AggregateError(failures, "Subagent publication readiness failed");
-          }
-        };
-        if (publications.length === 0) {
-          throwFailures();
-          return undefined;
-        }
-        return Promise.allSettled(publications).then((results) => {
-          try {
-            assertSubagentRegistryWriteSourceCurrent(stateContext);
-          } catch (error) {
-            failures.push(error);
-          }
-          for (const result of results) {
-            if (
-              result.status === "rejected" &&
-              !isSessionDeliveryGenerationRevokedError(result.reason)
-            ) {
-              failures.push(result.reason);
-            }
-          }
-          throwFailures();
-        });
-      };
+      const prepareRead = () =>
+        prepareSubagentKillSessionReads([parent?.prepareRead, session?.prepareRead], () =>
+          assertSubagentRegistryWriteSourceCurrent(stateContext),
+        );
       const tree: KillTree = {
         get entry() {
           return selectedEntry() ?? entry;

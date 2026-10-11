@@ -28,6 +28,49 @@ export type SubagentKillSession = {
   release: () => void | Promise<void>;
 };
 
+export function prepareSubagentKillSessionReads(
+  preparations: Array<SubagentKillSession["prepareRead"] | undefined>,
+  assertCurrent: () => void,
+): Promise<void> | undefined {
+  const failures: unknown[] = [];
+  const publications = preparations.flatMap((prepare) => {
+    try {
+      const publication = prepare?.();
+      return publication ? [publication] : [];
+    } catch (error) {
+      if (!isSessionDeliveryGenerationRevokedError(error)) {
+        failures.push(error);
+      }
+      return [];
+    }
+  });
+  const throwFailures = () => {
+    if (failures.length === 1) {
+      throw failures[0];
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(failures, "Subagent publication readiness failed");
+    }
+  };
+  if (publications.length === 0) {
+    throwFailures();
+    return undefined;
+  }
+  return Promise.allSettled(publications).then((results) => {
+    try {
+      assertCurrent();
+    } catch (error) {
+      failures.push(error);
+    }
+    for (const result of results) {
+      if (result.status === "rejected" && !isSessionDeliveryGenerationRevokedError(result.reason)) {
+        failures.push(result.reason);
+      }
+    }
+    throwFailures();
+  });
+}
+
 /** Retain the original session generation before native cancellation can yield. */
 export async function prepareSubagentKillSession(
   cfg: OpenClawConfig,
