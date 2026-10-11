@@ -38,6 +38,40 @@ export function captureSubagentEmbeddedExecution(entry: SubagentRunRecord) {
     : undefined;
 }
 
+export async function captureSubagentReplyExecution(entry: SubagentRunRecord) {
+  const authority = resolveSubagentChildAuthority(entry);
+  if (authority.status === "mismatch") {
+    return undefined;
+  }
+  const [{ resolveReplyOperationsForSession }, { getAttachedBackend }] = await Promise.all([
+    import("../../../auto-reply/reply/reply-run-registry.registry.js"),
+    import("../../../auto-reply/reply/reply-run-registry.state.js"),
+  ]);
+  const current = () =>
+    resolveReplyOperationsForSession({
+      agentId: authority.childAgentId,
+      sessionKeys: [entry.childSessionKey],
+      sessionId: entry.childSessionIdentity?.sessionId,
+    }).find(
+      (operation) =>
+        operation.key === entry.childSessionKey &&
+        getAttachedBackend(operation)?.runId === entry.runId,
+    );
+  const operation = current();
+  if (!operation) {
+    return undefined;
+  }
+  const backend = getAttachedBackend(operation);
+  return {
+    sessionId: operation.sessionId,
+    settlement: operation.ownerSettlement,
+    abort: () =>
+      current() === operation &&
+      getAttachedBackend(operation) === backend &&
+      operation.abortByUser(),
+  };
+}
+
 export function captureSubagentExecution(params: {
   entry: SubagentRunRecord;
   session: SubagentKillSession;

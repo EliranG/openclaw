@@ -25,6 +25,7 @@ import { resolveSubagentKillTargetState } from "./subagent-registry-completion.j
 import {
   captureSubagentEmbeddedExecution,
   captureSubagentExecution,
+  captureSubagentReplyExecution,
 } from "./subagent-registry-execution-cleanup.js";
 import { getCurrentSubagentRunOwner, subagentRuns } from "./subagent-registry-memory.js";
 import {
@@ -172,6 +173,8 @@ export async function mutateSubagentRunForKill(
   const resolved = params.session;
   const legacy = resolveSubagentChildAuthority(initial).status === "legacy-unverified";
   const embeddedExecution = legacy ? captureSubagentEmbeddedExecution(initial) : undefined;
+  const replyExecution = legacy ? await captureSubagentReplyExecution(initial) : undefined;
+  assertSelectedRun();
   const sessionId = resolved.entry?.sessionId;
   const commands = params.commands ?? captureSubagentCommands(initial, resolved);
   const sessionLifecycleRevision = resolved.entry?.lifecycleRevision;
@@ -418,7 +421,7 @@ export async function mutateSubagentRunForKill(
         const reason = createAgentRunDirectAbortError();
         const ownedAdmissions = captureSessionWorkRunInterruptions({
           scope: resolved.storePath,
-          identities: [childSessionKey, embeddedExecution?.sessionId],
+          identities: [childSessionKey, embeddedExecution?.sessionId, replyExecution?.sessionId],
           accept: (run) =>
             run.runId === params.entry.runId &&
             run.sessionKey === childSessionKey &&
@@ -441,6 +444,8 @@ export async function mutateSubagentRunForKill(
           acceptance.accept(true);
         } else if (embeddedExecution) {
           acceptance.accept(embeddedExecution.abort());
+        } else if (replyExecution) {
+          acceptance.accept(replyExecution.abort());
         }
         if (!stopAcceptance.accepted && commands) {
           acceptance.accept(
@@ -451,6 +456,9 @@ export async function mutateSubagentRunForKill(
           );
         }
         const interrupted = ownedAdmissions.map((owned) => owned.released);
+        if (replyExecution?.settlement && stopAcceptance.accepted) {
+          interrupted.push(replyExecution.settlement);
+        }
         for (const owned of ownedAdmissions) {
           if (acceptance.callerFailure) {
             break;
