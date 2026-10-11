@@ -489,7 +489,7 @@ export function createSubagentRegistryRestorer(config: {
           if (authority.status === "legacy-unverified") {
             return true;
           }
-          if (!ownsCleanup() || !expectedSessionId || !expectedLifecycleRevision) {
+          if (!ownsCleanup()) {
             return false;
           }
           if (!expectedSessionId || !expectedLifecycleRevision) {

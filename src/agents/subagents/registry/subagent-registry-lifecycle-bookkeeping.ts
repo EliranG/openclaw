@@ -34,13 +34,11 @@ export async function completeCleanupBookkeeping(
   }
   const stateContext = cleanupParams.stateContext ?? captureOpenClawStateWorkerContext();
   // Bookkeeping can retire the row; detached child effects refresh currency below.
-  const suppressSessionEffects = !context.sessionEffectsHostCurrent(entry);
   const assertCurrent = (current: SubagentRunRecord) => {
     assertSubagentRegistryWriteSourceCurrent(stateContext);
     if (
       cleanupParams.isCurrent?.() === false ||
-      resolveSubagentChildAuthority(current).status === "mismatch" ||
-      context.sessionEffectsHostCurrent(current) === suppressSessionEffects
+      resolveSubagentChildAuthority(current).status === "mismatch"
     ) {
       throw new Error("Subagent cleanup owner changed before bookkeeping.");
     }
@@ -150,7 +148,8 @@ export async function completeCleanupBookkeeping(
     stateContext,
     assertCurrent,
     retire: () => retireImmediately,
-    mutate: (draft) => {
+    mutate: (draft, current) => {
+      const suppressSessionEffects = !context.sessionEffectsHostCurrent(current);
       // Cron reads settled child rows directly; delete rows retire through the archive sweep.
       retireAfterSettle =
         !draft.collect &&

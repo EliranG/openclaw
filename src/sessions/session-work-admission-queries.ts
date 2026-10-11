@@ -62,7 +62,6 @@ export function createSessionWorkAdmissionQueries<T extends ReleasableSessionWor
     const identities = normalizeSessionIdentities(params.scope, params.identities);
     const current = currentAdmissions();
     const isCurrent = (admission: T) =>
-      !admission.interrupted &&
       identities.some((identity) => admissionsByIdentity.get(identity)?.has(admission));
     const admissions = collectSessionWorkAdmissions(
       identities,
@@ -79,7 +78,7 @@ export function createSessionWorkAdmissionQueries<T extends ReleasableSessionWor
           released: admission.released,
           interrupt: (reason: Error) => {
             // Awaited preparation cannot transfer Stop to a released or replaced owner.
-            if (!isCurrent(admission)) {
+            if (admission.interrupted || !isCurrent(admission)) {
               return false;
             }
             return admission.interrupt?.(reason)?.runId === run.runId;
