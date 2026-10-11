@@ -27,6 +27,16 @@ export function resolveSubagentChildAgentId(entry: {
   return owner.ok && (!keyOwner || keyOwner === owner.value) ? owner.value : undefined;
 }
 
+export function resolveSubagentRequesterAgentId(entry: {
+  requesterSessionKey: string;
+  requesterAgentId?: string;
+}): string | undefined {
+  return resolveSubagentChildAgentId({
+    childSessionKey: entry.requesterSessionKey,
+    childAgentId: entry.requesterAgentId,
+  });
+}
+
 type ChildAuthorityEntry = Pick<
   SubagentRunRecord,
   "childSessionKey" | "childAgentId" | "childSessionIdentity"

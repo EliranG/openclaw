@@ -1,5 +1,8 @@
 import { parseAgentSessionKey } from "../../../routing/session-key.js";
-import { matchesSubagentChildSessionOwner } from "./subagent-child-owner-match.js";
+import {
+  matchesSubagentChildSessionOwner,
+  resolveSubagentRequesterAgentId,
+} from "./subagent-child-owner-match.js";
 import { isDeliverySuspended } from "./subagent-delivery-state.js";
 import {
   buildSubagentRunReadTopology,
@@ -77,7 +80,8 @@ export function listRunsForRequesterFromRuns(
         })) &&
       (!latestRuns ||
         latestRuns.getLatestSubagentRun(entry.childSessionKey, entry.childAgentId) === entry) &&
-      (!options?.requesterAgentId || entry.requesterAgentId === options.requesterAgentId) &&
+      (!options?.requesterAgentId ||
+        resolveSubagentRequesterAgentId(entry) === options.requesterAgentId) &&
       (options?.requesterStorePath === undefined ||
         (entry.requesterStorePath ?? null) === options.requesterStorePath) &&
       (typeof lowerBound !== "number" || entry.createdAt >= lowerBound) &&
@@ -487,7 +491,7 @@ export function listSwarmRunsForGroupFromRuns<T extends SubagentRunReadRecord>(
       entry.groupId === key &&
       (!requesterKey ||
         (entry.swarmRequesterSessionKey ?? entry.requesterSessionKey) === requesterKey) &&
-      (!requesterAgentId || entry.requesterAgentId === requesterAgentId),
+      (!requesterAgentId || resolveSubagentRequesterAgentId(entry) === requesterAgentId),
   );
 }
 
@@ -518,7 +522,10 @@ export function countActiveRunsForSessionFromRuns<T extends SubagentRunReadRecor
     if (ownerSessionKey !== key) {
       continue;
     }
-    if (options?.requesterAgentId && entry.requesterAgentId !== options.requesterAgentId) {
+    if (
+      options?.requesterAgentId &&
+      resolveSubagentRequesterAgentId(entry) !== options.requesterAgentId
+    ) {
       continue;
     }
     recordLatestSubagentRun(latestByChildSessionKey, entry.childSessionKey, entry);
@@ -555,7 +562,7 @@ function scopeRootDescendantsToRequesterAgent(
           ([, entry]) =>
             entry.requesterSessionKey !== rootSessionKey ||
             ((!rootRunIds || rootRunIds.has(entry.runId)) &&
-              (!requesterAgentId || entry.requesterAgentId === requesterAgentId) &&
+              (!requesterAgentId || resolveSubagentRequesterAgentId(entry) === requesterAgentId) &&
               (requesterStorePath === undefined ||
                 (entry.requesterStorePath ?? null) === requesterStorePath)),
         ),
