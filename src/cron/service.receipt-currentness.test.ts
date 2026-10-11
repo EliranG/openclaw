@@ -48,7 +48,6 @@ it("rejects unrepaired delivery in the current receipt row", async () => {
       cronEnabled: true,
       log: createNoopLogger(),
       enqueueSystemEvent: vi.fn(),
-      requestHeartbeat: vi.fn(),
       runIsolatedAgentJob: vi.fn(),
     });
     const marker = markServiceCronJobActive(state, job, handle);
@@ -152,8 +151,12 @@ it.each(["payload", "webhook"] as const)(
             taskPorts,
           );
         });
-      const enqueueSystemEvent = vi.fn();
-      const requestHeartbeat = vi.fn();
+      const runSessionEvent = vi.fn(async () => {
+        if (phase === "webhook") {
+          Atomics.store(gate, 0, 1);
+        }
+        return { status: "ok" as const, summary: "Synthetic main-session result" };
+      });
       const sendCronWebhook = vi.fn(async () => ({ status: "delivered" as const }));
       const storePath = state.statePath("cron", "jobs.json");
       const cron = new CronService({
@@ -162,8 +165,8 @@ it.each(["payload", "webhook"] as const)(
         cronEnabled: false,
         defaultAgentId: "main",
         log: createNoopLogger(),
-        enqueueSystemEvent,
-        requestHeartbeat,
+        enqueueSystemEvent: vi.fn(),
+        runSessionEvent,
         sendCronWebhook,
         runIsolatedAgentJob: vi.fn(async () => ({ status: "ok" as const })),
       });
@@ -182,7 +185,7 @@ it.each(["payload", "webhook"] as const)(
             ? { delivery: { mode: "webhook" as const, to: "https://example.invalid/hook" } }
             : {}),
         });
-        Atomics.store(gate, 0, phase === "webhook" ? 2 : 1);
+        Atomics.store(gate, 0, phase === "payload" ? 1 : 0);
         run = cron.run(job.id, "force");
         expect(
           await Promise.race([
@@ -197,7 +200,7 @@ it.each(["payload", "webhook"] as const)(
           jobId: job.id,
           jobPresent: true,
         });
-        expect(enqueueSystemEvent).toHaveBeenCalledTimes(phase === "webhook" ? 1 : 0);
+        expect(runSessionEvent).toHaveBeenCalledTimes(phase === "webhook" ? 1 : 0);
         expect(sendCronWebhook).not.toHaveBeenCalled();
         await expect(cron.remove(job.id)).resolves.toEqual({
           ok: true,
@@ -212,8 +215,7 @@ it.each(["payload", "webhook"] as const)(
         Atomics.store(gate, 2, 1);
         Atomics.notify(gate, 2);
         await expect(run).resolves.toMatchObject({ ok: true, ran: true });
-        expect(enqueueSystemEvent).toHaveBeenCalledTimes(phase === "webhook" ? 1 : 0);
-        expect(requestHeartbeat).toHaveBeenCalledTimes(phase === "webhook" ? 1 : 0);
+        expect(runSessionEvent).toHaveBeenCalledTimes(phase === "webhook" ? 1 : 0);
         expect(sendCronWebhook).not.toHaveBeenCalled();
       } finally {
         Atomics.store(gate, 2, 1);

@@ -37,7 +37,6 @@ const cron = new CronService({
   defaultAgentId: "main",
   log: { info() {}, warn() {}, error() {}, debug() {} },
   enqueueSystemEvent() {},
-  requestHeartbeat() {},
   runIsolatedAgentJob: ({ abortSignal, onExecutionStarted }) =>
     trackAsyncWork(async () => {
       assert(abortSignal);

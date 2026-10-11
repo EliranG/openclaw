@@ -6,7 +6,6 @@ import type { TrustedSubagentCompletionHandoff } from "./subagents/announce/suba
 export type EmbeddedRunTrigger =
   | "cron"
   | "event"
-  | "heartbeat"
   | "manual"
   | "memory"
   | "overflow"
@@ -23,11 +22,9 @@ export function resolveModelCallUrgency(provenance: {
   trustedInternalHandoff?: boolean | TrustedSubagentCompletionHandoff;
 }): ModelCallUrgency {
   const backgroundRunKind =
-    provenance.bootstrapContextRunKind === "cron" ||
-    provenance.bootstrapContextRunKind === "heartbeat";
+    provenance.bootstrapContextRunKind === "cron";
   const backgroundTrigger =
     provenance.trigger === "cron" ||
-    provenance.trigger === "heartbeat" ||
     provenance.trigger === "memory";
   if (backgroundRunKind || backgroundTrigger) {
     return "background";
