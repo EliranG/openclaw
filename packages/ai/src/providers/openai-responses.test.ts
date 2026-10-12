@@ -1,5 +1,5 @@
 import type { ClientOptions } from "openai";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { configureAiTransportHost } from "../host.js";
 import type { Context, Model } from "../types.js";
 
@@ -217,6 +217,7 @@ describe("OpenAI Responses provider", () => {
     ).result();
 
     const config = openAiMockState.configs[0];
+    assert.isDefined(config);
     expect(config).toMatchObject({
       apiKey,
       baseURL: "https://gateway.ai.cloudflare.com/v1/account/gateway/openai",
