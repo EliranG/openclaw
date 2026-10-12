@@ -695,7 +695,7 @@ describe("compactEmbeddedAgentSessionDirect hooks", () => {
     const { addSession, deleteSession } = await import("../bash-process-registry.js");
     const { resolveSandboxContext } = await import("../sandbox/context.js");
     const owned = createProcessSessionFixture({ id: "compaction-owned", backgrounded: true });
-    owned.scopeKey = "agent:main:main";
+    owned.scopeKey = TEST_SESSION_KEY;
     const other = createProcessSessionFixture({ id: "policy-owned", backgrounded: true });
     other.scopeKey = "agent:main:telegram:default:direct:12345";
     addSession(owned);

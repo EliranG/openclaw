@@ -395,8 +395,9 @@ describe("session deletion and native owner state", () => {
           database.db.prepare("SELECT * FROM session_windows ORDER BY session_id").all();
         const windowsBefore = readWindows();
         if (rejectSuggestions) {
+          // The deletion worker must encounter the same failure as the fixture connection.
           database.db
-            .exec(`CREATE TEMP TRIGGER reject_artifact_delete BEFORE DELETE ON session_suggestions
+            .exec(`CREATE TRIGGER reject_artifact_delete BEFORE DELETE ON session_suggestions
             WHEN OLD.session_key = '${sessionKey}' BEGIN
             SELECT CASE WHEN EXISTS (SELECT 1 FROM session_members WHERE session_key = OLD.session_key)
               THEN RAISE(ABORT, 'membership deletion order changed')

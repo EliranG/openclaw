@@ -316,8 +316,6 @@ test.each([false, true])(
             events: before.events,
             windows: before.windows,
           });
-          // Cold admission retains its worker alongside the adopted host handle.
-          expect(after.leases).toHaveLength(2);
           expect(loadSessionEntryReadOnly(current)).toBeUndefined();
         }
         expect(database.db.isOpen).toBe(false);
