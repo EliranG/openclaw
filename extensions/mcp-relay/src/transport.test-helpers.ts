@@ -1,10 +1,18 @@
 import { EventEmitter } from "node:events";
 import {
+  GatewayControlUiIngressError,
+  type GatewayControlUiIngressFactoryV2,
+  type GatewayControlUiIngressV1,
+  type GatewayIngressPrincipalBindingV1,
+  type GatewayIngressPrincipalOptionsV1,
+} from "openclaw/plugin-sdk/gateway-ingress";
+import {
   createGatewaySchedulerClock,
   createTestGatewayScheduler,
   createTestPluginServiceScheduler,
 } from "openclaw/plugin-sdk/plugin-test-api";
 import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { vi } from "vitest";
 import { identityFromPrivateKey } from "./protocol.js";
 import { RelayService, type RelaySocket } from "./service.js";
 import { createStateFixture } from "./state.test-helpers.js";
@@ -80,9 +88,52 @@ export class FakeRelaySocket extends EventEmitter implements RelaySocket {
         });
   }
 
-  acknowledge(frame: Record<string, unknown>): void {
-    this.receive({ type: "res", id: frame.id, ok: true, result: {} });
+  acknowledge(frame: Record<string, unknown>, result: Record<string, unknown> = {}): void {
+    this.receive({ type: "res", id: frame.id, ok: true, result });
   }
+}
+
+export function createPrincipalIngress(handle?: GatewayControlUiIngressV1) {
+  const bindings: {
+    options: GatewayIngressPrincipalOptionsV1;
+    binding: GatewayIngressPrincipalBindingV1;
+  }[] = [];
+  const factory = {
+    capabilityVersion: 2,
+    open: vi.fn<GatewayControlUiIngressFactoryV2["open"]>(async () => {
+      throw new Error("Relay grants must use their shared principal binding");
+    }),
+    bindPrincipal: vi.fn<GatewayControlUiIngressFactoryV2["bindPrincipal"]>(async (options) => {
+      let closed = false;
+      const assertCurrent = () => {
+        if (closed || options.signal.aborted) {
+          throw new GatewayControlUiIngressError("closed", "Principal binding closed");
+        }
+        options.assertCurrent();
+      };
+      assertCurrent();
+      const request = vi.fn(async (): Promise<never> => {
+        assertCurrent();
+        throw new Error("Unexpected Gateway request");
+      });
+      const binding: GatewayIngressPrincipalBindingV1 = {
+        request,
+        openControlUi: vi.fn(async () => {
+          assertCurrent();
+          if (!handle) {
+            throw new Error("Unexpected Control UI open");
+          }
+          return { ...handle, requestGateway: request };
+        }),
+        close: vi.fn(async () => {
+          closed = true;
+        }),
+      };
+      bindings.push({ options, binding });
+      return binding;
+    }),
+  } satisfies GatewayControlUiIngressFactoryV2;
+  return { factory, bindings };
 }
 
 export async function createTransportFixture(
@@ -98,8 +149,10 @@ export async function createTransportFixture(
   const sockets: FakeRelaySocket[] = [];
   const addresses: string[] = [];
   const effects: { connectError?: Error } = {};
+  const ingress = createPrincipalIngress();
   const service = new RelayService({
     config: () => ({}),
+    controlUiIngress: ingress.factory,
     ...ui,
     scheduler,
     state,
@@ -134,6 +187,7 @@ export async function createTransportFixture(
     sockets,
     addresses,
     effects,
+    ingress,
     ready: async (target = socket, capability?: unknown) => {
       target.receive(CHALLENGE);
       const hello = await target.nextFrame();

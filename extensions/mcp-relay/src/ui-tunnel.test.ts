@@ -128,14 +128,10 @@ describe("Control UI relay tunnel", () => {
       0,
     ]);
     expect(bodies.map((frame) => frame.more)).toEqual([true, true, false]);
-    expect(f.factory.open).toHaveBeenCalledWith(
-      expect.objectContaining({
-        audienceId: "gr_one",
-        ...ORIGINS,
-        frameAncestors: ["https://chatgpt.com"],
-        operatorScopeCeiling: ["operator.read", "operator.write"],
-      }),
-    );
+    expect(f.open).toHaveBeenCalledWith("gr_one", {
+      ...ORIGINS,
+      frameAncestors: ["https://chatgpt.com"],
+    });
   });
 
   it.each<[GatewayControlUiIngressErrorCode, string]>([
@@ -147,7 +143,7 @@ describe("Control UI relay tunnel", () => {
     ["limit-exceeded", "limit_exceeded"],
   ])("maps core %s to a terminal ui.error", async (code, expected) => {
     const f = setup();
-    vi.mocked(f.factory.open).mockRejectedValue(
+    vi.mocked(f.open).mockRejectedValue(
       new GatewayControlUiIngressError(code, "Configure token or password authentication."),
     );
     await f.receive(HTTP);
@@ -158,13 +154,10 @@ describe("Control UI relay tunnel", () => {
       message: "Configure token or password authentication.",
     });
     if (code === "unsupported-auth") {
-      expect(f.onUnsupportedAuth).toHaveBeenCalledWith(
-        "Configure token or password authentication.",
-      );
-      vi.mocked(f.factory.open).mockResolvedValue(f.handle);
+      vi.mocked(f.open).mockResolvedValue(f.handle);
       await f.receive({ ...HTTP, sid: "http0002" });
       expect((await response(f)).head.status).toBe(200);
-      expect(f.factory.open).toHaveBeenCalledTimes(2);
+      expect(f.open).toHaveBeenCalledTimes(2);
     }
   });
 
@@ -262,7 +255,7 @@ describe("Control UI relay tunnel", () => {
   it("settles cancelled admission jobs while the shared factory open remains pending", async () => {
     const f = setup();
     const admission = deferred<typeof f.handle>();
-    vi.mocked(f.factory.open).mockReturnValue(admission.promise);
+    vi.mocked(f.open).mockReturnValue(admission.promise);
     try {
       for (let i = 0; i < 128; i++) {
         const sid = `pending_${String(i).padStart(3, "0")}`;
@@ -278,7 +271,7 @@ describe("Control UI relay tunnel", () => {
         );
         await dispatch;
       }
-      expect(f.factory.open).toHaveBeenCalledTimes(1);
+      expect(f.open).toHaveBeenCalledTimes(1);
       expect(f.handle.request).not.toHaveBeenCalled();
       expect(f.handle.openWebSocket).not.toHaveBeenCalled();
       expect(f.clock.armedAtMs).toBeNull();
@@ -292,7 +285,7 @@ describe("Control UI relay tunnel", () => {
     }
   });
 
-  it("revokes the live handle, aborts HTTP, closes sockets, and fences retained assertions", async () => {
+  it("revokes the live handle, aborts HTTP, closes sockets, and refuses subsequent frames", async () => {
     const f = setup();
     const socket = await opened(f);
     const request = deferred<AbortSignal>();
@@ -302,13 +295,13 @@ describe("Control UI relay tunnel", () => {
     });
     await f.receive(HTTP);
     const signal = await request.promise;
-    const options = vi.mocked(f.factory.open).mock.calls[0]![0];
     f.active.delete("gr_one");
-    expect(() => options.assertCurrent()).toThrow("Grant revoked");
     f.tunnel.revoke("gr_one");
     expect(signal.aborted).toBe(true);
     expect(socket.closes[0]?.code).toBe(1008);
     expect((await f.frames.next()).code).toBe("grant_revoked");
+    expect((await f.frames.next()).code).toBe("grant_revoked");
+    await f.receive({ ...HTTP, sid: "revoked1" });
     expect((await f.frames.next()).code).toBe("grant_revoked");
     await f.stop();
     expect(f.handle.close).toHaveBeenCalledTimes(1);
@@ -317,7 +310,7 @@ describe("Control UI relay tunnel", () => {
   it("closes every stream and handle on relay disconnect, including a late handle open", async () => {
     const f = setup();
     const admission = deferred<typeof f.handle>();
-    vi.mocked(f.factory.open).mockReturnValue(admission.promise);
+    vi.mocked(f.open).mockReturnValue(admission.promise);
     await f.receive(HTTP);
     const stopping = f.tunnel.close();
     admission.resolve(f.handle);
@@ -338,8 +331,8 @@ describe("Control UI relay tunnel", () => {
     expect((await f.frames.next()).code).toBe("unavailable");
     await response(f);
     expect(socket.closes[0]?.code).toBe(1011);
-    expect(f.factory.open).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(f.factory.open).mock.calls[1]![0].publicOrigin).toBe("https://new.ui.example");
+    expect(f.open).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(f.open).mock.calls[1]![1].publicOrigin).toBe("https://new.ui.example");
   });
 
   it("rejects missing grants, duplicate IDs, invalid origins and oversized chunks", async () => {

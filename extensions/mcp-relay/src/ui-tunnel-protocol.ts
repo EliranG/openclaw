@@ -2,6 +2,7 @@ import {
   GatewayControlUiIngressError,
   type GatewayPluginReadCookieV1,
 } from "openclaw/plugin-sdk/gateway-ingress";
+import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { containsAsciiControlCharacter } from "openclaw/plugin-sdk/string-normalization-runtime";
 import { MAX_FRAME_BYTES, RelayError } from "./protocol.js";
 
@@ -249,4 +250,22 @@ export function closeInfo(frame: Record<string, unknown>): { code: number; reaso
     return invalid("Supply a valid WebSocket close code and reason.");
   }
   return { code, reason };
+}
+
+export function readUiFrameAncestors(ui: unknown): string[] | undefined {
+  if (ui === undefined) {
+    return undefined;
+  }
+  if (
+    !isRecord(ui) ||
+    !Array.isArray(ui.frameAncestors) ||
+    !ui.frameAncestors.every(
+      (value): value is string => typeof value === "string" && value.length > 0,
+    ) ||
+    ui.frameAncestors.length > 16 ||
+    ui.frameAncestors.join(" ").length > 4096
+  ) {
+    throw new RelayError("invalid_params", "Invalid UI capability");
+  }
+  return ui.frameAncestors;
 }

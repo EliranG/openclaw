@@ -15,8 +15,9 @@ ChatGPT and Claude connect to `https://mcp.openclaw.ai/mcp`; you do not need to
 expose a Gateway port to the internet.
 
 The plugin is **disabled by default**. Enabling it opts your Gateway into an
-outbound relay connection. Each client also needs a grant authorized with a
-single-use code issued by your running Gateway.
+outbound relay connection. Each client also needs a grant you authorize through
+**Sign in with your Gateway** or a single-use pairing code. Sign-in is optional;
+pairing codes remain available.
 
 ## Set up the Gateway
 
@@ -58,18 +59,44 @@ new conversations when the client does not choose one.
 
 ## Connect ChatGPT or Claude
 
-1. Run `openclaw mcp-relay pair` on the Gateway host. The command prints a
-   `XXXXX-XXXXX` code, its expiration time, and the MCP URL.
-2. In **ChatGPT**, open **Plugins**, choose the option to add a plugin, and add
-   `https://mcp.openclaw.ai/mcp`. In **Claude**, add a **custom connector** with
-   that URL.
-3. On the OpenClaw consent page, verify the client name and redirect host, then
-   enter the pairing code and connect.
+Add `https://mcp.openclaw.ai/mcp` as a plugin in ChatGPT or a custom connector
+in Claude. On the relay's connection page, choose **Sign in with your Gateway**
+and enter your Gateway's Control UI URL. Your browser opens the Gateway's
+**Connected apps** page, using its normal sign-in. The relay does not fetch your
+Gateway URL or receive your Gateway credentials.
+
+Check the app name and return host, select its access, and choose **Allow** or
+**Deny**. Both choices return you to the relay to finish the request. Requests
+expire after ten minutes. Start again from the app if a request has expired.
+Linking another Gateway from an app uses the same consent flow.
+
+The default access is **Read and write**, capped by your current role. **Full
+role access** also includes any administration or approval permissions your role
+allows. Full access lets the embedded Control UI perform those actions; only
+choose it for an app and relay you trust with that authority. An app's access
+can never exceed your current Gateway permissions.
+
+### Pair with a code
+
+1. Open **Connected apps** in your Gateway's Control UI and choose **Pair with
+   code**. Select the access and create a code. On a single-user Gateway, you can
+   also run `openclaw mcp-relay pair` on the Gateway host.
+2. On the relay's connection page, verify the app name and return host, enter the
+   `XXXXX-XXXXX` code, and connect.
 
 Codes expire after ten minutes and can be used only once. Spaces, hyphens, and
-letter case do not matter. If a code expires, run `openclaw mcp-relay pair`
-again. Pairing requires a connected relay socket; check
-`openclaw mcp-relay status` if issuing a code fails.
+letter case do not matter. Create a new code if it expires. Pairing requires a
+connected relay socket; check `openclaw mcp-relay status` if issuing a code fails.
+On a Gateway using verified profiles, create codes in **Connected apps** while
+signed in as yourself; the CLI refuses to create a person-less grant.
+
+## Connected apps
+
+The **Connected apps** tab lists your grants and their access limits. You can
+revoke your own grants; administrators can see and revoke all grants. On
+single-user Gateways, operators with administrator access can create owner
+grants. On Gateways with verified profiles, each grant belongs to the person
+who approved it, including grants approved by an administrator.
 
 ## Show the full Control UI in ChatGPT
 
@@ -79,13 +106,15 @@ over the existing outbound relay connection. The Gateway can remain on a private
 network. The relay gives each grant separate HTTPS origins for the UI and its
 sandbox, and preserves the Gateway's configured Control UI base path.
 
-This requires a current Gateway and relay, with Gateway authentication set to
-**token** or **password** and no `gateway.roles` configuration. You do not paste
-the Gateway's shared token or password into ChatGPT. The browser signs the normal
-device challenge and becomes an ordinary paired device with `operator.read` and
-`operator.write` scopes. The embedded UI cannot administer the Gateway, approve
-commands, or resolve approval prompts; use your direct OpenClaw connection for
-those actions.
+This requires a current Gateway and relay. The embedded browser uses the grant's
+principal and access limit; it does not receive or store an ordinary paired-device
+token. You do not paste the Gateway's shared token or password into ChatGPT.
+
+A single-user Gateway uses an owner grant. A Gateway using trusted-proxy
+authentication or configured roles requires a person grant tied to an existing
+verified profile. Old owner grants on these Gateways are refused with guidance
+to pair again as a person. The same live principal and permissions apply to MCP
+operations and the embedded Control UI.
 
 Run `openclaw mcp-relay status` to see UI availability and any update guidance.
 Until the first launch, availability checks only whether the Gateway and relay
@@ -95,18 +124,13 @@ conversations view until a plugin restart or configuration reload clears the
 cached error. A Gateway or relay without tunnel support also keeps the built-in
 conversations view.
 
-The browser appears in the ordinary **Devices** list. To revoke its device token,
-use **Devices** through your direct OpenClaw connection, or
-`openclaw devices revoke --device <id> --role operator`. Revoking the MCP relay
-grant closes its UI path and active requests and sockets, but does not revoke
-ordinary device tokens or delete paired devices. Those tokens also work on the
-Gateway's direct listener at their issued read/write scopes; revoke the device
-token separately when needed.
+Revoke an app through **Connected apps** to close its embedded browser sessions,
+active requests, sockets, and MCP access. The embedded browser does not create
+an ordinary device token that needs separate revocation.
 
-**The relay sees UI traffic in transit**, including device tokens and content.
-TLS protects each connection, but this is not end-to-end encryption against the
-relay. Only pair a client when you trust it and the relay with read/write access
-to your Gateway.
+**The relay sees UI traffic and content in transit.** TLS protects each
+connection, but this is not end-to-end encryption against the relay. Only pair
+an app when you trust it and the relay with the access you select.
 
 The tunnel applies these limits per Gateway relay connection; stricter Gateway
 and endpoint limits still apply:
@@ -149,12 +173,12 @@ run. It continues to report `running`; it never reports `waiting_for_approval`.
 If progress stalls, open the conversation in OpenClaw and check for an approval
 prompt.
 
-The MCP conversation operations cannot change Gateway configuration, approve
-commands, resolve agent approval prompts, or invoke arbitrary Gateway methods.
-These restrictions remain when the full Control UI is available. Sending a
-message acts as the Gateway owner: the agent can take real actions under its own
-policies, and its approval prompts must still be answered through your direct
-OpenClaw connection.
+The MCP conversation operations do not expose arbitrary Gateway methods. Their
+requests run as the grant's principal, within both its selected access limit and
+the principal's current permissions. The embedded Control UI can use additional
+capabilities, including administration and approvals, only when both the grant's
+access limit and the principal's current role permit them. Sending messages can
+cause the agent to take real actions under its own policies.
 
 ## Data and authority
 
@@ -164,10 +188,23 @@ the configured Gateway token or password or the private key. Pairing-code hashes
 and client grants also live in plugin-owned SQLite state and survive Gateway
 restarts and updates.
 
-The Gateway authorizes each grant and checks it on every data operation. A
-grant is broad access to the operations above and, when available, the read/write
-Control UI; it is not limited to a single conversation. Only pair clients you
-trust with that access.
+The Gateway authorizes each grant and checks its live authority on every
+operation. Grants store an owner or person principal and an operator-scope
+ceiling in the plugin's own state. A person's profile ID stays on the Gateway;
+the relay receives only the principal kind and display label. Effective access
+is the intersection of the ceiling and the principal's current authority, so a
+role change also limits existing grants. Grants are not restricted to one
+conversation; normal principal and role visibility still applies.
+
+Existing grants migrate to owner grants with read/write access. They continue to
+work on single-user Gateways. A Gateway that requires verified profiles refuses
+owner grants until they are replaced by a person grant through **Connected
+apps**. No core database migration is required.
+
+Person grants approved through Gateway sign-in have an absolute refresh-token
+lifetime of 30 days. After that, sign in and approve again. Owner grants and
+pairing-code grants retain their existing relay token lifetime. Revocation,
+plugin disablement, or lost principal authority can end access sooner.
 
 **This connection is not end-to-end encrypted.** TLS protects each network
 connection, but the relay sees request and response content in transit. The
@@ -185,8 +222,12 @@ openclaw mcp-relay revoke <grantId>
 ```
 
 These commands act on the running Gateway. Add `--json` for machine-readable
-output. Pairing, listing grants, and revoking grants require operator admin
-access; connection status requires operator read access.
+output. The CLI requests administrator access for pairing, listing, and revoking
+grants; connection status requires operator read access. In **Connected apps**,
+listing your own grants requires read access, while pairing and revoking your
+own person grants require write access. Creating owner grants or revoking
+another person's grant requires administrator access. Grant listings include
+the principal and scope ceiling.
 
 Revocation is persisted locally before the Gateway notifies the relay. If the
 relay is offline, the Gateway still refuses further requests using that grant;

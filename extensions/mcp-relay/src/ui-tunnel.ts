@@ -1,6 +1,6 @@
 import {
   GatewayControlUiIngressError,
-  type GatewayControlUiIngressFactoryV1,
+  type GatewayControlUiIngressPresentationOptionsV1,
   type GatewayControlUiIngressV1,
   type GatewayIngressMessage,
   type GatewayIngressSocketV1,
@@ -26,14 +26,16 @@ import {
 } from "./ui-tunnel-protocol.js";
 
 type Options = {
-  factory: GatewayControlUiIngressFactoryV1;
+  open: (
+    grantId: string,
+    presentation: GatewayControlUiIngressPresentationOptionsV1,
+  ) => Promise<GatewayControlUiIngressV1>;
   frameAncestors: readonly string[];
   scheduler: PluginServiceSchedulerV1;
   assertGrantCurrent: (grantId: string) => void;
   send: (frame: unknown) => void;
   bufferedBytes: () => number;
   closeRelay: () => void;
-  onUnsupportedAuth: (reason: string) => void;
 };
 type Grant = UiIngressAdmission & {
   id: string;
@@ -255,14 +257,10 @@ export class UiTunnel {
       handle: Promise.resolve().then(async () => {
         this.#assertGrant(grant);
         try {
-          const handle = await this.#options.factory.open({
-            audienceId: grant.id,
+          const handle = await this.#options.open(grant.id, {
             publicOrigin,
             sandboxOrigin,
-            operatorScopeCeiling: ["operator.read", "operator.write"],
             frameAncestors: this.#options.frameAncestors,
-            signal: abort.signal,
-            assertCurrent: () => this.#assertGrant(grant),
           });
           try {
             this.#assertGrant(grant);
@@ -272,14 +270,6 @@ export class UiTunnel {
             throw error;
           }
         } catch (error) {
-          if (
-            error instanceof GatewayControlUiIngressError &&
-            error.code === "unsupported-auth" &&
-            !this.#stopped
-          ) {
-            // The first unsupported launch shows its error inside the frame; later status calls fall back.
-            this.#options.onUnsupportedAuth(error.message);
-          }
           this.#retire(
             grant,
             error instanceof Error ? error : new Error("Control UI ingress failed"),

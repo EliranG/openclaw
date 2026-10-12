@@ -1,7 +1,10 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
-import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { mcpRelayConfigSchema, parseMcpRelayConfig } from "./src/config.js";
-import { identityFromPrivateKey, RelayError, safeError } from "./src/protocol.js";
+import {
+  registerMcpRelayGatewayMethods,
+  registerMcpRelayConnectRoute,
+} from "./src/gateway-methods.js";
+import { identityFromPrivateKey } from "./src/protocol.js";
 import type { RelayService } from "./src/service.js";
 
 export default definePluginEntry({
@@ -26,69 +29,17 @@ export default definePluginEntry({
         ],
       },
     );
-    for (const operation of ["status", "pair", "grants", "revoke"] as const) {
-      api.registerGatewayMethod(
-        `mcp-relay.${operation}`,
-        async ({ params, respond, signal, hasCurrentClientAuthority }) => {
-          const assertCurrent = () => {
-            signal?.throwIfAborted();
-            if (hasCurrentClientAuthority && !hasCurrentClientAuthority()) {
-              throw new RelayError(
-                "unavailable",
-                "Gateway authorization ended. Reconnect and retry the command.",
-              );
-            }
-          };
-          try {
-            assertCurrent();
-            const active = service;
-            if (!active) {
-              throw new RelayError(
-                "unavailable",
-                "MCP relay is not running. Enable mcp-relay and restart the Gateway.",
-              );
-            }
-            if (
-              !isRecord(params) ||
-              Object.keys(params).some((key) => operation !== "revoke" || key !== "grantId")
-            ) {
-              throw new RelayError(
-                "invalid_params",
-                "Use openclaw mcp-relay status, pair, grants, or revoke <grantId>.",
-              );
-            }
-            let result: unknown;
-            if (operation === "revoke") {
-              if (
-                typeof params.grantId !== "string" ||
-                !params.grantId.trim() ||
-                params.grantId.length > 200
-              ) {
-                throw new RelayError(
-                  "invalid_params",
-                  "Supply a grant ID from openclaw mcp-relay grants.",
-                );
-              }
-              result = await active.revoke(params.grantId, assertCurrent);
-            } else if (operation === "pair") {
-              result = await active.pair(assertCurrent);
-            } else {
-              result = await active[operation]();
-            }
-            assertCurrent();
-            respond(true, result);
-          } catch (error) {
-            const safe = safeError(error);
-            respond(false, undefined, {
-              code: safe.code === "invalid_params" ? "INVALID_REQUEST" : "UNAVAILABLE",
-              message: safe.message,
-              details: { code: safe.code },
-            });
-          }
-        },
-        { scope: operation === "status" ? "operator.read" : "operator.admin" },
-      );
-    }
+    registerMcpRelayGatewayMethods(api, () => service);
+    registerMcpRelayConnectRoute(api, parseMcpRelayConfig(api.pluginConfig).relayUrl);
+    api.session.controls.registerControlUiDescriptor({
+      surface: "tab",
+      id: "connected-apps",
+      slug: "connected-apps",
+      label: "Connected apps",
+      icon: "plug",
+      group: "control",
+      requiredScopes: ["operator.read"],
+    });
     api.registerService({
       id: "mcp-relay",
       apiVersion: 2,
@@ -116,7 +67,6 @@ export default definePluginEntry({
           controlUiIngress: context.controlUiIngress,
           config: () => api.runtime.config.current(),
           operations: createOperations({
-            runtime: api.runtime,
             logger: api.logger,
             gateway,
             agentId: config.agentId,

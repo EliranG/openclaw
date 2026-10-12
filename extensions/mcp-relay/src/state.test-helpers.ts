@@ -109,6 +109,10 @@ export function createStateFixture() {
     corrupt: () => {
       serialized = '{"version":1,"privateKey":"bad"}';
     },
+    seed: (value: unknown) => {
+      serialized = JSON.stringify(value);
+      revision += 1;
+    },
     persisted: () => serialized,
   };
 }

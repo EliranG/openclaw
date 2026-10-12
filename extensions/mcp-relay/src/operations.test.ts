@@ -1,12 +1,5 @@
-import type { PluginRuntime } from "openclaw/plugin-sdk/runtime-store";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-// mock-isolation: Exercise the plugin adapter without loading host config/storage owners.
-vi.mock("openclaw/plugin-sdk/agent-scope-runtime", () => ({
-  listAgentIds: () => ["main", "research"],
-  tryResolveDefaultAgentId: () => "main",
-}));
-
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { GatewayRequest } from "./gateway-request.js";
 import { createOperations } from "./operations.js";
 
 const newer = {
@@ -29,56 +22,38 @@ const older = {
 };
 
 function fixture(agentId?: string, now = () => 0) {
-  const request = vi.fn<Parameters<typeof createOperations>[0]["runtime"]["gateway"]["request"]>();
-  const readSessionFacts = vi
-    .fn<PluginRuntime["gateway"]["readSessionFacts"]>()
-    .mockResolvedValue({ sessions: [newer] });
-  const withSessionFacts =
-    vi.fn<(selection: Parameters<PluginRuntime["gateway"]["withSessionFacts"]>[0]) => void>();
-  const selectSessionFacts: PluginRuntime["gateway"]["withSessionFacts"] = async (
-    selection,
-    run,
-  ) => {
-    withSessionFacts(selection);
-    return run({
-      scope: undefined,
-      revision: "1",
-      redactionRevision: "1",
-      sessions: [older, newer],
-    });
-  };
+  const request = vi.fn<GatewayRequest>();
+  const describeSession = vi.fn<GatewayRequest>().mockResolvedValue({ session: newer });
+  const listSessions = vi.fn<GatewayRequest>().mockResolvedValue({ sessions: [newer] });
+  const agents = vi.fn<GatewayRequest>().mockResolvedValue({
+    defaultId: "main",
+    agents: [
+      { id: "main", name: "Main agent" },
+      { id: "research", name: "Research" },
+    ],
+  });
+  // These are RPC response fixtures, not implementations of Gateway authorization.
+  const boundRequest = vi.fn<GatewayRequest>(async (method, params, options) => {
+    const handler =
+      method === "sessions.describe"
+        ? describeSession
+        : method === "sessions.list"
+          ? listSessions
+          : method === "agents.list"
+            ? agents
+            : request;
+    return handler(method, params, options);
+  });
   const logger = { error: vi.fn() };
   const dispatch = createOperations({
     logger,
     agentId,
     now,
     gateway: { name: "Synthetic Gateway", version: "1.0.0" },
-    runtime: {
-      config: {
-        current: () => ({
-          agents: { entries: { main: { name: "Main agent" }, research: { name: "Research" } } },
-        }),
-      },
-      gateway: {
-        request: async (method, params, options) => {
-          if (method === "sessions.create" && params?.idempotencyKey) {
-            throw Object.assign(
-              new Error(
-                "idempotent session creation requires an authenticated principal or device identity",
-              ),
-              { code: "INVALID_REQUEST" },
-            );
-          }
-          return request(method, params, options);
-        },
-        readSessionFacts,
-        withSessionFacts: selectSessionFacts,
-      },
-    },
   });
   const operations = (op: string, params: unknown, assertAuthority = async () => {}) =>
-    dispatch(op, params, assertAuthority);
-  return { operations, request, readSessionFacts, withSessionFacts, logger };
+    dispatch(op, params, assertAuthority, boundRequest);
+  return { operations, request, describeSession, listSessions, agents, boundRequest, logger };
 }
 
 function message(id: string, role: string, text: string) {
@@ -87,9 +62,10 @@ function message(id: string, role: string, text: string) {
 
 describe("MCP relay data operations", () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.useRealTimers());
 
-  it("maps agent roster/default and current session facts to the wire results", async () => {
-    const { operations, withSessionFacts } = fixture();
+  it("maps only the grant-bound RPC roster and session results to the wire", async () => {
+    const { operations, listSessions } = fixture();
     expect(await operations("status", {})).toEqual({
       gateway: { name: "Synthetic Gateway", version: "1.0.0" },
       agents: [
@@ -108,10 +84,15 @@ describe("MCP relay data operations", () => {
         },
       ],
     });
+    listSessions.mockResolvedValueOnce({ sessions: [older] });
     expect(
       await operations("conversations.list", { limit: 50, search: "OLDER", agentId: "main" }),
     ).toMatchObject({ conversations: [{ conversationId: older.key }] });
-    expect(withSessionFacts).toHaveBeenLastCalledWith(expect.objectContaining({ agentId: "main" }));
+    expect(listSessions).toHaveBeenLastCalledWith(
+      "sessions.list",
+      expect.objectContaining({ agentId: "main", search: "OLDER", limit: 50 }),
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it("anchors the first history page and preserves opaque older cursors with plain user/assistant text", async () => {
@@ -142,7 +123,7 @@ describe("MCP relay data operations", () => {
         limit: 3,
         maxChars: 16_000,
       }),
-      { timeoutMs: 15_000 },
+      { signal: expect.any(AbortSignal) },
     );
     request.mockResolvedValueOnce({ messages: [message("prior", "user", "earlier")] });
     await operations("conversation.read", {
@@ -153,7 +134,7 @@ describe("MCP relay data operations", () => {
     expect(request).toHaveBeenLastCalledWith(
       "chat.history",
       expect.objectContaining({ cursor: "host-page-cursor", limit: 3 }),
-      { timeoutMs: 15_000 },
+      { signal: expect.any(AbortSignal) },
     );
   });
 
@@ -178,18 +159,37 @@ describe("MCP relay data operations", () => {
     ).rejects.toMatchObject({ code: "too_large" });
   });
 
-  it("refuses unknown or rebound sessions and invalid history cursors", async () => {
-    const missing = fixture();
-    missing.readSessionFacts.mockResolvedValue({ sessions: [] });
-    await expect(
-      missing.operations("conversation.read", { conversationId: "unknown", limit: 1 }),
-    ).rejects.toMatchObject({ code: "not_found" });
-    expect(missing.request).not.toHaveBeenCalled();
+  it.each(["missing", "FORBIDDEN", "INVALID_REQUEST"])(
+    "reports a %s session lookup without disclosing whether it exists",
+    async (response) => {
+      const missing = fixture();
+      if (response === "missing") {
+        missing.describeSession.mockResolvedValue({ session: null });
+      } else {
+        missing.describeSession.mockRejectedValue(
+          Object.assign(new Error("Hidden session"), {
+            name: "GatewayClientRequestError",
+            code: response,
+            gatewayCode: response,
+            retryable: false,
+          }),
+        );
+      }
+      await expect(
+        missing.operations("conversation.read", { conversationId: "unknown", limit: 1 }),
+      ).rejects.toMatchObject({
+        code: "not_found",
+        message: "Conversation not found. List conversations and select an existing conversation.",
+      });
+      expect(missing.request).not.toHaveBeenCalled();
+    },
+  );
 
+  it("refuses rebound sessions and invalid history cursors", async () => {
     const rebound = fixture();
-    rebound.readSessionFacts
-      .mockResolvedValueOnce({ sessions: [newer] })
-      .mockResolvedValueOnce({ sessions: [{ ...newer, sessionId: "replacement" }] });
+    rebound.describeSession
+      .mockResolvedValueOnce({ session: newer })
+      .mockResolvedValueOnce({ session: { ...newer, sessionId: "replacement" } });
     rebound.request.mockResolvedValueOnce({ messages: [message("old", "user", "old data")] });
     await expect(
       rebound.operations("conversation.read", {
@@ -221,11 +221,11 @@ describe("MCP relay data operations", () => {
     ["message.send", { message: "hello", waitMs: -1 }],
     ["reply.get", { conversationId: newer.key, runId: "run", waitMs: 50_001 }],
   ])("validates %s parameters before reaching the SDK", async (op, params) => {
-    const { operations, request, readSessionFacts, withSessionFacts } = fixture();
+    const { operations, request, describeSession, listSessions } = fixture();
     await expect(operations(op, params)).rejects.toMatchObject({ code: "invalid_params" });
     expect(request).not.toHaveBeenCalled();
-    expect(readSessionFacts).not.toHaveBeenCalled();
-    expect(withSessionFacts).not.toHaveBeenCalled();
+    expect(describeSession).not.toHaveBeenCalled();
+    expect(listSessions).not.toHaveBeenCalled();
   });
 
   it("submits a new conversation with agent precedence and returns its accepted run without waiting", async () => {
@@ -242,7 +242,7 @@ describe("MCP relay data operations", () => {
     expect(request).toHaveBeenCalledExactlyOnceWith(
       "sessions.create",
       { agentId: "main", message: "new question" },
-      { timeoutMs: 15_000 },
+      { signal: expect.any(AbortSignal) },
     );
 
     const configured = fixture("research");
@@ -290,13 +290,13 @@ describe("MCP relay data operations", () => {
         message: "continue",
         idempotencyKey: expect.any(String),
       },
-      { timeoutMs: 15_000 },
+      { signal: expect.any(AbortSignal) },
     );
     expect(request).toHaveBeenNthCalledWith(
       2,
       "agent.wait",
       { runId: "accepted-run", timeoutMs: 50_000 },
-      { timeoutMs: 55_000 },
+      { signal: expect.any(AbortSignal) },
     );
   });
 
@@ -331,14 +331,14 @@ describe("MCP relay data operations", () => {
       expect(request).toHaveBeenCalledExactlyOnceWith(
         "agent.wait",
         { runId: "run", timeoutMs: 0 },
-        { timeoutMs: 5_000 },
+        { signal: expect.any(AbortSignal) },
       );
     },
   );
 
   it.each(["message.send", "reply.get"])("refuses a missing conversation for %s", async (op) => {
-    const { operations, request, readSessionFacts } = fixture();
-    readSessionFacts.mockResolvedValue({ sessions: [] });
+    const { operations, request, describeSession } = fixture();
+    describeSession.mockResolvedValue({ session: null });
     await expect(
       operations(op, {
         conversationId: "missing",
@@ -350,9 +350,9 @@ describe("MCP relay data operations", () => {
   });
 
   it("withholds a reply if the conversation is deleted while waiting", async () => {
-    const { operations, request, readSessionFacts } = fixture();
+    const { operations, request, describeSession } = fixture();
     request.mockImplementationOnce(async () => {
-      readSessionFacts.mockResolvedValue({ sessions: [] });
+      describeSession.mockResolvedValue({ session: null });
       return { status: "ok", terminalReply: { disposition: "visible", text: "deleted reply" } };
     });
     await expect(
@@ -415,9 +415,18 @@ describe("MCP relay data operations", () => {
     },
   );
 
-  it("rechecks grant authority after preparation and before submission", async () => {
-    const { operations, request } = fixture();
-    const assertAuthority = vi.fn().mockRejectedValue(new Error("grant revoked"));
+  it("rechecks grant authority after session preparation and before submission", async () => {
+    const { operations, request, describeSession } = fixture();
+    let authorized = true;
+    describeSession.mockImplementationOnce(async () => {
+      authorized = false;
+      return { session: newer };
+    });
+    const assertAuthority = async () => {
+      if (!authorized) {
+        throw new Error("grant revoked");
+      }
+    };
     await expect(
       operations(
         "message.send",
@@ -427,6 +436,27 @@ describe("MCP relay data operations", () => {
     ).rejects.toThrow("grant revoked");
     expect(request).not.toHaveBeenCalled();
   });
+
+  it.each(["status", "conversations.list"])(
+    "withholds %s metadata if grant authority is revoked during the RPC",
+    async (op) => {
+      const { operations, agents, listSessions } = fixture();
+      let authorized = true;
+      (op === "status" ? agents : listSessions).mockImplementationOnce(async () => {
+        authorized = false;
+        return op === "status"
+          ? { defaultId: "main", agents: [{ id: "main", name: "Private agent" }] }
+          : { sessions: [newer] };
+      });
+      await expect(
+        operations(op, op === "status" ? {} : { limit: 1 }, async () => {
+          if (!authorized) {
+            throw new Error("grant revoked");
+          }
+        }),
+      ).rejects.toThrow("grant revoked");
+    },
+  );
 
   it("withholds the run result if authority is revoked while waiting", async () => {
     const { operations, request } = fixture();
@@ -511,7 +541,7 @@ describe("MCP relay data operations", () => {
           2,
           "agent.wait",
           { runId: "run", timeoutMs: 44_000 },
-          { timeoutMs: 45_000 },
+          { signal: expect.any(AbortSignal) },
         );
       } else {
         expect(request).toHaveBeenCalledTimes(1);
@@ -554,6 +584,42 @@ describe("MCP relay data operations", () => {
     ).rejects.toBe(failure);
   });
 
+  it("aborts an elapsed grant-bound RPC and preserves its accepted run ID", async () => {
+    vi.useFakeTimers();
+    const { operations, request } = fixture();
+    let waiting!: () => void;
+    const enteredWait = new Promise<void>((resolve) => {
+      waiting = resolve;
+    });
+    request.mockResolvedValueOnce({ runId: "run", status: "started" });
+    request.mockImplementationOnce(async (_method, _params, options) => {
+      const signal = options!.signal!;
+      waiting();
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            reject(signal.reason instanceof Error ? signal.reason : new Error("RPC aborted"));
+          },
+          { once: true },
+        );
+      });
+    });
+    const result = operations("message.send", {
+      conversationId: newer.key,
+      message: "hello",
+      waitMs: 100,
+    });
+    await enteredWait;
+    await vi.advanceTimersByTimeAsync(5_100);
+    await expect(result).resolves.toEqual({
+      conversationId: newer.key,
+      runId: "run",
+      status: "running",
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it.each(["message.send", "conversation.read"])(
     "logs a %s Gateway failure once without request content",
     async (op) => {
@@ -590,15 +656,15 @@ describe("MCP relay data operations", () => {
     },
   );
 
-  it("logs unexpected non-RPC failures without dumping error details", async () => {
-    const { operations, readSessionFacts, logger } = fixture();
-    const failure = new Error("session facts unavailable");
-    readSessionFacts.mockRejectedValueOnce(failure);
+  it("logs failed session lookup RPCs without dumping error details", async () => {
+    const { operations, describeSession, logger } = fixture();
+    const failure = new Error("session lookup unavailable");
+    describeSession.mockRejectedValueOnce(failure);
     await expect(
       operations("reply.get", { conversationId: newer.key, runId: "run", waitMs: 0 }),
     ).rejects.toBe(failure);
     expect(logger.error).toHaveBeenCalledExactlyOnceWith(
-      "mcp-relay: op=reply.get method=none unknown: session facts unavailable",
+      "mcp-relay: op=reply.get method=sessions.describe unknown: session lookup unavailable",
     );
   });
 });

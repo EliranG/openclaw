@@ -2,11 +2,15 @@
   "id": "mcp-relay",
   "name": "MCP Relay",
   "description": "Connect remote MCP clients to your OpenClaw Gateway",
-  "categories": ["infrastructure"],
+  "categories": [
+    "infrastructure"
+  ],
   "enabledByDefault": false,
   "activation": {
     "onStartup": true,
-    "onCommands": ["mcp-relay"]
+    "onCommands": [
+      "mcp-relay"
+    ]
   },
   "cliCommands": [
     {
@@ -24,7 +28,10 @@
         "default": "https://mcp.openclaw.ai",
         "pattern": "^(?:https://[^\\s/?#@\\\\]+|http://(?:localhost|127\\.0\\.0\\.1)(?::[0-9]+)?)/?$"
       },
-      "agentId": { "type": "string", "minLength": 1 }
+      "agentId": {
+        "type": "string",
+        "minLength": 1
+      }
     }
   },
   "uiHints": {
@@ -36,5 +43,11 @@
       "label": "Default Agent",
       "help": "Optional agent for new conversations; otherwise use the Gateway default."
     }
+  },
+  "controlUi": {
+    "entry": "dist/control-ui/9509a07640662412e57d3008999752b64f3569d299f29a084ecd2f4a0f59fdbb/index.js",
+    "styles": [
+      "dist/control-ui/9509a07640662412e57d3008999752b64f3569d299f29a084ecd2f4a0f59fdbb/index.css"
+    ]
   }
 }

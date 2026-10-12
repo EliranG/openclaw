@@ -1,5 +1,6 @@
 import { createHash, createPrivateKey, createPublicKey, randomBytes, sign } from "node:crypto";
-import { truncateUtf16Safe } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { GatewayControlUiIngressError } from "openclaw/plugin-sdk/gateway-ingress";
+import { isRecord, truncateUtf16Safe } from "openclaw/plugin-sdk/string-coerce-runtime";
 
 export const MAX_FRAME_BYTES = 1024 * 1024;
 export const MAX_RESULT_BYTES = 512 * 1024;
@@ -81,10 +82,50 @@ export function capResult<T>(result: T): T {
 }
 
 export function safeError(error: unknown): { code: ErrorCode; message: string } {
+  if (error instanceof GatewayControlUiIngressError) {
+    return { code: "unavailable", message: error.message };
+  }
   return error instanceof RelayError
     ? { code: error.code, message: error.message }
     : {
         code: "internal",
         message: "OpenClaw could not complete this request. Check the Gateway logs and try again.",
       };
+}
+
+export function relayResponseError(error: unknown): RelayError {
+  return isRecord(error) && error.code === "not_found"
+    ? new RelayError(
+        "not_found",
+        "This connection request is unknown, expired, or belongs to another Gateway. Start connecting again.",
+      )
+    : new RelayError(
+        "unavailable",
+        "The relay could not complete the request. Check openclaw mcp-relay status and try again.",
+      );
+}
+
+export function readGrantCreation(params: Record<string, unknown>): {
+  codeHash: string;
+  client: { id: string; name: string };
+} {
+  if (
+    Object.keys(params).some((key) => !["grantId", "codeHash", "client"].includes(key)) ||
+    typeof params.codeHash !== "string" ||
+    !/^[A-Za-z0-9_-]{43}$/.test(params.codeHash) ||
+    !isRecord(params.client) ||
+    Object.keys(params.client).some((key) => !["id", "name"].includes(key)) ||
+    typeof params.client.id !== "string" ||
+    !params.client.id ||
+    params.client.id.length > 2000 ||
+    typeof params.client.name !== "string" ||
+    !params.client.name ||
+    params.client.name.length > 2000
+  ) {
+    throw new RelayError(
+      "invalid_params",
+      "Supply a code hash and client id/name, then retry pairing.",
+    );
+  }
+  return { codeHash: params.codeHash, client: { id: params.client.id, name: params.client.name } };
 }

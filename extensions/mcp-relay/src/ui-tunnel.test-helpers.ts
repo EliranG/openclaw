@@ -1,5 +1,4 @@
 import type {
-  GatewayControlUiIngressFactoryV1,
   GatewayControlUiIngressV1,
   GatewayIngressMessage,
   GatewayIngressSocketV1,
@@ -133,11 +132,8 @@ export function fixture() {
       }
     }),
   } satisfies GatewayControlUiIngressV1;
-  const factory = {
-    open: vi.fn<GatewayControlUiIngressFactoryV1["open"]>(async () => handle),
-  } satisfies GatewayControlUiIngressFactoryV1;
+  const open = vi.fn<ConstructorParameters<typeof UiTunnel>[0]["open"]>(async () => handle);
   const active = new Set(["gr_one"]);
-  const onUnsupportedAuth = vi.fn();
   let bufferedBytes = 0;
   const relayClosed = deferred<void>();
   const closeRelay = vi.fn(() => {
@@ -145,7 +141,7 @@ export function fixture() {
     void tunnel.close();
   });
   const tunnel = new UiTunnel({
-    factory,
+    open,
     scheduler,
     frameAncestors: ["https://chatgpt.com"],
     assertGrantCurrent: (id) => {
@@ -155,7 +151,6 @@ export function fixture() {
     },
     bufferedBytes: () => bufferedBytes,
     closeRelay,
-    onUnsupportedAuth,
     send: (frame) => {
       if (!isRecord(frame)) {
         throw new Error("Expected a frame");
@@ -168,12 +163,11 @@ export function fixture() {
     clock,
     frames,
     handle,
-    factory,
+    open,
     sockets,
     active,
     closeRelay,
     relayClosed: relayClosed.promise,
-    onUnsupportedAuth,
     setBuffered: (bytes: number) => {
       bufferedBytes = bytes;
     },

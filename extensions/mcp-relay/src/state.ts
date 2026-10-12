@@ -1,10 +1,17 @@
 import { generateKeyPairSync } from "node:crypto";
 import type { PluginRuntime } from "openclaw/plugin-sdk/core";
+import type { GatewayIngressPrincipal } from "openclaw/plugin-sdk/gateway-ingress";
 import type { PluginStateKeyedStore } from "openclaw/plugin-sdk/plugin-state-runtime";
 import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { identityFromPrivateKey, RelayError } from "./protocol.js";
 
-type IssuedGrant = {
+export type RelayGrantAuthority = {
+  readonly principal: Readonly<GatewayIngressPrincipal>;
+  readonly ceiling: readonly string[];
+  readonly principalLabel?: string;
+};
+
+export type IssuedRelayGrant = RelayGrantAuthority & {
   grantId: string;
   clientId: string;
   clientName: string;
@@ -13,11 +20,17 @@ type IssuedGrant = {
   revokedAt?: number;
 };
 
-export type RelayGrant = IssuedGrant | { grantId: string; revokedAt: number; lastUsedAt?: never };
+export type RelayGrant =
+  | IssuedRelayGrant
+  | { grantId: string; revokedAt: number; lastUsedAt?: never };
 
-type PairingCode = { codeHash: string; expiresAt: number; consumed: boolean };
+type PairingCode = RelayGrantAuthority & {
+  codeHash: string;
+  expiresAt: number;
+  consumed: boolean;
+};
 type RelayRecord = {
-  version: 1;
+  version: 2;
   relayOrigin: string;
   privateKey: string;
   codes: PairingCode[];
@@ -28,6 +41,10 @@ const RECORD_KEY = "authority";
 const MAX_CODES = 100;
 const MAX_GRANTS = 1_000;
 const MAX_BYTES = 512 * 1024;
+const OWNER_AUTHORITY: RelayGrantAuthority = {
+  principal: { kind: "owner" },
+  ceiling: ["operator.read", "operator.write"],
+};
 
 function stateError(): RelayError {
   return new RelayError(
@@ -40,7 +57,36 @@ function timestamp(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
-function parseCode(value: unknown): PairingCode {
+function parseAuthority(value: Record<string, unknown>): RelayGrantAuthority {
+  const { principal, ceiling, principalLabel } = value;
+  if (
+    !isRecord(principal) ||
+    !Array.isArray(ceiling) ||
+    !ceiling.every((scope): scope is string => typeof scope === "string" && scope.length > 0) ||
+    (principalLabel !== undefined && typeof principalLabel !== "string")
+  ) {
+    throw stateError();
+  }
+  let parsedPrincipal: GatewayIngressPrincipal;
+  if (principal.kind === "owner") {
+    parsedPrincipal = { kind: "owner" };
+  } else if (
+    principal.kind === "person" &&
+    typeof principal.profileId === "string" &&
+    principal.profileId.trim()
+  ) {
+    parsedPrincipal = { kind: "person", profileId: principal.profileId };
+  } else {
+    throw stateError();
+  }
+  return {
+    principal: parsedPrincipal,
+    ceiling: [...ceiling],
+    ...(principalLabel === undefined ? {} : { principalLabel }),
+  };
+}
+
+function parseCode(value: unknown, legacy: boolean): PairingCode {
   if (
     !isRecord(value) ||
     typeof value.codeHash !== "string" ||
@@ -49,10 +95,15 @@ function parseCode(value: unknown): PairingCode {
   ) {
     throw stateError();
   }
-  return { codeHash: value.codeHash, expiresAt: value.expiresAt, consumed: value.consumed };
+  return {
+    codeHash: value.codeHash,
+    expiresAt: value.expiresAt,
+    consumed: value.consumed,
+    ...(legacy ? OWNER_AUTHORITY : parseAuthority(value)),
+  };
 }
 
-function parseGrant(value: unknown): RelayGrant {
+function parseGrant(value: unknown, legacy: boolean): RelayGrant {
   if (!isRecord(value) || typeof value.grantId !== "string") {
     throw stateError();
   }
@@ -76,15 +127,16 @@ function parseGrant(value: unknown): RelayGrant {
     clientId: value.clientId,
     clientName: value.clientName,
     createdAt: value.createdAt,
+    ...(legacy ? OWNER_AUTHORITY : parseAuthority(value)),
     ...(value.lastUsedAt === undefined ? {} : { lastUsedAt: value.lastUsedAt }),
     ...(value.revokedAt === undefined ? {} : { revokedAt: value.revokedAt }),
   };
 }
 
-function parseRecord(value: unknown): RelayRecord {
+function parseRecord(value: unknown, migrateLegacy: boolean): RelayRecord {
   if (
     !isRecord(value) ||
-    value.version !== 1 ||
+    (value.version !== 2 && !(migrateLegacy && value.version === 1)) ||
     typeof value.relayOrigin !== "string" ||
     typeof value.privateKey !== "string" ||
     !Array.isArray(value.codes) ||
@@ -93,11 +145,11 @@ function parseRecord(value: unknown): RelayRecord {
     throw stateError();
   }
   const record: RelayRecord = {
-    version: 1,
+    version: 2,
     relayOrigin: value.relayOrigin,
     privateKey: value.privateKey,
-    codes: value.codes.map(parseCode),
-    grants: value.grants.map(parseGrant),
+    codes: value.codes.map((code) => parseCode(code, value.version === 1)),
+    grants: value.grants.map((grant) => parseGrant(grant, value.version === 1)),
   };
   if (
     new Set(record.codes.map((code) => code.codeHash)).size !== record.codes.length ||
@@ -139,7 +191,7 @@ export class RelayState {
   readonly #relayOrigin: string;
   readonly #assertCurrent: () => void;
   readonly #now: () => number;
-  readonly #activeGrants = new Set<string>();
+  readonly #activeGrants = new Map<string, Readonly<IssuedRelayGrant>>();
   #updates: Promise<void> = Promise.resolve();
 
   constructor(
@@ -173,8 +225,8 @@ export class RelayState {
     });
   }
 
-  #record(value: unknown): RelayRecord {
-    const record = parseRecord(value);
+  #record(value: unknown, migrateLegacy = false): RelayRecord {
+    const record = parseRecord(value, migrateLegacy);
     if (record.relayOrigin !== this.#relayOrigin) {
       throw new RelayError(
         "unavailable",
@@ -190,17 +242,21 @@ export class RelayState {
     let candidate: RelayRecord | undefined;
     for (;;) {
       if (observation.value !== undefined) {
-        const record = this.#record(observation.value);
+        const record = this.#record(observation.value, true);
         try {
           identityFromPrivateKey(record.privateKey);
         } catch {
           throw stateError();
         }
-        this.#publishGrants(record);
-        return { privateKey: record.privateKey };
+        if (isRecord(observation.value) && observation.value.version === 2) {
+          this.#publishGrants(record);
+          return { privateKey: record.privateKey };
+        }
+        // Added authority metadata must not strand a full legacy store; only new admissions use the budget.
+        candidate = record;
       }
       candidate ??= {
-        version: 1,
+        version: 2,
         relayOrigin: this.#relayOrigin,
         privateKey: generateKeyPairSync("ed25519")
           .privateKey.export({ type: "pkcs8", format: "der" })
@@ -237,20 +293,31 @@ export class RelayState {
   #publishGrants(record: RelayRecord): void {
     this.#activeGrants.clear();
     for (const grant of record.grants) {
-      if (grant.revokedAt === undefined) {
-        this.#activeGrants.add(grant.grantId);
+      if ("createdAt" in grant && grant.revokedAt === undefined) {
+        this.#activeGrants.set(
+          grant.grantId,
+          Object.freeze({
+            ...grant,
+            principal: Object.freeze({ ...grant.principal }),
+            ceiling: Object.freeze([...grant.ceiling]),
+          }),
+        );
       }
     }
   }
 
   assertGrantCurrent(grantId: string): void {
-    this.#assertCurrent();
-    if (!this.#activeGrants.has(grantId)) {
+    if (!this.getGrant(grantId)) {
       throw new RelayError(
         "grant_revoked",
         "This connection was revoked. Run openclaw mcp-relay pair and connect again.",
       );
     }
+  }
+
+  getGrant(grantId: string): Readonly<IssuedRelayGrant> | undefined {
+    this.#assertCurrent();
+    return this.#activeGrants.get(grantId);
   }
 
   async #applyUpdate<T>(
@@ -288,7 +355,9 @@ export class RelayState {
     expiresAt: number,
     now: number,
     assertCommandCurrent?: () => void,
+    authority: RelayGrantAuthority = OWNER_AUTHORITY,
   ): Promise<void> {
+    const issuedAuthority = parseAuthority(authority);
     await this.#update((record) => {
       const codes = record.codes.filter((code) => code.expiresAt > now);
       if (codes.some((code) => code.codeHash === codeHash)) {
@@ -297,7 +366,10 @@ export class RelayState {
           "Pairing code already issued. Run openclaw mcp-relay pair again.",
         );
       }
-      const value = { ...record, codes: [...codes, { codeHash, expiresAt, consumed: false }] };
+      const value = {
+        ...record,
+        codes: [...codes, { codeHash, expiresAt, consumed: false, ...issuedAuthority }],
+      };
       assertCapacity(value);
       return { value, result: undefined };
     }, assertCommandCurrent);
@@ -333,6 +405,9 @@ export class RelayState {
               clientId: params.client.id,
               clientName: params.client.name,
               createdAt: now,
+              principal: code.principal,
+              ceiling: code.ceiling,
+              ...(code.principalLabel === undefined ? {} : { principalLabel: code.principalLabel }),
             },
           ],
         };
@@ -350,13 +425,28 @@ export class RelayState {
     );
   }
 
-  async authorize(grantId: string, now: number): Promise<boolean> {
+  async approveGrant(
+    grant: Omit<IssuedRelayGrant, "lastUsedAt" | "revokedAt">,
+    assertCommandCurrent: () => void,
+  ): Promise<boolean> {
+    const approvedGrant = parseGrant(grant, false);
     return this.#update((record) => {
+      if (record.grants.some((entry) => entry.grantId === grant.grantId)) {
+        return { result: false };
+      }
+      const value = { ...record, grants: [...record.grants, approvedGrant] };
+      assertCapacity(value);
+      return { value, result: true };
+    }, assertCommandCurrent);
+  }
+
+  async authorize(grantId: string, now: number): Promise<Readonly<IssuedRelayGrant> | undefined> {
+    const authorized = await this.#update((record) => {
       const grant = record.grants.find((entry) => entry.grantId === grantId);
       if (!grant || !("createdAt" in grant) || grant.revokedAt !== undefined) {
         return { result: false };
       }
-      const usedGrant: IssuedGrant = { ...grant, lastUsedAt: now };
+      const usedGrant: IssuedRelayGrant = { ...grant, lastUsedAt: now };
       return {
         value: {
           ...record,
@@ -365,6 +455,7 @@ export class RelayState {
         result: true,
       };
     });
+    return authorized ? this.getGrant(grantId) : undefined;
   }
 
   async revoke(grantId: string, now: number, assertCommandCurrent?: () => void): Promise<boolean> {

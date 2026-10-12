@@ -1,22 +1,25 @@
 import { randomUUID } from "node:crypto";
-import { listAgentIds, tryResolveDefaultAgentId } from "openclaw/plugin-sdk/agent-scope-runtime";
 import { redactSensitiveText } from "openclaw/plugin-sdk/logging-core";
 import type { PluginLogger } from "openclaw/plugin-sdk/plugin-entry";
-import type { PluginRuntime } from "openclaw/plugin-sdk/runtime-store";
 import { isRecord, readStringValue } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { escapeRegExp } from "openclaw/plugin-sdk/text-utility-runtime";
-import { createDeadlineGatewayRequest, type GatewayRequest } from "./gateway-request.js";
+import {
+  createDeadlineGatewayRequest,
+  type DeadlineGatewayRequest,
+  type GatewayRequest,
+} from "./gateway-request.js";
 import { capResult, RelayError, truncateText } from "./protocol.js";
 
-type OperationsRuntime = {
-  config: Pick<PluginRuntime["config"], "current">;
-  gateway: Pick<PluginRuntime["gateway"], "readSessionFacts" | "withSessionFacts"> & {
-    request: GatewayRequest;
-  };
+type Session = {
+  key: string;
+  agentId: string;
+  sessionId?: string;
+  lifecycleRevision?: string;
+  label?: string;
+  derivedTitle?: string;
+  lastMessagePreview?: string;
+  lastActivityAt: number;
 };
-type SessionFact = Awaited<
-  ReturnType<OperationsRuntime["gateway"]["readSessionFacts"]>
->["sessions"][number];
 type HistoryMessage = { id: string; role: "user" | "assistant"; text: string; timestamp: string };
 
 function invalid(message: string): never {
@@ -71,8 +74,45 @@ function isoDate(value: unknown): string | undefined {
   return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
 }
 
-function title(session: SessionFact): string {
+function title(session: Session): string {
   return truncateText(session.label || session.derivedTitle || session.key);
+}
+
+function sessionRow(value: unknown): Session {
+  if (!isRecord(value) || typeof value.key !== "string" || typeof value.agentId !== "string") {
+    throw new RelayError("unavailable", "Conversation details are unavailable. Retry in OpenClaw.");
+  }
+  return {
+    key: value.key,
+    agentId: value.agentId,
+    sessionId: readStringValue(value.sessionId),
+    lifecycleRevision: readStringValue(value.lifecycleRevision),
+    label: readStringValue(value.label),
+    derivedTitle: readStringValue(value.derivedTitle),
+    lastMessagePreview: readStringValue(value.lastMessagePreview),
+    lastActivityAt:
+      typeof value.lastActivityAt === "number"
+        ? value.lastActivityAt
+        : typeof value.updatedAt === "number"
+          ? value.updatedAt
+          : 0,
+  };
+}
+
+async function listAgents(request: DeadlineGatewayRequest) {
+  const result = await request("agents.list", {}, { timeoutMs: 15_000 });
+  if (!isRecord(result) || !Array.isArray(result.agents)) {
+    throw new RelayError("unavailable", "Agent status is unavailable. Retry in OpenClaw.");
+  }
+  return {
+    defaultId: readStringValue(result.defaultId),
+    agents: result.agents.map((agent: unknown) => {
+      if (!isRecord(agent) || typeof agent.id !== "string") {
+        throw new RelayError("unavailable", "Agent status is unavailable. Retry in OpenClaw.");
+      }
+      return { id: agent.id, name: truncateText(readStringValue(agent.name) ?? agent.id) };
+    }),
+  };
 }
 
 function messageId(value: unknown): string | undefined {
@@ -154,34 +194,50 @@ function historyPage(value: unknown): {
 }
 
 export function createOperations({
-  runtime,
   logger,
   gateway,
   agentId: configuredAgentId,
   now = Date.now,
 }: {
-  runtime: OperationsRuntime;
   logger: Pick<PluginLogger, "error">;
   gateway: { name: string; version: string };
   agentId?: string;
   now?: () => number;
 }) {
-  async function findSession(conversationId: string): Promise<SessionFact> {
-    const facts = await runtime.gateway.readSessionFacts({ sessionKeys: [conversationId] });
-    const session = facts.sessions.find((entry) => entry.key === conversationId);
-    if (!session) {
+  async function findSession(
+    conversationId: string,
+    request: DeadlineGatewayRequest,
+  ): Promise<Session> {
+    let result: unknown;
+    try {
+      result = await request(
+        "sessions.describe",
+        { key: conversationId, includeDerivedTitles: true },
+        { timeoutMs: 15_000 },
+      );
+    } catch (error) {
+      const { isGatewayClientRequestError } = await import("openclaw/plugin-sdk/gateway-runtime");
+      if (
+        !isGatewayClientRequestError(error) ||
+        !["FORBIDDEN", "INVALID_REQUEST"].includes(error.gatewayCode)
+      ) {
+        throw error;
+      }
+      // Hidden and absent sessions have the same public result; ingress invalidation still throws.
+    }
+    if (!isRecord(result) || !result.session) {
       throw new RelayError(
         "not_found",
         "Conversation not found. List conversations and select an existing conversation.",
       );
     }
-    return session;
+    return sessionRow(result.session);
   }
 
   async function readHistory(
-    session: SessionFact,
+    session: Session,
     params: Record<string, unknown>,
-    request: GatewayRequest,
+    request: DeadlineGatewayRequest,
   ) {
     try {
       return historyPage(
@@ -218,7 +274,7 @@ export function createOperations({
     runId: string,
     waitMs: number,
     assertAuthority: () => Promise<void>,
-    request: GatewayRequest,
+    request: DeadlineGatewayRequest,
     justSubmitted = false,
   ) {
     const base = { conversationId, runId };
@@ -233,7 +289,7 @@ export function createOperations({
         { timeoutMs: waitMs + 5_000 },
       );
       await assertAuthority();
-      await findSession(conversationId);
+      await findSession(conversationId, request);
       if (!isRecord(result)) {
         throw new RelayError(
           "unavailable",
@@ -292,72 +348,69 @@ export function createOperations({
     op: string,
     params: unknown,
     assertAuthority: () => Promise<void>,
-    request: GatewayRequest,
+    request: DeadlineGatewayRequest,
   ): Promise<unknown> {
     switch (op) {
       case "status": {
         paramsObject(params, []);
-        const config = runtime.config.current();
-        const defaultAgentId = tryResolveDefaultAgentId(config);
+        const roster = await listAgents(request);
         return capResult({
           gateway: { name: truncateText(gateway.name), version: truncateText(gateway.version) },
-          agents: listAgentIds(config).map((id) => ({
-            id,
-            name: truncateText(readStringValue(config.agents?.entries?.[id]?.name) ?? id),
-            default: id === defaultAgentId,
+          agents: roster.agents.map((agent) => ({
+            id: agent.id,
+            name: agent.name,
+            default: agent.id === roster.defaultId,
           })),
         });
       }
       case "conversations.list": {
         const input = paramsObject(params, ["limit", "search", "agentId"]);
         const limit = integerParam(input, "limit", 1, 50);
-        const search = stringParam(input, "search", 200)?.toLowerCase();
+        const search = stringParam(input, "search", 200);
         const agentId = stringParam(input, "agentId", 128);
-        return await runtime.gateway.withSessionFacts(
+        const result = await request(
+          "sessions.list",
           {
+            limit,
+            ...(search ? { search } : {}),
             ...(agentId ? { agentId } : {}),
             includeGlobal: false,
             includeUnknown: false,
+            includeDerivedTitles: true,
+            includeLastMessage: true,
+            archived: "all",
             sortBy: "activity",
           },
-          async (facts) =>
-            capResult({
-              conversations: facts.sessions
-                .filter(
-                  (session) =>
-                    !session.unavailable &&
-                    (!search ||
-                      `${title(session)}\n${session.lastMessagePreview ?? ""}\n${session.key}`
-                        .toLowerCase()
-                        .includes(search)),
-                )
-                .toSorted(
-                  (left, right) =>
-                    right.lastActivityAt - left.lastActivityAt || left.key.localeCompare(right.key),
-                )
-                .slice(0, limit)
-                .map((session) =>
-                  Object.assign(
-                    {
-                      conversationId: session.key,
-                      title: title(session),
-                      agentId: session.agentId,
-                      updatedAt: new Date(session.lastActivityAt).toISOString(),
-                    },
-                    session.lastMessagePreview
-                      ? { preview: truncateText(session.lastMessagePreview) }
-                      : {},
-                  ),
-                ),
-            }),
+          { timeoutMs: 15_000 },
         );
+        if (!isRecord(result) || !Array.isArray(result.sessions)) {
+          throw new RelayError(
+            "unavailable",
+            "Conversation listing is unavailable. Retry in OpenClaw.",
+          );
+        }
+        return capResult({
+          conversations: result.sessions.map(sessionRow).map((session) =>
+            Object.assign(
+              {
+                conversationId: session.key,
+                title: title(session),
+                agentId: session.agentId,
+                updatedAt: new Date(session.lastActivityAt).toISOString(),
+              },
+              session.lastMessagePreview
+                ? { preview: truncateText(session.lastMessagePreview) }
+                : {},
+            ),
+          ),
+        });
       }
       case "conversation.read": {
         const input = paramsObject(params, ["conversationId", "limit", "before"]);
         const conversationId = stringParam(input, "conversationId", 512, true)!;
         const limit = integerParam(input, "limit", 1, 100);
         const before = stringParam(input, "before", 16_000);
-        const session = await findSession(conversationId);
+        const session = await findSession(conversationId, request);
         let page;
         if (before) {
           page = await readHistory(session, { cursor: before, limit }, request);
@@ -373,7 +426,7 @@ export function createOperations({
           // Anchor once so subsequent pages use the host's source-bound opaque cursor.
           page = anchor ? await readHistory(session, { messageId: anchor, limit }, request) : tail;
         }
-        const current = await findSession(conversationId);
+        const current = await findSession(conversationId, request);
         if (
           current.sessionId !== session.sessionId ||
           current.lifecycleRevision !== session.lifecycleRevision
@@ -399,7 +452,7 @@ export function createOperations({
         let resolvedConversationId: string;
         let accepted: unknown;
         if (conversationId) {
-          const session = await findSession(conversationId);
+          const session = await findSession(conversationId, request);
           resolvedConversationId = session.key;
           if (requestedAgentId && requestedAgentId !== session.agentId) {
             invalid("agentId does not own this conversation. Select the conversation's agent.");
@@ -417,14 +470,14 @@ export function createOperations({
             { timeoutMs: 15_000 },
           );
         } else {
-          const config = runtime.config.current();
-          const agentId = requestedAgentId ?? configuredAgentId ?? tryResolveDefaultAgentId(config);
+          const roster = await listAgents(request);
+          const agentId = requestedAgentId ?? configuredAgentId ?? roster.defaultId;
           if (!agentId) {
             invalid(
               "No default agent is configured. Supply agentId or set the MCP relay plugin's agentId.",
             );
           }
-          if (!listAgentIds(config).includes(agentId)) {
+          if (!roster.agents.some((agent) => agent.id === agentId)) {
             invalid(
               "The selected agent does not exist. Get the Gateway status and choose an available agent.",
             );
@@ -477,7 +530,7 @@ export function createOperations({
         const conversationId = stringParam(input, "conversationId", 512, true)!;
         const runId = stringParam(input, "runId", 512, true)!;
         const waitMs = integerParam(input, "waitMs", 0, 50_000);
-        await findSession(conversationId);
+        await findSession(conversationId, request);
         return await observeRun(conversationId, runId, waitMs, assertAuthority, request);
       }
       default:
@@ -488,6 +541,7 @@ export function createOperations({
     op: string,
     params: unknown,
     assertAuthority: () => Promise<void>,
+    boundRequest: GatewayRequest,
   ): Promise<unknown> => {
     const waitMs =
       isRecord(params) &&
@@ -529,7 +583,10 @@ export function createOperations({
       async (method, requestParams, options) => {
         gatewayMethod = method;
         try {
-          return await runtime.gateway.request(method, requestParams, options);
+          await assertAuthority();
+          const result = await boundRequest(method, requestParams, options);
+          await assertAuthority();
+          return result;
         } catch (error) {
           logFailure(error);
           throw error;

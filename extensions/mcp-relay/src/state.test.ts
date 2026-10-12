@@ -1,8 +1,18 @@
 import { createPrivateKey } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import type { RelayGrantAuthority } from "./state.js";
 import { createStateFixture } from "./state.test-helpers.js";
 
 const CLIENT = { id: "synthetic-client", name: "Synthetic client" };
+const OWNER_AUTHORITY: RelayGrantAuthority = {
+  principal: { kind: "owner" },
+  ceiling: ["operator.read", "operator.write"],
+};
+const PERSON_AUTHORITY: RelayGrantAuthority = {
+  principal: { kind: "person", profileId: "person-one" },
+  principalLabel: "Synthetic person",
+  ceiling: ["operator.admin"],
+};
 
 async function paired(f: ReturnType<typeof createStateFixture>) {
   const state = f.open();
@@ -44,11 +54,106 @@ describe("MCP relay durable authority", () => {
     expect(f.persisted()).toBe(corrupted);
   });
 
+  it("migrates legacy grants and unused codes together without changing identity or revocations", async () => {
+    const f = createStateFixture();
+    const identity = await f.open().initialize();
+    f.seed({
+      version: 1,
+      relayOrigin: "https://mcp.openclaw.ai",
+      privateKey: identity.privateKey,
+      codes: [{ codeHash: "legacy-code", expiresAt: 1_000, consumed: false }],
+      grants: [
+        {
+          grantId: "gr_legacy",
+          clientId: CLIENT.id,
+          clientName: CLIENT.name,
+          createdAt: 10,
+          lastUsedAt: 20,
+        },
+        { grantId: "gr_revoked", revokedAt: 25 },
+      ],
+    });
+    const migrated = await Promise.all([f.open().initialize(), f.open().initialize()]);
+    expect(migrated).toEqual([identity, identity]);
+    expect(JSON.parse(f.persisted()!)).toMatchObject({
+      version: 2,
+      codes: [{ codeHash: "legacy-code", consumed: false, ...OWNER_AUTHORITY }],
+      grants: [
+        { grantId: "gr_legacy", createdAt: 10, lastUsedAt: 20, ...OWNER_AUTHORITY },
+        { grantId: "gr_revoked", revokedAt: 25 },
+      ],
+    });
+    const restarted = f.open();
+    await restarted.initialize();
+    await expect(restarted.authorize("gr_legacy", 30)).resolves.toMatchObject(OWNER_AUTHORITY);
+    await expect(
+      restarted.createGrant(
+        { grantId: "gr_from_legacy_code", codeHash: "legacy-code", client: CLIENT },
+        30,
+      ),
+    ).resolves.toBe(true);
+    expect(restarted.getGrant("gr_from_legacy_code")).toMatchObject(OWNER_AUTHORITY);
+    await expect(restarted.authorize("gr_revoked", 30)).resolves.toBeUndefined();
+  });
+
+  it("refuses current records with missing principal kinds instead of upgrading them to owner", async () => {
+    const f = createStateFixture();
+    const identity = await f.open().initialize();
+    f.seed({
+      version: 2,
+      relayOrigin: "https://mcp.openclaw.ai",
+      privateKey: identity.privateKey,
+      codes: [],
+      grants: [
+        {
+          grantId: "gr_invalid",
+          clientId: CLIENT.id,
+          clientName: CLIENT.name,
+          createdAt: 10,
+          principal: { profileId: "person-one" },
+          ceiling: ["operator.read"],
+        },
+      ],
+    });
+    const saved = f.persisted();
+    await expect(f.open().initialize()).rejects.toThrow("Restore a valid OpenClaw state backup");
+    expect(f.persisted()).toBe(saved);
+  });
+
+  it("persists approved person authority and never reuses an existing or revoked grant ID", async () => {
+    const f = createStateFixture();
+    const state = f.open();
+    await state.initialize();
+    const grant = {
+      grantId: "gr_consent",
+      clientId: CLIENT.id,
+      clientName: CLIENT.name,
+      createdAt: 10,
+      ...PERSON_AUTHORITY,
+    };
+    const assertCurrent = () => {};
+    await expect(state.approveGrant(grant, assertCurrent)).resolves.toBe(true);
+    const restarted = f.open();
+    await restarted.initialize();
+    expect(restarted.getGrant("gr_consent")).toEqual(grant);
+    await expect(restarted.authorize("gr_consent", 20)).resolves.toMatchObject(PERSON_AUTHORITY);
+    await expect(state.approveGrant({ ...grant, ...OWNER_AUTHORITY }, assertCurrent)).resolves.toBe(
+      false,
+    );
+    await state.recordRevocation("gr_consent", 30);
+    expect(state.getGrant("gr_consent")).toBeUndefined();
+    await expect(state.approveGrant(grant, assertCurrent)).resolves.toBe(false);
+    await state.recordRevocation("gr_unknown", 30);
+    await expect(
+      state.approveGrant({ ...grant, grantId: "gr_unknown" }, assertCurrent),
+    ).resolves.toBe(false);
+  });
+
   it("atomically consumes a code once across concurrent grant requests and restart", async () => {
     const f = createStateFixture();
     const state = f.open();
     await state.initialize();
-    await state.issue("hash", 1_000, 0);
+    await state.issue("hash", 1_000, 0, undefined, PERSON_AUTHORITY);
     const results = await Promise.all(
       ["gr_a", "gr_b"].map((grantId) =>
         f.open().createGrant({ grantId, codeHash: "hash", client: CLIENT }, 10),
@@ -61,6 +166,7 @@ describe("MCP relay durable authority", () => {
       clientId: CLIENT.id,
       clientName: CLIENT.name,
       createdAt: 10,
+      ...PERSON_AUTHORITY,
     });
     await expect(
       state.createGrant({ grantId: "gr_c", codeHash: "hash", client: CLIENT }, 11),
@@ -79,8 +185,8 @@ describe("MCP relay durable authority", () => {
     const state = await paired(f);
     expect(() => state.assertGrantCurrent("gr_one")).not.toThrow();
     expect(() => state.assertGrantCurrent("unknown")).toThrow("revoked");
-    await expect(state.authorize("unknown", 20)).resolves.toBe(false);
-    await expect(state.authorize("gr_one", 20)).resolves.toBe(true);
+    await expect(state.authorize("unknown", 20)).resolves.toBeUndefined();
+    await expect(state.authorize("gr_one", 20)).resolves.toMatchObject(OWNER_AUTHORITY);
     await expect(f.open().grants()).resolves.toEqual([
       {
         grantId: "gr_one",
@@ -88,6 +194,7 @@ describe("MCP relay durable authority", () => {
         clientName: CLIENT.name,
         createdAt: 10,
         lastUsedAt: 20,
+        ...OWNER_AUTHORITY,
       },
     ]);
     await expect(state.revoke("gr_one", 30)).resolves.toBe(true);
@@ -95,7 +202,7 @@ describe("MCP relay durable authority", () => {
     const restarted = f.open();
     await restarted.initialize();
     expect(() => restarted.assertGrantCurrent("gr_one")).toThrow("revoked");
-    await expect(f.open().authorize("gr_one", 40)).resolves.toBe(false);
+    await expect(f.open().authorize("gr_one", 40)).resolves.toBeUndefined();
     await state.issue("fresh", 1_000, 40);
     await expect(
       state.createGrant({ grantId: "gr_one", codeHash: "fresh", client: CLIENT }, 40),
@@ -114,7 +221,7 @@ describe("MCP relay durable authority", () => {
     f.effects.beforeCompare = async () => {
       await f.open().revoke("gr_one", 20);
     };
-    await expect(state.authorize("gr_one", 30)).resolves.toBe(false);
+    await expect(state.authorize("gr_one", 30)).resolves.toBeUndefined();
     await expect(f.open().grants()).resolves.toEqual([
       {
         grantId: "gr_one",
@@ -122,6 +229,7 @@ describe("MCP relay durable authority", () => {
         clientName: CLIENT.name,
         createdAt: 10,
         revokedAt: 20,
+        ...OWNER_AUTHORITY,
       },
     ]);
   });
@@ -147,7 +255,7 @@ describe("MCP relay durable authority", () => {
       ).resolves.toBe(false);
       const reopened = f.open();
       await reopened.initialize();
-      await expect(reopened.authorize("gr_one", 30)).resolves.toBe(false);
+      await expect(reopened.authorize("gr_one", 30)).resolves.toBeUndefined();
       await reopened.recordRevocation("gr_one", 40);
       await expect(reopened.grants()).resolves.toEqual([{ grantId: "gr_one", revokedAt: 20 }]);
       await expect(
@@ -181,10 +289,10 @@ describe("MCP relay durable authority", () => {
         10,
       ),
     ).resolves.toBe(true);
-    await expect(state.authorize("gr_big", 20)).resolves.toBe(true);
+    await expect(state.authorize("gr_big", 20)).resolves.toMatchObject(OWNER_AUTHORITY);
     await expect(state.recordRevocation(`gr_${"x".repeat(1_024)}`, 25)).rejects.toThrow("capacity");
     await state.recordRevocation("gr_big", 30);
-    await expect(f.open().authorize("gr_big", 40)).resolves.toBe(false);
+    await expect(f.open().authorize("gr_big", 40)).resolves.toBeUndefined();
     expect((await f.open().grants())[0]).toMatchObject({ lastUsedAt: 20, revokedAt: 30 });
   });
 
@@ -220,7 +328,7 @@ describe("MCP relay durable authority", () => {
     expect(f.persisted()).toBe(saved);
   });
 
-  it.each(["issue", "revoke"] as const)(
+  it.each(["issue", "revoke", "approve"] as const)(
     "carries the %s command authority into pending persistence",
     async (operation) => {
       const f = createStateFixture();
@@ -238,7 +346,18 @@ describe("MCP relay durable authority", () => {
       const pending =
         operation === "issue"
           ? state.issue("fresh", 1_000, 30, assertCommandCurrent)
-          : state.revoke("gr_one", 30, assertCommandCurrent);
+          : operation === "revoke"
+            ? state.revoke("gr_one", 30, assertCommandCurrent)
+            : state.approveGrant(
+                {
+                  grantId: "gr_consent",
+                  clientId: CLIENT.id,
+                  clientName: CLIENT.name,
+                  createdAt: 30,
+                  ...PERSON_AUTHORITY,
+                },
+                assertCommandCurrent,
+              );
       await expect(pending).rejects.toThrow("Command authority revoked");
       expect(f.persisted()).toBe(saved);
     },
