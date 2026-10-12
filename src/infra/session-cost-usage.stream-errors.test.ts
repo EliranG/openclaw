@@ -6,7 +6,9 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
+import { AsyncWorkScope } from "../shared/async-work-scope.js";
 import { withEnvAsync } from "../test-utils/env.js";
+import { requestCostUsageCacheRefresh } from "./session-cost-usage-cache-runtime.js";
 import { readSessionCostUsageRollupRows } from "./session-cost-usage-cache.test-support.js";
 import {
   loadCostUsageSummary,
@@ -113,23 +115,23 @@ if (!isMainThread) {
         await fs.appendFile(sessionFile, appendedEntry, "utf-8");
         await fs.writeFile(armed, "armed");
 
-        await loadCostUsageSummaryFromCache({ ...range, agentId: "main" });
-        let summary = await loadCostUsageSummaryFromCache({
+        const work = new AsyncWorkScope();
+        try {
+          await work.track(async () =>
+            requestCostUsageCacheRefresh({
+              agentId: "main",
+              storePath: path.join(sessionsDir, "sessions.json"),
+            }),
+          );
+          await work.runWhenIdle(() => undefined);
+        } finally {
+          await work.drain();
+        }
+        const summary = await loadCostUsageSummaryFromCache({
           ...range,
           agentId: "main",
           requestRefresh: false,
         });
-        await vi.waitFor(
-          async () => {
-            summary = await loadCostUsageSummaryFromCache({
-              ...range,
-              agentId: "main",
-              requestRefresh: false,
-            });
-            expect(summary.cacheStatus?.status).toBe("partial");
-          },
-          { interval: 5, timeout: 1_000 },
-        );
 
         expect(await fs.readFile(failed, "utf8")).toBe("stream read failed");
         expect(readSessionCostUsageRollupRows()).toEqual(rollupsBefore);

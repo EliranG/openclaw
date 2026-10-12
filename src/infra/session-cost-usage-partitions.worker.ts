@@ -3,7 +3,6 @@ import { isMainThread } from "node:worker_threads";
 import { expressionBuilder } from "kysely";
 import type { DB } from "../state/openclaw-agent-db.generated.js";
 import { executeSqliteQuerySync, getNodeSqliteKysely } from "./kysely-sync.js";
-import type { SessionCostUsageRollupSnapshot } from "./session-cost-usage-cache.kernel.js";
 import {
   USAGE_COST_PARTITION_SCOPE,
   usageCostPartitionKey,
@@ -98,7 +97,7 @@ export function readSessionCostUsagePartitionsInDatabase(
 
 export function pruneSessionCostUsagePartitionsInDatabase(
   db: DatabaseSync,
-  existing: readonly SessionCostUsageRollupSnapshot[],
+  existing: readonly { key: string; valueJson: string | Uint8Array; updatedAt: number }[],
 ): void {
   assertUsagePartitionWorker();
   const kysely = getNodeSqliteKysely<CacheDatabase>(db);

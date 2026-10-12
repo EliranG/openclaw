@@ -260,7 +260,7 @@ describe("session cost usage SQLite cache", () => {
       const agentId = "usage-migration";
       const { db } = openOpenClawAgentDatabase({ agentId });
       const entry = {
-        version: USAGE_COST_ROLLUP_VERSION,
+        version: 6,
         pricingFingerprint: "synthetic",
         checkpoint: {
           kind: "jsonl" as const,

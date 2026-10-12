@@ -279,10 +279,8 @@ describe("UsagePage detail identity", () => {
       await vi.waitFor(() => expect(page.details.timeSeries.loading).toBe(false));
       await page.updateComplete;
       expect(page.querySelector(".session-bar-selection")?.textContent).toContain(label);
-      await vi.waitFor(() =>
-        expect(page.querySelector(".session-detail-stats")?.textContent).toContain("350"),
-      );
-      expect(page.details.session.data?.usage?.totalTokens).toBe(350);
+      await vi.waitFor(() => expect(page.details.session.data?.usage?.totalTokens).toBe(350));
+      expect(page.querySelector(".session-detail-stats strong")?.textContent).toBe("200");
       expect(page.usageSelectedSessions).toEqual(["global"]);
       expect(page.details.timeSeries.data).toEqual(timeSeries);
       expect(page.details.sessionLogs.data).toEqual(logs);
@@ -301,6 +299,12 @@ describe("UsagePage detail identity", () => {
           method,
         ).toHaveLength(refresh === "manual" ? 2 : 1);
       }
+      [...page.querySelectorAll<HTMLButtonElement>(".timeseries-controls button")]
+        .find((button) => button.textContent?.trim() === "Reset")!
+        .click();
+      await page.updateComplete;
+      expect(page.querySelector(".session-detail-indicator")).toBeNull();
+      expect(page.querySelector(".session-detail-stats strong")?.textContent).toBe("350");
     },
   );
   it.each([
