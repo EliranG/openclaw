@@ -1,10 +1,13 @@
-import type { UserProfile } from "../../../packages/gateway-protocol/src/index.ts";
+import type {
+  ChannelsStatusResult,
+  UserProfile,
+} from "../../../packages/gateway-protocol/src/index.ts";
 import type {
   PluginsCatalogBrowseResult,
   PluginsCatalogCategoriesResult,
 } from "../../../packages/gateway-protocol/src/schema/plugins.ts";
 import { BUILTIN_THEMES } from "../../../packages/gateway-protocol/src/theme.js";
-import type { ChannelsPairingListResult, ChannelsStatusSnapshot } from "../api/types.ts";
+import type { ChannelsPairingListResult } from "../api/types.ts";
 import type { ControlUiMockPresenceUser } from "./control-ui-e2e-contract.ts";
 
 export const defaultControlUiFeatureMethods = [
@@ -100,7 +103,7 @@ export function createControlUiDefaultResponses(scenario: {
       channels: {},
       channelAccounts: {},
       channelDefaultAccountId: {},
-    } satisfies ChannelsStatusSnapshot,
+    } satisfies ChannelsStatusResult,
     "channels.pairing.list": {
       accounts: [],
       requests: [],

@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { Locator, Page } from "playwright";
 import { expect, it } from "vitest";
+import { selectChatLayoutAction } from "../test-helpers/chat-layout-menu.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { evaluateControlUiContext } from "../test-helpers/control-ui-e2e-context.ts";
 import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
@@ -39,8 +40,8 @@ suite.define(() => {
         await page.keyboard.type("Ready to ask");
         expect(await input.inputValue()).toBe("Ready to ask");
 
-        await page.locator(".side-panel__minimize").click();
-        await page.locator(".chat-side-panel-toggle").click();
+        await selectChatLayoutAction(page, "Minimize side panel");
+        await selectChatLayoutAction(page, /^(Side panel|Minimize side panel)$/);
         await expect
           .poll(() => input.evaluate((element) => document.activeElement === element))
           .toBe(true);
@@ -141,7 +142,7 @@ suite.define(() => {
           if (action === "close") {
             await page.getByRole("button", { name: "Close Side chat", exact: true }).click();
           } else if (action === "minimize") {
-            await page.locator(".side-panel__minimize").click();
+            await selectChatLayoutAction(page, "Minimize side panel");
           } else {
             await openChatSidePanelType(page, "Files");
           }
@@ -149,7 +150,7 @@ suite.define(() => {
           if (action === "close") {
             await openChatSidePanelType(page, "Side chat");
           } else if (action === "minimize") {
-            await page.locator(".chat-side-panel-toggle").click();
+            await selectChatLayoutAction(page, /^(Side panel|Minimize side panel)$/);
           } else {
             await page.getByRole("tab", { name: "Side chat", exact: true }).click();
           }
@@ -226,7 +227,7 @@ suite.define(() => {
           deferredMethods: ["sessions.companion.ask"],
         });
         await page.goto(`${suite.server.baseUrl}chat`);
-        await page.getByRole("button", { name: "Open split view", exact: true }).click();
+        await selectChatLayoutAction(page, "Open split view");
         const panes = page.locator("openclaw-chat-pane.chat-split-view__pane");
         await expect.poll(() => panes.count()).toBe(2);
         const firstInput = panes.first().locator(".agent-chat__composer-shell textarea");
