@@ -821,6 +821,7 @@ describe("buildGatewayCronService", () => {
       vi.setSystemTime(new Date("2026-08-14T12:01:00.000Z"));
       clock.setTime(Date.now());
       await onCronTimer(getCronState(state));
+      await state.cron.waitForIdle();
 
       expect(state.cron.getJob(job.id)?.state).toMatchObject({
         lastStatus: "ok",
