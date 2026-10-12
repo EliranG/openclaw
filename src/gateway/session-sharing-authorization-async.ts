@@ -8,8 +8,14 @@ import { readDatabasePathIdentitySync } from "../infra/sqlite-worker-identity.js
 import { errorShapeFromError } from "./error-shape.js";
 import { SessionMutationAuthorizationChangedError } from "./session-mutation-authorization-error.js";
 import { resolveRequestedSessionAgentId } from "./session-request-agent.js";
-import type { SessionMutationAuthorizationParams } from "./session-sharing-authorization.js";
-import { prepareSessionMutationFacts } from "./session-sharing-preparation.js";
+import {
+  sessionMutationTargetChanged,
+  type SessionMutationAuthorizationParams,
+} from "./session-sharing-authorization.js";
+import {
+  prepareSessionMutationFacts,
+  SessionMutationFactsUnavailableError,
+} from "./session-sharing-preparation.js";
 import { prepareSessionSharingProfiles } from "./session-sharing-read.js";
 import {
   resolveChatSendAuthorizationParams,
@@ -115,6 +121,16 @@ export async function resolveSessionMutationAuthorizationAsync(
       });
       reads.push(retained);
       const initialFacts = retained.readCurrent(cfg);
+      const readCurrent = () => {
+        try {
+          return retained.readCurrent(params.context.getRuntimeConfig());
+        } catch (error) {
+          if (error instanceof SessionMutationFactsUnavailableError) {
+            throw sessionMutationTargetChanged(params.method, target.sessionKey);
+          }
+          throw error;
+        }
+      };
       const sourcePath = initialFacts.sourcePath;
       const sourceIdentity = sourcePath && readDatabasePathIdentitySync(sourcePath);
       const readSource =
@@ -132,14 +148,14 @@ export async function resolveSessionMutationAuthorizationAsync(
         readSource,
         bindCreation: retained.bindCreation,
         read: () => {
-          const facts = retained.readCurrent(params.context.getRuntimeConfig());
+          const facts = readCurrent();
           return {
             target: facts.target && { ...facts.target, readSource },
             storageTarget: retained.storageTarget,
             members: [],
             isMember: (identityId: string) => facts.membership.has(identityId),
             assertCurrent: () => {
-              retained.readCurrent(params.context.getRuntimeConfig());
+              readCurrent();
             },
           };
         },

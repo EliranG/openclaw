@@ -704,9 +704,7 @@ describe("plugin HTTP routing", () => {
         },
       }),
     ]);
-    const server = createServer((req, res) => {
-      void handler(req, res);
-    });
+    const server = createServer((req, res) => void handler(req, res));
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", () => resolve());
@@ -923,6 +921,7 @@ describe("plugin suspension admission", () => {
         getSuspensionBlockerCount: vi.fn(() => 0),
       };
       const context = {
+        getRuntimeConfig: () => ({}),
         trackExecution: trackAsyncWork,
         cron,
         logGateway: { warn: vi.fn() },

@@ -41,8 +41,8 @@ export function nativeApprovalTargetsMatch(params: {
 }
 
 function isNativeApprovalTarget(value: unknown): value is NativeApprovalTarget {
-  return Boolean(
-    value && typeof value === "object" && typeof (value as { to?: unknown }).to === "string",
+  return (
+    value !== null && typeof value === "object" && "to" in value && typeof value.to === "string"
   );
 }
 

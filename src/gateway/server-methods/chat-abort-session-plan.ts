@@ -194,8 +194,6 @@ export function prepareChatSessionAbort(
     if (!canRunLifecycleCleanup) {
       return;
     }
-    params.assertCurrent?.();
-    result.aborted = params.onAuthorizedBeforeEmbeddedAbort?.() || result.aborted;
     const wasActive = Boolean(persistedSessionId && isEmbeddedAgentRunActive(persistedSessionId));
     params.assertCurrent?.();
     const embeddedAborted = Boolean(
@@ -245,25 +243,10 @@ export function prepareChatSessionAbort(
   const abortAuthorizedRuns = () => {
     params.assertCurrent?.();
     params.onControllerTargets?.(authorizedRuns);
-    if (!hasAuthorizedGatewayRuns) {
-      // The injected lifecycle callback must not turn a persisted session id into
-      // a bypass around a matching connection or protected run owner.
-      if (hasUnauthorizedOwner || hasUnauthorizedLifecycleOwner) {
-        result.unauthorized = true;
-        return;
-      }
-      params.assertCurrent?.();
-      if (commands.cancel()) {
-        result.aborted = true;
-      }
-      // With no owned Gateway run, the exact persisted session is the boundary,
-      // matching sessions.steer's operator.write behavior for ownerless work.
-      abortAdditional();
-      if (!hasWorkerRun || !params.requester.isAdmin || !canCancelWorkerSession) {
-        return;
-      }
-      params.assertCurrent?.();
-      cancelWorker();
+    // The injected lifecycle callback must not turn a persisted session id into
+    // a bypass around a matching connection or protected run owner.
+    if (!hasAuthorizedGatewayRuns && (hasUnauthorizedOwner || hasUnauthorizedLifecycleOwner)) {
+      result.unauthorized = true;
       return;
     }
     snapshots = authorizedRuns.flatMap(({ runId, entry }) => {
@@ -315,10 +298,9 @@ export function prepareChatSessionAbort(
     }
     // Hidden and preserved side runs must also block broad cleanup: authorization
     // alone must not let the callback abort work intentionally excluded above.
-    abortAdditional();
-    params.assertCurrent?.();
-    if (commands.cancel()) {
-      result.aborted = true;
+    if (canRunLifecycleCleanup) {
+      params.assertCurrent?.();
+      result.aborted = params.onAuthorizedBeforeEmbeddedAbort?.() || result.aborted;
     }
     for (const { runId, sessionKey, sessionId, agentId, entry } of authorizedRuns) {
       params.assertCurrent?.();
@@ -346,6 +328,12 @@ export function prepareChatSessionAbort(
         recordRun(runId);
       }
     }
+    // Secondary cancellation must not retire reply abortability before its chat terminal.
+    params.assertCurrent?.();
+    if (commands.cancel()) {
+      result.aborted = true;
+    }
+    abortAdditional();
     const endedAt = Date.now();
     const stopReason = params.stopReason ?? "rpc";
     for (const [kind, plan] of [
@@ -374,7 +362,11 @@ export function prepareChatSessionAbort(
         }
       }
     }
-    if (params.requester.isAdmin && canCancelWorkerSession) {
+    if (
+      (hasAuthorizedGatewayRuns || hasWorkerRun) &&
+      params.requester.isAdmin &&
+      canCancelWorkerSession
+    ) {
       params.assertCurrent?.();
       cancelWorker();
     }

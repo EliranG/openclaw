@@ -1,8 +1,5 @@
 import { retainPreparedSessionEntryPredicate } from "../../config/sessions/session-accessor.sqlite-entry-cache-publication-state.js";
-import {
-  captureSessionActorStorageOwner,
-  getSessionActorStorageBinding,
-} from "../../config/sessions/session-actor-storage-binding.js";
+import { getSessionActorStorageBinding } from "../../config/sessions/session-actor-storage-binding.js";
 import { withSessionEntriesFromStoresInWorker } from "../../config/sessions/session-entry-read-runtime.js";
 import { captureSessionEntryMetadataRead } from "../../config/sessions/session-entry-source-authority.js";
 import type { InternalSessionEntry } from "../../config/sessions/types.js";
@@ -23,12 +20,14 @@ export async function prepareRewindRepositoryEntries(
     storePath: source.storePath,
   };
   const memory = getSessionActorStorageBinding(scope);
-  const memoryOwner = memory && captureSessionActorStorageOwner(memory);
   const metadata = captureSessionEntryMetadataRead(scope);
   if (memory || metadata || isIncognitoSessionKey(source.canonicalKey)) {
     const read = (key: string) => {
       if (memory) {
-        return memoryOwner?.owner?.readSession(key, memory.authority)?.entry;
+        return memory.actor.storage.readCurrent(
+          { type: "session.entry.read", input: { sessionKey: key } },
+          memory.authority,
+        );
       }
       if (metadata) {
         return key === source.canonicalKey
