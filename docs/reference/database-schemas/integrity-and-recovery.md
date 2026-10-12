@@ -66,10 +66,9 @@ seal. Migration and repair owners validate before mutation, verify their
 changes, and publish new admitted facts only after successful settlement. They
 cannot reuse a seal for a changed schema. Backup and restore publish independent
 SQLite files; their new physical identities require fresh admission even if an
-old adjacent seal survives. The deployment controller excludes only the exact
-`.seal` sibling of an inventoried SQLite file from preservation comparisons;
-unrelated files remain protected. No database schema change is required for
-this seal format.
+old adjacent seal survives. The deployment controller delegates migration and
+restore to these native update owners, so it does not independently preserve
+or validate seals. No database schema change is required for this seal format.
 
 | When                                             | Check                                                                                                                        |
 | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
