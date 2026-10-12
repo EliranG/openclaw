@@ -825,9 +825,8 @@ describe("buildGatewayCronService", () => {
       expect(state.cron.getJob(job.id)?.state).toMatchObject({
         lastStatus: "ok",
         consecutiveErrors: 0,
-        lastError: undefined,
       });
-      expect(getCronState(state).activeTimerTicks).toBe(0);
+      expect(state.cron.getJob(job.id)?.state.lastError).toBeUndefined();
       expectIsolatedRunFields({ agentId: "main" });
     } finally {
       state.cron.stop();
@@ -3164,7 +3163,6 @@ describe("buildGatewayCronService", () => {
           ).id,
       );
       expect(new Set(attemptedIds)).toEqual(new Set(jobIds));
-      expect(getCronState(state).activeTimerTicks).toBe(0);
     } finally {
       state.cron.stop();
       vi.useRealTimers();

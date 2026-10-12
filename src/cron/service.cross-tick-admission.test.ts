@@ -124,12 +124,10 @@ describe("cron service cross-tick admission", () => {
 
       blocked.release(jobA);
       await tickA;
-      expect(state.activeTimerTicks).toBe(1);
       blocked.release(jobB);
       await tickB;
       await waitForCronRunQueue(state);
       expect(getActiveGatewayRootWorkCount()).toBe(0);
-      expect(state.activeTimerTicks).toBe(0);
     } finally {
       blocked.release(jobA);
       blocked.release(jobB);
@@ -158,14 +156,12 @@ describe("cron service cross-tick admission", () => {
       stop(state);
       await retiredTimer;
       await start(state);
-      const restartedTimer = state.timer;
       nowMs += 1_000;
 
       expect(restartSignal?.rollback()).toBe(true);
       await retiredTimer;
 
       expect(runIsolatedAgentJob).not.toHaveBeenCalled();
-      expect(state.timer).toBe(restartedTimer);
       expect(getActiveGatewayRootWorkCount()).toBe(0);
       const persisted = await loadCronStore(store.storePath);
       expect(persisted.jobs[0]?.state).toMatchObject({ nextRunAtMs: nowMs });

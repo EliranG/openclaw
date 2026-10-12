@@ -27,8 +27,7 @@ import * as runtimeMutation from "./runtime-mutation.js";
 import type { CronEvent, CronServiceDeps, CronServiceState } from "./state.js";
 import { authorCronRunCompletion } from "./timer-job-runner.js";
 import { finalizeCompletedCronRunOutcomes } from "./timer-outcome-finalization.js";
-import { runMissedJobs } from "./timer.js";
-import { onTimer } from "./timer.test-support.js";
+import { onTimer, runMissedJobs } from "./timer.test-support.js";
 
 const fixtures = setupCronRegressionFixtures({ prefix: "cron-service-batch-finalization-" });
 const DUE_AT = Date.parse("2026-02-06T10:05:00.250Z");
@@ -78,7 +77,6 @@ async function finishBatch(
 ) {
   runner.release.resolve({ status: "ok", summary: "completed" });
   await batch;
-  state.timer?.cancel();
 }
 
 function findCronTask(jobId: string) {
@@ -464,14 +462,17 @@ describe("cron batch outcome finalization", () => {
     }
   });
 
-  it("leaves unrequested startup jobs untouched when terminal finalization fails", async () => {
+  it("keeps a deferred startup job unrequested when immediate finalization fails", async () => {
     const first = dueJob("startup-failed-write-before-stop");
     const unstarted = dueJob("startup-unstarted-after-failed-write");
     const runIsolatedAgentJob = vi.fn(async () => ({
       status: "ok" as const,
       summary: "completed before service stop",
     }));
-    const { state, storePath } = await fixture([first, unstarted], { runIsolatedAgentJob });
+    const { state, storePath } = await fixture([first, unstarted], {
+      maxMissedJobsPerRestart: 1,
+      runIsolatedAgentJob,
+    });
     const allowWrites = rejectWrite(first.id);
     const observer = observeFinalizationRejection(() => stop(state));
     try {
@@ -482,12 +483,12 @@ describe("cron batch outcome finalization", () => {
       );
       expect(persisted?.state.queuedAtMs).toBeUndefined();
       expect(persisted?.state.runningAtMs).toBeUndefined();
+      expect(persisted?.state.nextRunAtMs).toBe(DUE_AT + 5_000);
       expect(isCronJobActive(first.id)).toBe(false);
       expect(isCronJobActive(unstarted.id)).toBe(false);
     } finally {
       observer.mockRestore();
       allowWrites();
-      state.timer?.cancel();
     }
   });
 

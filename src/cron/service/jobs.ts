@@ -52,7 +52,6 @@ import {
 } from "./jobs-validation.js";
 import { normalizeOptionalAgentId, normalizeRequiredName } from "./normalize.js";
 import { mergeCronPayload } from "./payload-merge.js";
-import type { CronServiceState } from "./state.js";
 
 type DeliveryValidationOptions = { configuredChannels?: readonly string[] };
 
@@ -196,7 +195,7 @@ function validateFullJob(
 }
 /** Creates a normalized cron job row from public add input and computes its initial schedule. */
 export function createJob(
-  state: CronServiceState,
+  state: { deps: { nowMs: () => number; cronConfig?: CronConfig; defaultAgentId?: string } },
   input: CronJobCreate,
   opts?: DeliveryValidationOptions & {
     scheduledToolPolicy?: CronScheduledToolPolicy;

@@ -78,10 +78,6 @@ async function runTimer(cronJob: CronJob) {
     };
   } finally {
     maintenance.mockRestore();
-    if (state.timer) {
-      state.timer.cancel();
-      state.timer = null;
-    }
   }
 }
 
@@ -117,16 +113,11 @@ describe("cron timer maintenance admission", () => {
       expect(state.deps.runIsolatedAgentJob).not.toHaveBeenCalled();
       expect(state.deps.enqueueSystemEvent).not.toHaveBeenCalled();
       expect(state.deps.requestHeartbeat).not.toHaveBeenCalled();
-      expect(state.running).toBe(false);
       expect(state.deps.scheduler.nextWakeAtMs).toBe(nextRunAtMs);
       expect(previousRuns).toHaveBeenCalledTimes(0);
     } finally {
       previousRuns.mockRestore();
       maintenance.mockRestore();
-      if (state.timer) {
-        state.timer.cancel();
-        state.timer = null;
-      }
     }
   });
 
