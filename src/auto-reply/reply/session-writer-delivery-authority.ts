@@ -191,9 +191,3 @@ export function assertSessionWriterDeliveryAuthorized(
     throw new SessionWriterDeliveryRevokedError();
   }
 }
-
-/** Fails closed at the provider's last pre-I/O boundary for an authority-bearing payload. */
-export function assertReplyPayloadSessionWriterDeliveryAuthorized(payload: ReplyPayload): void {
-  const authority = getReplyPayloadMetadata(payload)?.sessionWriterDeliveryAuthority;
-  assertSessionWriterDeliveryAuthorized(authority);
-}

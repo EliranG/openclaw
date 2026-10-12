@@ -14,6 +14,7 @@ import { captureIncognitoSessionSource } from "../../config/sessions/session-inc
 import type { InternalSessionEntry as SessionEntry } from "../../config/sessions/types.js";
 import { isIncognitoSessionKey } from "../../routing/session-key.js";
 import type { ExpectedRestartRecoveryTarget } from "./main-session-restart-recovery-shared.js";
+import { resolveRestartRecoveryDispatchIdentity } from "./main-session-restart-recovery-target.js";
 
 type ExpectedRecoveryRead = {
   expected: ExpectedRestartRecoveryTarget;
@@ -55,7 +56,14 @@ export async function prepareExpectedRestartRecoveryCurrent(
     ...params.expected,
     claim: params.expected.claim && { ...params.expected.claim },
   };
-  const target = { ...expected, storePath: params.storePath };
+  const target = {
+    ...expected,
+    storePath: params.storePath,
+    agentId: resolveRestartRecoveryDispatchIdentity({
+      ...expected,
+      storePath: params.storePath,
+    }).agentId,
+  };
   const source = captureIncognitoSessionSource(target);
   if (source && "kind" in source) {
     return {

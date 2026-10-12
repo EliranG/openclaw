@@ -49,6 +49,7 @@ import type {
 } from "./mention-inbox.types.js";
 import type { GatewayClient } from "./server-methods/types.js";
 import { prepareSessionSharingRead } from "./session-sharing-target-read.js";
+import { resolveSessionStoreIdentity } from "./session-store-key.js";
 
 const log = createSubsystemLogger("gateway/mentions");
 
@@ -66,9 +67,9 @@ export function createMentionInbox(params: MentionInboxOptions): MentionInbox {
   let sessionRevision = 0;
   const views = new WeakMap<GatewayClient, { signature: string; revision: number }>();
   const sharingTargets = createMentionSharingTargets({
-    getRuntimeConfig: params.getRuntimeConfig,
+    getRuntimeConfig: () => params.getRuntimeConfig(),
     getProjection: () => state,
-    now: scheduler.now,
+    now: () => scheduler.now(),
     policy,
   });
   const {
@@ -82,7 +83,7 @@ export function createMentionInbox(params: MentionInboxOptions): MentionInbox {
   let profileInvalidationPending = false;
   const applyCommittedInput = createMentionInputRecorder({
     getRuntimeConfig: () => params.getRuntimeConfig(),
-    now: scheduler.now,
+    now: () => scheduler.now(),
     policy,
     onCapacityReached() {
       if (!capacityReported) {
@@ -547,10 +548,16 @@ export function createMentionInbox(params: MentionInboxOptions): MentionInbox {
       if (!prepareCommittedMentionInput(input)) {
         return;
       }
-      const prepared = await prepareSessionSharingRead({
-        cfg: params.getRuntimeConfig(),
+      const cfg = params.getRuntimeConfig();
+      const { agentId } = resolveSessionStoreIdentity({
+        cfg,
         sessionKey: input.sessionKey,
         agentId: input.agentId,
+      });
+      const prepared = await prepareSessionSharingRead({
+        cfg,
+        sessionKey: input.sessionKey,
+        agentId,
       });
       try {
         await policy.recordCommittedInvolvementAsync(input, prepared);

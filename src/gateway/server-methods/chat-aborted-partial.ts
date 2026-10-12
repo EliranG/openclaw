@@ -72,10 +72,10 @@ export function retainChatAbortSessionSnapshot(snapshot: ChatAbortSessionSnapsho
             error: new Error("Aborted partial transcript session is unavailable"),
           };
         }
-        if (entry) {
-          retained.adoptCreatedEntry(entry);
-        }
-        return { ok: true, value: { ...selected, entry: entry ?? undefined } };
+        return {
+          ok: true,
+          value: { ...selected, entry: entry ? selected.entry : undefined },
+        };
       },
       release: retained.release,
     };

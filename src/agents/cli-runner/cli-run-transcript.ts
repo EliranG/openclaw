@@ -314,6 +314,10 @@ async function prepareCliBlockFallbackWrite(
     return { readScope: { ...identity, storePath: actor.path }, assertCurrent, release() {} };
   }
   const retainWrite = (source: CapturedSessionEntryReadSource, captured: InternalSessionEntry) => {
+    const { databaseIdentity } = source;
+    if (typeof databaseIdentity !== "string") {
+      throw new SessionTranscriptWriterClaimReboundError();
+    }
     const { lifecycleRevision, activeWriterRunId } = expectedEntry;
     const matches = (current: InternalSessionEntry | undefined) =>
       current?.sessionId === identity.sessionId &&
@@ -327,7 +331,7 @@ async function prepareCliBlockFallbackWrite(
       throw new SessionTranscriptWriterClaimReboundError();
     }
     const retained = retainPreparedSessionEntryPredicate({
-      databaseIdentity: `file:${source.databaseIdentity}`,
+      databaseIdentity: `file:${databaseIdentity}`,
       sessionKey: resolveSqliteSessionKey(identity.sessionKey, identity.agentId),
       entry: captured,
       matches: (_before, current) => matches(current),

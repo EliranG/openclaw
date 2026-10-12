@@ -261,7 +261,6 @@ function assertCurrentOperatorAuthority(authority: AdmittedRunOperatorAuthority 
 /** Fingerprints the complete model-facing tool authority owned by one queued turn. */
 function resolveFollowupRunToolAuthorityFingerprint(
   snapshot: ReplyToolAuthorityInput,
-  route: ReplyToolAuthorityRoute | undefined,
   preparedContext: ReturnType<typeof resolveReplyToolAuthorityContext>,
 ): string {
   const execution = snapshot.run;
@@ -349,19 +348,6 @@ export async function prepareFollowupRunToolAuthorityFingerprint(
   }
 }
 
-export async function resolveFollowupRunToolAuthorityFingerprintAsync(
-  snapshot: ReplyToolAuthorityInput,
-  route?: ReplyToolAuthorityRoute,
-  assertCurrent: () => void = () => {},
-): Promise<string> {
-  const prepared = await prepareFollowupRunToolAuthorityFingerprint(snapshot, route, assertCurrent);
-  try {
-    return prepared.read();
-  } finally {
-    prepared.release();
-  }
-}
-
 export type ReplyToolAuthorityNarrow = (
   input: ReplyToolAuthorityInput,
   sandbox: ReturnType<typeof resolveSandboxRuntimeStatus>,
@@ -381,7 +367,6 @@ function resolvePreparedReplyToolAuthorityFingerprint(
   const preparedInput = narrow?.(input, sandbox) ?? input;
   return resolveFollowupRunToolAuthorityFingerprint(
     preparedInput,
-    route,
     resolveReplyToolAuthorityContext(preparedInput, route, sandbox),
   );
 }

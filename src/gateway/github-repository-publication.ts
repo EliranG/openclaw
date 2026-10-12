@@ -299,12 +299,12 @@ export function createRepositoryGitHubPublicationCoordinator(params: {
           ...input,
           selection: {
             source: "shared",
-            ...(input.expectedPublisher
+            ...(expected
               ? {
                   expected: {
-                    source: input.expectedPublisher.source,
-                    accountId: input.expectedPublisher.accountId,
-                    login: input.expectedPublisher.login,
+                    source: expected.source,
+                    accountId: expected.accountId,
+                    login: expected.login,
                   },
                 }
               : {}),

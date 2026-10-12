@@ -126,7 +126,11 @@ export async function handleApproveCommandFromContext(
       senderId: kind === "plugin" ? pluginReviewerSenderId : params.command.senderId,
       kind,
     });
-  const [exec, plugin, systemAgent] = await Promise.all(approvalKinds.map(authorize));
+  const [exec, plugin, systemAgent] = await Promise.all([
+    authorize("exec"),
+    authorize("plugin"),
+    authorize("system-agent"),
+  ]);
   const authorizations: Record<(typeof approvalKinds)[number], ApprovalCommandAuthorization> = {
     exec,
     plugin,

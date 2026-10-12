@@ -380,6 +380,7 @@ export async function prepareSessionWorkspaceForRun(params: {
         // Direct bindings still require containment. Pending managed checkouts use
         // the saved child requirement and source custody in the preparation owner.
         enforceSandboxContainment: !pending && Boolean(project || saved.projectId),
+        sandboxRequired: saved.sandbox === "required",
         requestedProjectId: project?.id ?? saved.projectId,
         sessionCwd: directory,
         sessionKey,

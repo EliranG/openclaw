@@ -31,7 +31,7 @@ export async function prepareReceiptOwner(row: {
   const session = await prepareGitHubPublicationSession(row.session_key, { agentId: row.agent_id });
   try {
     const repository = await getSessionRepositoryWorkspaceStore().prepare(row.workspace_id);
-    return { ...repository, session, release: session.release };
+    return { ...repository, session, release: () => session.release() };
   } catch (error) {
     session.release();
     throw error;

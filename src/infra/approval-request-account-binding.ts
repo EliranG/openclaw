@@ -178,7 +178,7 @@ function resolveApprovalRequestAccountBinding(
 }
 
 /** Resolves the account id an approval request belongs to for an optional channel filter. */
-export function resolveApprovalRequestAccountIdFromDelivery(
+function resolveApprovalRequestAccountIdFromDelivery(
   params: {
     cfg: OpenClawConfig;
     request: ApprovalRequestLike;
@@ -190,7 +190,7 @@ export function resolveApprovalRequestAccountIdFromDelivery(
 }
 
 /** Resolves an approval request account only when the request can be routed to a channel. */
-export function resolveApprovalRequestChannelAccountIdFromDelivery(
+function resolveApprovalRequestChannelAccountIdFromDelivery(
   params: {
     cfg: OpenClawConfig;
     request: ApprovalRequestLike;

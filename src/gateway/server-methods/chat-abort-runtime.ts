@@ -332,7 +332,7 @@ export async function abortChatRunsForSessionKeyWithPartials(
     failure = { error };
   }
   // Cancellation consumed these buffers before awaited descendant work could fail.
-  const warning = await settleChatAbortPersistence(plan.finish, failure);
+  const warning = await settleChatAbortPersistence(() => plan.finish(), failure);
   return {
     ...result,
     aborted:

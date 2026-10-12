@@ -492,7 +492,7 @@ function resolveSandboxClassification(params: SandboxRuntimeStatusParams) {
   const comparableSessionKey = canonicalizeMainSessionAlias({
     cfg,
     agentId: classificationAgentId,
-    sessionKey: classificationSessionKey,
+    sessionKey: resolveSqliteSessionKey(classificationSessionKey, classificationAgentId),
   });
   return {
     sessionKey,

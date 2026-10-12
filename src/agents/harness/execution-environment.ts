@@ -241,7 +241,21 @@ export async function assertAgentHarnessExecutionEnvironment(
 function assertPreparedAgentHarnessExecutionEnvironment(
   harness: AgentHarness,
   params: ExecutionEnvironmentParams,
-  entry: SessionEntry | undefined,
+  entry:
+    | Pick<
+        SessionEntry,
+        | "sessionId"
+        | "agentRuntimeOverride"
+        | "permissionMode"
+        | "sandbox"
+        | "sandboxMode"
+        | "createdActor"
+        | "execHost"
+        | "execNode"
+        | "execCwd"
+        | "nativeRuntimeConsent"
+      >
+    | undefined,
   nativeSource: boolean,
   runtime: ReturnType<typeof resolveSandboxRuntimeStatus>,
 ): boolean {

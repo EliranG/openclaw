@@ -135,7 +135,7 @@ export async function prepareSessionPatchArchive(
       async (selected) =>
         prepareSessionPatchArchiveFromSource(params, {
           selected,
-          readCurrent: metadata.readCurrent,
+          readCurrent: () => metadata.readCurrent(),
         }),
     );
   }

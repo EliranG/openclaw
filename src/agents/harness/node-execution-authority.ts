@@ -134,7 +134,8 @@ export async function createSessionNodeAuthorities(
           : undefined;
     const currentSessionAllowed =
       source || projected
-        ? entry?.sessionId === attempt.sessionId &&
+        ? entry !== undefined &&
+          entry.sessionId === attempt.sessionId &&
           (request.source !== "session-full" || entry.permissionMode === "full")
         : sessionAllowed &&
           retained?.isCurrent() &&

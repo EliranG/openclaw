@@ -46,7 +46,11 @@ import {
   SessionHistorySseState,
 } from "./session-history-state.js";
 import { resolveCursorSeq } from "./session-history-tail.js";
-import { prepareSessionMutationFacts } from "./session-sharing-preparation.js";
+import {
+  prepareSessionMutationFacts,
+  type PreparedSessionSourceFacts,
+  type SessionFactsRead,
+} from "./session-sharing-preparation.js";
 import { createSessionListEntryFilter, resolveSessionSharingTarget } from "./session-sharing.js";
 import { resolveSessionStoreIdentity, resolveSessionStoreKey } from "./session-store-key.js";
 import {
@@ -220,7 +224,7 @@ async function serveAuthorizedSessionHistory(
   assertSourceCurrent: () => void,
 ): Promise<boolean> {
   const { cfg, requestAuth, operatorScopes } = authResult;
-  let sharing: Awaited<ReturnType<typeof prepareSessionMutationFacts>> | undefined;
+  let sharing: SessionFactsRead<PreparedSessionSourceFacts> | undefined;
   using sharingLifetime = {
     transferred: false,
     [Symbol.dispose]() {

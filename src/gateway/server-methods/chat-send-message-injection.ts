@@ -219,7 +219,10 @@ export function createChatSendMessageInjectionStarter(params: {
           userTurnTranscriptRecorder: params.userTurnTranscriptRecorder,
         },
       );
-      void attempt.outcome.then(delivery.release, delivery.release);
+      void attempt.outcome.then(
+        () => delivery.release(),
+        () => delivery.release(),
+      );
       handedOff = true;
       return admissionRefused ? undefined : attempt;
     } finally {

@@ -281,6 +281,7 @@ async function initSessionStateAttempt(params: InitSessionStateParams): Promise<
           // Child finalizers may need the same store writer. Drain them here,
           // outside that lane, before an explicit reset can commit or run its tail.
           const cleanup = await prepareSessionResetCleanupGuard({
+            agentId: attemptContext.agentId,
             sessionKey: candidate.sessionKey,
             storePath: attemptContext.storePath,
             expectedSession: current,

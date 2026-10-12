@@ -321,28 +321,6 @@ export function createHumanMentionPolicy(params: {
         release: prepared.release,
       };
     },
-    recordCommittedInvolvement(input: MentionCommittedInput): void {
-      if (isIncognitoSessionKey(input.sessionKey)) {
-        return;
-      }
-      const cfg = params.getRuntimeConfig();
-      const target = resolveSessionSharingTarget({
-        cfg,
-        sessionKey: input.sessionKey,
-        agentId: input.agentId,
-      });
-      const profileIds = involvedProfiles(input, target, cfg);
-      if (target && profileIds.length) {
-        updateSessionProfileInvolvement(
-          { agentId: target.agentId, sessionKey: target.storeKey, storePath: target.storePath },
-          {
-            expectedSessionId: input.sessionId,
-            profileIds,
-            change: { kind: "mention", source: input.committedSource },
-          },
-        );
-      }
-    },
     async recordCommittedInvolvementAsync(
       input: MentionCommittedInput,
       facts: Awaited<ReturnType<typeof prepareSessionSharingRead>>,

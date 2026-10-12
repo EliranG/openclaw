@@ -382,7 +382,7 @@ export async function readGitHubPublicationWorktreeOwner(
       session,
       params.expected,
     )();
-    return { ...owner, release: session.release };
+    return { ...owner, release: () => session.release() };
   } catch (error) {
     session.release();
     throw error;
@@ -486,7 +486,7 @@ export async function prepareGitHubPublicationWorkspaceOwner(
       // Only repository owners expose synchronous current facts; worktrees use the worker reader.
       currentRepository: () =>
         validate(resolveGitHubPublicationWorkspaceOwner(identity, prepared, session)),
-      release: session.release,
+      release: () => session.release(),
     };
   } catch (error) {
     session.release();
@@ -565,41 +565,6 @@ export async function readLocalGitHubPublicationWorktreeOwner(
       return owner.assertCurrent();
     },
   };
-}
-
-export async function prepareGitHubPublicationAvailability(params: {
-  sessionId: string;
-  sessionKey: string;
-  agentId: string;
-  sessionTarget?: AgentRunSessionTarget;
-  assertCurrent?: () => boolean;
-}): Promise<boolean> {
-  try {
-    const assertCurrent = () => {
-      if (params.assertCurrent?.() === false) {
-        throw new GitHubPublicationSessionChangedError();
-      }
-    };
-    assertCurrent();
-    const prepared = await prepareGitHubPublicationWorkspaceOwner(params, {
-      sessionTarget: params.sessionTarget,
-      assertCurrent,
-    });
-    using _ = { [Symbol.dispose]: () => prepared.release() };
-
-    const initial = prepared.initial;
-    assertCurrent();
-    const identity = await prepareCurrentGitHubPublicationIdentity(params.agentId);
-    assertCurrent();
-    const current = await prepared.read();
-    assertCurrent();
-    return (
-      sameGitHubPublicationWorkspace(initial, current) &&
-      matchesCurrentGitHubPublicationIdentity({ agentId: params.agentId, identity })
-    );
-  } catch {
-    return false;
-  }
 }
 
 /** Discovery validates the same registered repository identity as publication, without GitHub I/O. */

@@ -158,7 +158,7 @@ export async function captureSessionEntryCurrentCheckInternal(inputParams: {
       const selectedStore = owner.selectedStore;
       const native = owner.kind === "native";
       let active = true;
-      const matchesFields = (current: SessionEntry | undefined) =>
+      const matchesFields = (current: Partial<Record<keyof SessionEntry, unknown>> | undefined) =>
         (current === undefined) === (selected === undefined) &&
         fields.every((field, index) => isDeepStrictEqual(current?.[field], selectedValues[index]));
       const retained =

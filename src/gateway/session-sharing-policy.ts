@@ -381,15 +381,6 @@ export async function isResolvedIncognitoSessionAsync(params: {
   });
 }
 
-export function isResolvedIncognitoSession(
-  params: Parameters<typeof isResolvedIncognitoSessionAsync>[0],
-): boolean {
-  return isIncognitoSessionTarget({
-    sessionKey: params.sessionKey,
-    target: resolveSessionSharingTarget(params),
-  });
-}
-
 export function authorizeIncognitoSessionTarget(params: {
   client: GatewayClient | null;
   sessionKey: string;
@@ -409,24 +400,6 @@ export function authorizeIncognitoSessionTarget(params: {
     return null;
   }
   return hiddenSessionNotFound(params.sessionKey, true);
-}
-
-export async function canAccessIncognitoSession(params: {
-  cfg: OpenClawConfig;
-  client: GatewayClient | null;
-  sessionKey: string;
-  agentId?: string;
-}): Promise<boolean> {
-  if (isGatewayAdmin(params.client)) {
-    return true;
-  }
-  return (
-    authorizeIncognitoSessionTarget({
-      client: params.client,
-      sessionKey: params.sessionKey,
-      target: await resolveSessionSharingTargetAsync(params),
-    }) === null
-  );
 }
 
 export async function authorizeResolvedSessionMutationAsync(params: {

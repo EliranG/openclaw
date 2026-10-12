@@ -28,6 +28,7 @@ export class SessionResetCleanupError extends Error {}
 
 /** Prepare parent facts once; cleanup observes the entry writer's in-process receipts. */
 export async function prepareSessionResetCleanupGuard(params: {
+  agentId: string;
   storePath: string;
   sessionKey: string;
   expectedSession: Pick<SessionEntry, "sessionId" | "lifecycleRevision"> | undefined;
@@ -68,7 +69,12 @@ export async function prepareSessionResetCleanupGuard(params: {
     };
   }
   return withSessionEntriesFromStoreInWorker(
-    { storePath: params.storePath, sessionKeys: [params.sessionKey], snapshotFields: [] },
+    {
+      agentId: params.agentId,
+      storePath: params.storePath,
+      sessionKeys: [params.sessionKey],
+      snapshotFields: [],
+    },
     async ({ result }) => {
       const entry = result.entries.find((row) => row.sessionKey === params.sessionKey)?.entry;
       assertEntry(entry);

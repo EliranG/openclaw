@@ -1,4 +1,4 @@
-import { stableStringify } from "@openclaw/normalization-core";
+import { expectDefined, stableStringify } from "@openclaw/normalization-core";
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import { withSandboxRuntimeStatusesInWorker } from "../../../agents/sandbox/runtime-status.js";
 import { withPreparedSessionCapabilityRead } from "../../../agents/subagents/spawn/subagent-session-store.js";
@@ -214,8 +214,11 @@ export async function prepareNextDeliveryGroup(
           const profile =
             index < 0
               ? undefined
-              : resolveReplyToolAuthorityContext(item, undefined, statuses[index])
-                  .capabilityProfile;
+              : resolveReplyToolAuthorityContext(
+                  item,
+                  undefined,
+                  expectDefined(statuses[index], "prepared sandbox status"),
+                ).capabilityProfile;
           const storageKey = resolveFollowupDeliveryStorageKey(item);
           const personalTargets = profile
             ? resolveReplyPersonalToolTargets(item, profile)

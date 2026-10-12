@@ -14,10 +14,7 @@ import type { SessionEntryCreationOperation } from "../config/sessions/session-a
 import { readCommittedIncognitoSessionSharing } from "../config/sessions/session-accessor.sqlite-incognito-sharing.js";
 import { readSessionEntriesFromStoreInWorker } from "../config/sessions/session-entry-read-runtime.js";
 import { captureIncognitoSessionBinding } from "../config/sessions/session-incognito-binding.js";
-import {
-  captureSessionStoreReadCandidate,
-  type SessionStoreReadCandidate,
-} from "../config/sessions/session-store-read-candidates.js";
+import type { SessionStoreReadCandidate } from "../config/sessions/session-store-read-candidates.js";
 import {
   createSessionStoreRegistryMutationFilter,
   prepareSessionStoreTargetInventory,
@@ -59,7 +56,7 @@ import { prepareGatewaySessionStoreTargetReadOnly } from "./session-utils-store-
 import { findCanonicalStoreMatch } from "./session-utils-store-selection.js";
 import type { GatewaySessionStoreTarget } from "./session-utils-store.types.js";
 
-type PreparedSessionSourceFacts = PreparedSessionMutationFacts & {
+export type PreparedSessionSourceFacts = PreparedSessionMutationFacts & {
   /** Physical source retained by the same read custody as the sharing facts. */
   sourcePath?: string;
   sourceAgentId?: string;
@@ -252,6 +249,10 @@ export async function prepareSessionMutationFacts(
     if (!change.storePath) {
       return;
     }
+    // A bound reader follows its physical source, not same-key rows in other stores.
+    if (facts?.target && !selectedPaths.has(path.resolve(change.storePath))) {
+      return;
+    }
     if (
       !change.factsInvalidated &&
       (change.facts?.kind === "unchanged" ||
@@ -296,12 +297,7 @@ export async function prepareSessionMutationFacts(
     ) {
       return;
     }
-    if (
-      !facts ||
-      facts.target === null ||
-      !selectedPaths.has(path.resolve(change.storePath)) ||
-      readPreparedSessionSharingChange(change) === undefined
-    ) {
+    if (!facts || facts.target === null || readPreparedSessionSharingChange(change) === undefined) {
       invalidate();
     }
   };
@@ -441,21 +437,8 @@ export async function prepareSessionMutationFacts(
           registryDiscovery: inventory.registryDiscovery,
         }),
       );
-      const assertPaths = () => {
-        for (const { candidate, identity } of candidateIdentities) {
-          const current = readDatabasePathIdentitySync(candidate.path);
-          if (
-            captureSessionStoreReadCandidate(candidate.path, candidate.scope).physicalPath !==
-              candidate.physicalPath ||
-            !isDeepStrictEqual(current, identity)
-          ) {
-            throw new SessionMutationFactsUnavailableError();
-          }
-        }
-      };
       assertRegistryPublication = () => {
         inventoryRead.assertRegistryCurrent();
-        assertPaths();
       };
       const members = new Map<
         string,
@@ -520,7 +503,6 @@ export async function prepareSessionMutationFacts(
                 ) {
                   throw new SessionMutationFactsUnavailableError();
                 }
-                assertPaths();
                 assertExistingDatabaseIdentity(
                   loaded.sharing.source.path,
                   loaded.sharing.databaseIdentity,
@@ -660,7 +642,6 @@ export async function prepareSessionMutationFacts(
       }
       assertSource = () => {
         inventoryRead.assertRegistryCurrent();
-        assertPaths();
         for (const source of preparedSources) {
           assertExistingDatabaseIdentity(source.path, source.identity, source.birthtime);
         }

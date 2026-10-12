@@ -53,7 +53,7 @@ export async function readResolvedSessionEntryInWorker(
 }
 
 /** One selected metadata read per store, shared by every requested logical owner. */
-export async function readResolvedSessionEntriesInWorker(
+async function readResolvedSessionEntriesInWorker(
   input: Omit<LogicalSessionAccessScope, "sessionKey"> & { sessionKeys: readonly string[] },
   projection: "exact" | "worktree" = "exact",
 ): Promise<Map<string, ResolvedSessionEntryAccessTarget>> {

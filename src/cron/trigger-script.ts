@@ -129,7 +129,7 @@ type PreparedTriggerRuntime = {
   acquireMcpTools?: (
     admitted: AdmittedRunContext,
     reservedToolNames: readonly string[],
-  ) => CronScriptMcpTools | undefined;
+  ) => Promise<CronScriptMcpTools | undefined>;
   context: HookContext & { config: OpenClawConfig; agentId: string; sessionKey: string };
   pluginRegistry?: PluginRegistry;
 };
@@ -561,7 +561,7 @@ function createCronCodeModeRunner(deps: CronTriggerEvaluatorDeps) {
           // A script that never names MCP cannot reach it, so it starts no server.
           if (/\bMCP\b/.test(params.script)) {
             const reservedToolNames = tools.map((tool) => tool.name);
-            mcp = withPluginRuntimeRegistryScope(selected.pluginRegistry, () =>
+            mcp = await withPluginRuntimeRegistryScope(selected.pluginRegistry, () =>
               selected.acquireMcpTools?.(authority, reservedToolNames),
             );
           }

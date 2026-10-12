@@ -60,10 +60,7 @@ import {
 } from "./store-entry.js";
 import { resolveAllAgentSessionStoreTargetsSync, type SessionStoreTarget } from "./targets.js";
 import type { InternalSessionEntry as SessionEntry } from "./types.js";
-export {
-  readResolvedSessionEntriesInWorker,
-  readResolvedSessionEntryInWorker,
-} from "./session-accessor.entry-read-runtime.js";
+export { readResolvedSessionEntryInWorker } from "./session-accessor.entry-read-runtime.js";
 export { clearPluginOwnedSessionState } from "./plugin-host-cleanup.js";
 export {
   copySqliteSessionOwnedStateForCanonicalRepair as copySessionOwnedStateForCanonicalRepair,

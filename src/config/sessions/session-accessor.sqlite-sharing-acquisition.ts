@@ -3,7 +3,7 @@ import type {
   SessionEntryPlaceholder,
   SessionSharingEntry,
 } from "./session-accessor.sqlite-entry-cache.types.js";
-import type { SessionEntry } from "./types.js";
+import type { InternalSessionEntry as SessionEntry } from "./types.js";
 
 export type PreparedSessionEntryPredicate = {
   entry: SessionEntry | undefined;

@@ -302,7 +302,7 @@ export function createHarnessCompletionSourceAssertion(params: {
   };
   const prepareSnapshot = (
     snapshot: HarnessCompletionSourceSnapshot,
-    source: CapturedSessionEntryReadSource,
+    source: CapturedSessionEntryReadSource & { databaseIdentity: string },
     assertStorageCurrent: () => void,
     release?: () => void | Promise<void>,
   ): PreparedSessionSourceAuthority => {
