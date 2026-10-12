@@ -52,7 +52,6 @@ export {
   rewritePreparedAssistantTranscriptMessageForRun as rewriteAssistantTranscriptMessageForRun,
   rewritePreparedTranscriptMessageAtAnchor as rewriteTranscriptMessageAtAnchor,
 } from "./session-message-rewrite.js";
-export { readSessionTranscriptMessageByEventId } from "./session-accessor.sqlite-transcript-store.js";
 export {
   appendTranscriptEvent,
   appendTranscriptMessage,
