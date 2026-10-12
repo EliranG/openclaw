@@ -211,7 +211,7 @@ async function prepareSessionStatusDetails(cfg: OpenClawConfig, now: number) {
           (hasUserPinnedModelSelection(entry) || hasSessionActiveAutoModelFallback(entry));
         // Session rows show the live selected model and warn for user-pinned
         // differences as well as runtime fallback selections (#96126).
-        const runtime = resolveSessionRuntime({
+        const runtime = await resolveSessionRuntime({
           cfg,
           entry,
           provider: lookupModel.provider,

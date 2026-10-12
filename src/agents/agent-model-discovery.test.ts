@@ -8,6 +8,7 @@ import { clearPluginMetadataLifecycleCaches } from "../plugins/plugin-metadata-l
 import {
   discoverAuthStorageFacts,
   discoverModels,
+  discoverModelsAsync,
   discoverModelsFromCapturedSources,
 } from "./agent-model-discovery.js";
 
@@ -70,14 +71,14 @@ describe("discoverModels", () => {
     const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-agent-models-"));
     writeModelsJson(agentDir, "old-model");
     const { authStorage } = await discoverAuthStorageFacts(agentDir, { skipCredentials: true });
-    const registry = discoverModels(authStorage, agentDir, { normalizeModels: false });
+    const registry = await discoverModelsAsync(authStorage, agentDir, { normalizeModels: false });
 
     expect(registry.find("CUSTOM", "old-model")).toBeUndefined();
     expect(registry.find("custom", "old-model")?.id).toBe("old-model");
     expect(registry.find("custom", "new-model")).toBeUndefined();
 
     writeModelsJson(agentDir, "new-model");
-    registry.refresh();
+    await registry.refreshAsync();
 
     expect(registry.getAll().some((model) => model.id === "new-model")).toBe(true);
     expect(registry.find("custom", "new-model")?.id).toBe("new-model");

@@ -564,10 +564,11 @@ initializer's ownership.
 
 The synchronous upsert, delete, and initializer `link` contracts shipped in
 `v2026.9.8` retain their arguments, immediate results, and completion timing until
-the next Plugin SDK major and explicit breaking-release approval. Their
-deprecation is recorded in TypeScript and the compatibility registry without
-runtime warnings. This migration changes no schema, stored data, retention, or
-update behavior.
+the next Plugin SDK major and explicit breaking-release approval. Calling any of
+these methods emits one `DEP_SESSION_PERSISTENCE` warning per plugin and process
+for the upstream-link capability family; unscoped consumers share one SDK-level
+warning. This migration changes no schema, stored data, retention, or update
+behavior.
 
 ## Await session metadata listings
 
@@ -1398,27 +1399,33 @@ availability, or starting work that depends on a stored credential. Their
 database reads and writes run through the existing auth owner and workers.
 Keep the same arguments and await the replacement's result:
 
-| SDK subpath                              | Synchronous API                               | Awaited replacement                                |
-| ---------------------------------------- | --------------------------------------------- | -------------------------------------------------- |
-| `provider-auth`                          | `ensureAuthProfileStore`                      | `ensureAuthProfileStoreAsync`                      |
-| `provider-auth`                          | `ensureAuthProfileStoreForLocalUpdate`        | `ensureAuthProfileStoreForLocalUpdateAsync`        |
-| `provider-auth`                          | `upsertAuthProfile`                           | `upsertAuthProfileAsync`                           |
-| `provider-auth`, `provider-auth-api-key` | `upsertApiKeyProfile`                         | `upsertApiKeyProfileAsync`                         |
-| `provider-auth`                          | `isProviderApiKeyConfigured`                  | `isProviderApiKeyConfiguredAsync`                  |
-| `provider-auth`                          | `isProviderAuthProfileConfigured`             | `isProviderAuthProfileConfiguredAsync`             |
-| `provider-auth`                          | `listUsableProviderAuthProfileIds`            | `listUsableProviderAuthProfileIdsAsync`            |
-| `provider-auth-runtime`                  | `resolveProviderAuthProfileMetadata`          | `resolveProviderAuthProfileMetadataAsync`          |
-| `agent-runtime`                          | `loadAuthProfileStoreWithoutExternalProfiles` | `loadAuthProfileStoreWithoutExternalProfilesAsync` |
-| `agent-runtime`                          | `findPersistedAuthProfileCredential`          | `findPersistedAuthProfileCredentialAsync`          |
-| `agent-runtime`                          | `resolvePersistedAuthProfileOwnerAgentDir`    | `resolvePersistedAuthProfileOwnerAgentDirAsync`    |
-| `agent-harness-runtime`                  | `resolveModelAuthMode`                        | `resolveModelAuthModeAsync`                        |
-| `models-provider-runtime`                | `formatModelsAvailableHeader`                 | `formatModelsAvailableHeaderAsync`                 |
-| `image-generation-core`                  | `resolveCapabilityModelCandidates`            | `resolveCapabilityModelCandidatesAsync`            |
-| `provider-selection-runtime`             | `resolveConfiguredCapabilityProvider`         | `resolveConfiguredCapabilityProviderAsync`         |
-| `realtime-voice`                         | `resolveConfiguredRealtimeVoiceProvider`      | `resolveConfiguredRealtimeVoiceProviderAsync`      |
-| `tts-runtime`, `agent-runtime`           | `getTtsProvider`                              | `getTtsProviderAsync`                              |
-| `tts-runtime`                            | `isTtsProviderConfigured`                     | `isTtsProviderConfiguredAsync`                     |
-| `tts-runtime`                            | `resolveExplicitTtsOverrides`                 | `resolveExplicitTtsOverridesAsync`                 |
+| SDK subpath                              | Synchronous API                               | Awaited replacement                                  |
+| ---------------------------------------- | --------------------------------------------- | ---------------------------------------------------- |
+| `provider-auth`                          | `ensureAuthProfileStore`                      | `ensureAuthProfileStoreAsync`                        |
+| `provider-auth`                          | `ensureAuthProfileStoreForLocalUpdate`        | `ensureAuthProfileStoreForLocalUpdateAsync`          |
+| `provider-auth`                          | `upsertAuthProfile`                           | `upsertAuthProfileAsync`                             |
+| `provider-auth`, `provider-auth-api-key` | `upsertApiKeyProfile`                         | `upsertApiKeyProfileAsync`                           |
+| `provider-auth`                          | `isProviderApiKeyConfigured`                  | `isProviderApiKeyConfiguredAsync`                    |
+| `provider-auth`                          | `isProviderAuthProfileConfigured`             | `isProviderAuthProfileConfiguredAsync`               |
+| `provider-auth`                          | `listUsableProviderAuthProfileIds`            | `listUsableProviderAuthProfileIdsAsync`              |
+| `provider-auth-runtime`                  | `resolveProviderAuthProfileMetadata`          | `resolveProviderAuthProfileMetadataAsync`            |
+| `agent-runtime`                          | `loadAuthProfileStoreWithoutExternalProfiles` | `loadAuthProfileStoreWithoutExternalProfilesAsync`   |
+| `agent-runtime`                          | `loadAuthProfileStoreForSecretsRuntime`       | `loadAuthProfileStoreForSecretsRuntimeAsync`         |
+| `agent-runtime`                          | `resolveAuthStorePathForDisplay`              | `resolveAuthStorePathForDisplayAsync`                |
+| `agent-runtime`                          | `findPersistedAuthProfileCredential`          | `findPersistedAuthProfileCredentialAsync`            |
+| `agent-runtime`                          | `resolvePersistedAuthProfileOwnerAgentDir`    | `resolvePersistedAuthProfileOwnerAgentDirAsync`      |
+| `agent-harness-runtime`                  | `resolveModelAuthMode`                        | `resolveModelAuthModeAsync`                          |
+| `models-provider-runtime`                | `formatModelsAvailableHeader`                 | `formatModelsAvailableHeaderAsync`                   |
+| `image-generation-core`                  | `resolveCapabilityModelCandidates`            | `resolveCapabilityModelCandidatesAsync`              |
+| `provider-selection-runtime`             | `resolveConfiguredCapabilityProvider`         | `resolveConfiguredCapabilityProviderAsync`           |
+| `realtime-voice`                         | `resolveConfiguredRealtimeVoiceProvider`      | `resolveConfiguredRealtimeVoiceProviderAsync`        |
+| `tts-runtime`, `agent-runtime`           | `getTtsProvider`                              | `getTtsProviderAsync`                                |
+| `tts-runtime`                            | `isTtsProviderConfigured`                     | `isTtsProviderConfiguredAsync`                       |
+| `tts-runtime`                            | `resolveExplicitTtsOverrides`                 | `resolveExplicitTtsOverridesAsync`                   |
+| `agent-sessions`                         | `AuthStorage.forAgent`, `AuthStorage.create`  | `AuthStorage.forAgentAsync`                          |
+| `agent-sessions`                         | `AuthStorage.reload`                          | `AuthStorage.reloadAsync`                            |
+| `agent-sessions`                         | `AuthStorage.set`                             | `AuthStorage.setAsync`                               |
+| `agent-sessions`                         | `AuthStorage.remove`, `AuthStorage.logout`    | `AuthStorage.removeAsync`, `AuthStorage.logoutAsync` |
 
 The deprecated broad `agent-runtime` subpath also exposes
 `ensureAuthProfileStoreAsync`; use the focused `provider-auth` subpath for new imports.
@@ -1462,6 +1469,23 @@ profile; it preserves neighboring profiles. `upsertApiKeyProfileAsync` resolves
 to the profile ID after the write completes. A store returned for local update
 is a snapshot, not permission to replace newer owner state; use the owner-backed
 mutation API for the write.
+
+Replace `agent-runtime`'s `saveAuthProfileStore` with
+`updateAuthProfileStoreWithLock` from `provider-auth`. Its updater receives the
+owner's current store under the write transaction; change only the intended
+profiles and return whether the store changed. Await the result before using
+the updated credentials. This avoids replacing neighboring writes from an old
+whole-store snapshot.
+
+`AuthStorage.forAgentAsync(agentDir, config)` loads the canonical store through
+the worker. Use the awaited mutation and reload methods on that instance;
+`get`, `list`, and `has` read its prepared local view. `getApiKey` refreshes that
+view through the owner before resolving a credential. `login` and `getApiKey`
+keep their existing async signatures. Synchronous mutation methods remain
+available on instances created through the deprecated synchronous factory;
+an async instance rejects them with the required async method name. Migrate
+`AuthStorage.create(path)` by passing the path's agent directory to
+`AuthStorage.forAgentAsync`.
 
 Image, music, video, speech, realtime voice, and realtime transcription provider
 plugins should implement

@@ -24,7 +24,7 @@ import {
 } from "./sessions-patch.test-support.js";
 
 const acpSessionMetaMocks = vi.hoisted(() => ({
-  readAcpSessionMetaForEntry: vi.fn(),
+  readAcpSessionMetaForEntryAsync: vi.fn(),
 }));
 const providerThinkingMocks = vi.hoisted(() => ({
   resolveProviderThinkingProfile:
@@ -32,7 +32,7 @@ const providerThinkingMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../acp/runtime/session-meta-readonly.js", () => ({
-  readAcpSessionMetaForEntry: acpSessionMetaMocks.readAcpSessionMetaForEntry,
+  readAcpSessionMetaForEntryAsync: acpSessionMetaMocks.readAcpSessionMetaForEntryAsync,
 }));
 
 // This suite owns patch projection; provider policy artifacts have dedicated contract coverage.
@@ -247,7 +247,7 @@ describe("gateway sessions patch", () => {
   });
 
   afterEach(() => {
-    acpSessionMetaMocks.readAcpSessionMetaForEntry.mockReset();
+    acpSessionMetaMocks.readAcpSessionMetaForEntryAsync.mockReset();
     clearPluginMetadataLifecycleCaches();
     resetPluginRuntimeStateForTest();
   });
@@ -1712,7 +1712,7 @@ describe("gateway sessions patch", () => {
   );
 
   test("does not persist a misleading runtime pin on an ACP-owned session", async () => {
-    acpSessionMetaMocks.readAcpSessionMetaForEntry.mockReturnValue({
+    acpSessionMetaMocks.readAcpSessionMetaForEntryAsync.mockResolvedValue({
       backend: "codex",
       agent: "main",
       state: "idle",
@@ -1727,7 +1727,7 @@ describe("gateway sessions patch", () => {
   });
 
   test("uses ACP backend metadata on canonical agent keys for thinking validation", async () => {
-    acpSessionMetaMocks.readAcpSessionMetaForEntry.mockReturnValue({
+    acpSessionMetaMocks.readAcpSessionMetaForEntryAsync.mockResolvedValue({
       backend: "codex",
       agent: "main",
       runtimeSessionName: MAIN_SESSION_KEY,
@@ -1753,7 +1753,7 @@ describe("gateway sessions patch", () => {
     });
 
     expectPatchError(result, 'thinkingLevel "xhigh" is not supported');
-    expect(acpSessionMetaMocks.readAcpSessionMetaForEntry).toHaveBeenCalledWith({
+    expect(acpSessionMetaMocks.readAcpSessionMetaForEntryAsync).toHaveBeenCalledWith({
       sessionKey: MAIN_SESSION_KEY,
       agentId: "main",
       entry: expect.objectContaining({ sessionId: "sess" }),

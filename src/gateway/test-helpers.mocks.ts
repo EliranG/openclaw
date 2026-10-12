@@ -171,6 +171,10 @@ vi.mock("../agents/agent-model-discovery.js", async () => {
     ...actual,
     discoverModels: (authStorage: Parameters<typeof actual.discoverModels>[0], agentDir: string) =>
       new MockModelRegistry(authStorage, path.join(agentDir, "models.json")),
+    discoverModelsAsync: async (
+      authStorage: Parameters<typeof actual.discoverModels>[0],
+      agentDir: string,
+    ) => new MockModelRegistry(authStorage, path.join(agentDir, "models.json")),
     ModelRegistry: MockModelRegistry,
   };
 });

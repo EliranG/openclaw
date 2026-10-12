@@ -2,7 +2,7 @@ import path from "node:path";
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import { GATEWAY_CLIENT_MODES } from "../../../packages/gateway-protocol/src/client-info.js";
 import { ErrorCodes, errorShape } from "../../../packages/gateway-protocol/src/index.js";
-import { readAcpSessionMetaForEntry } from "../../acp/runtime/session-meta-readonly.js";
+import { readAcpSessionMetaForEntryAsync } from "../../acp/runtime/session-meta-readonly.js";
 import { tryResolveLegacyCompatibilityAgentId } from "../../agents/agent-scope.js";
 import { parseExecApprovalFollowupApprovalId } from "../../agents/bash-tools.exec-approval-followup-state.js";
 import { normalizeSpawnedRunMetadata } from "../../agents/spawned-context.js";
@@ -37,9 +37,11 @@ import { resolveGatewaySessionStoreTargetWithStore } from "../session-utils-stor
 import { readGatewayDedupeEntry, resolveAgentDedupeKeys } from "./agent-dedupe.js";
 import type { AgentTurnContext, AgentTurnIo, AgentTurnPrincipal } from "./types.js";
 
-export type AgentRequestPreflight = NonNullable<ReturnType<typeof prepareAgentRequestPreflight>>;
+export type AgentRequestPreflight = NonNullable<
+  Awaited<ReturnType<typeof prepareAgentRequestPreflight>>
+>;
 
-export function prepareAgentRequestPreflight(params: {
+export async function prepareAgentRequestPreflight(params: {
   request: AgentRunRequest;
   context: AgentTurnContext;
   client: AgentTurnPrincipal | null;
@@ -220,7 +222,7 @@ export function prepareAgentRequestPreflight(params: {
       sourceIsSubagent = isSubagentSessionFromEntry(
         sourceTarget.canonicalKey,
         sourceEntry,
-        readAcpSessionMetaForEntry({
+        await readAcpSessionMetaForEntryAsync({
           sessionKey: sourceTarget.canonicalKey,
           agentId: sourceTarget.agentId,
           cfg,

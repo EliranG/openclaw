@@ -6,7 +6,7 @@ import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { projectSessionsPatchEntry } from "./sessions-patch.js";
 
 vi.mock("../acp/runtime/session-meta-readonly.js", () => ({
-  readAcpSessionMetaForEntry: () => undefined,
+  readAcpSessionMetaForEntryAsync: async () => undefined,
 }));
 
 const key = "agent:main:model-policy";

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { observeHostDataSql } from "../../../test/helpers/sqlite-statement-execution-counter.js";
 import { useAutoCleanupTempDirTracker } from "../../../test/helpers/temp-dir.js";
 import { createDeferredCore } from "../../shared/deferred.js";
 import {
@@ -421,8 +422,8 @@ describe("auth profile batch persistence", () => {
         profiles: [{ profileId, credential: replacement }],
         allowOAuthGenerationReplacement: true,
       });
-      expect(receipt.rollback().unrevertedProfileIds).toEqual(new Set([profileId]));
-      expect(receipt.rollback().unrevertedProfileIds).toEqual(new Set([profileId]));
+      expect((await receipt.rollback()).unrevertedProfileIds).toEqual(new Set([profileId]));
+      expect((await receipt.rollback()).unrevertedProfileIds).toEqual(new Set([profileId]));
 
       expect(loadPersistedAuthProfileStore(agentDir)?.profiles[profileId]).toEqual(replacement);
     });
@@ -461,7 +462,7 @@ describe("auth profile batch persistence", () => {
   it("conditionally rolls a portable profile batch and its order back to absence", async () => {
     await withAgentDir(async (agentDir) => {
       const noOp = await persistAuthProfileBatch({ agentDir, profiles: [] });
-      noOp.rollback();
+      await noOp.rollback();
       expect(fs.existsSync(resolveAuthProfileDatabasePath(agentDir))).toBe(false);
 
       const receipt = await persistAuthProfileBatch({
@@ -484,8 +485,8 @@ describe("auth profile batch persistence", () => {
         order: { openai: ["openai:primary", "openai:backup"] },
       });
 
-      receipt.rollback();
-      receipt.rollback();
+      await receipt.rollback();
+      await receipt.rollback();
 
       expect(loadPersistedAuthProfileStore(agentDir)).toBeNull();
       expect(inspectPersistedAuthProfileStoreRaw(agentDir).status).toBe("missing");
@@ -505,6 +506,7 @@ describe("auth profile batch persistence", () => {
         },
         agentDir,
       );
+      const observation = observeHostDataSql();
       const receipt = await persistAuthProfileBatch({
         agentDir,
         profiles: [profile("openai:primary", "sk-attempt"), profile("openai:backup", "sk-backup")],
@@ -523,7 +525,11 @@ describe("auth profile batch persistence", () => {
         },
       });
 
-      receipt.rollback();
+      await receipt.rollback();
+      observation.restore();
+      expect(
+        observation.queries.filter((sql) => /\bauth_profile_(?:store|state)\b/iu.test(sql)),
+      ).toEqual([]);
 
       expect(loadPersistedAuthProfileStore(agentDir)).toMatchObject({
         profiles: {
@@ -569,7 +575,7 @@ describe("auth profile batch persistence", () => {
         order: { openai: ["openai:existing", "openai:portable"] },
       });
 
-      receipt.rollback();
+      await receipt.rollback();
 
       expect(loadPersistedAuthProfileStore(agentDir)).toMatchObject({
         profiles: {

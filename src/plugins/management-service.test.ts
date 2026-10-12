@@ -77,6 +77,8 @@ vi.mock("./installed-plugin-index-records.js", async (importOriginal) => ({
   loadInstalledPluginIndexInstallRecords: (...args: unknown[]) => mocks.installRecords(...args),
   readPersistedInstalledPluginIndexInstallRecords: (...args: unknown[]) =>
     mocks.readPersistedRecords(...args),
+  readPersistedInstalledPluginIndexInstallRecordsAsync: (...args: unknown[]) =>
+    mocks.readPersistedRecords(...args),
 }));
 
 vi.mock("./uninstall.js", async (importOriginal) => ({

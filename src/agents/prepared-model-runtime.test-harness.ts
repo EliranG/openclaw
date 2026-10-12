@@ -215,6 +215,10 @@ vi.mock("./agent-model-discovery.js", () => ({
     preparedModelRuntimeMocks.discoverModels(...args);
     return preparedModelRuntimeMocks.modelRegistry;
   },
+  discoverModelsAsync: async (...args: unknown[]) => {
+    preparedModelRuntimeMocks.discoverModels(...args);
+    return preparedModelRuntimeMocks.modelRegistry;
+  },
   discoverModelsFromCapturedSources: (...args: unknown[]) => {
     preparedModelRuntimeMocks.discoverModels(...args);
     return preparedModelRuntimeMocks.modelRegistry;

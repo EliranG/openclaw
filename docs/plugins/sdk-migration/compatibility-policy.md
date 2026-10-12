@@ -413,6 +413,13 @@ these APIs remain supported, with no deprecation warning or required migration.
 Worker activation must preserve them; changing these released contracts requires
 an explicitly approved Plugin SDK major release.
 
+The synchronous `readAcpSessionEntry` export remains available for the
+`v2026.9.4` contract, but is deprecated. Await `readAcpSessionEntryAsync` to read
+through the existing worker. Bundled callers have migrated. Legacy use emits
+one `DEP_PLUGIN_SDK` warning per plugin and ACP-session family per process;
+removal is gated on the next Plugin SDK major. The asynchronous signatures
+above remain supported without warnings. This changes no schema or stored data.
+
 ### Memory session binding compatibility
 
 `openclaw/plugin-sdk/memory-core-host-engine-sessions` retains the readers

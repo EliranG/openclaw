@@ -7,6 +7,7 @@ import {
   ModelRegistry as PublicModelRegistry,
 } from "openclaw/plugin-sdk/agent-sessions";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { observeHostDataSql } from "../../../test/helpers/sqlite-statement-execution-counter.js";
 import { withOpenClawTestState } from "../../test-utils/openclaw-test-state.js";
 import {
   createApiKeyCredential,
@@ -72,9 +73,39 @@ describe("SQLite auth storage", () => {
     return agentDir;
   }
 
+  it("merges async SDK writes and reloads committed peer changes without host SQLite", async () => {
+    await withOpenClawTestState(
+      { layout: "state-only", prefix: "auth-async-sdk-" },
+      async (state) => {
+        const agentDir = state.agentDir("worker");
+        fs.mkdirSync(agentDir, { recursive: true });
+        const left = await PublicAuthStorage.forAgentAsync(agentDir);
+        const right = await PublicAuthStorage.forAgentAsync(agentDir);
+        const sql = observeHostDataSql();
+        try {
+          await Promise.all([
+            left.setAsync("openai", { type: "api_key", key: "synthetic-openai" }),
+            right.setAsync("anthropic", { type: "api_key", key: "synthetic-anthropic" }),
+          ]);
+          await left.reloadAsync();
+          expect(left.list().toSorted()).toEqual(["anthropic", "openai"]);
+          await right.removeAsync("openai");
+          await left.reloadAsync();
+          expect(left.get("openai")).toBeUndefined();
+          expect(await left.getApiKey("anthropic")).toBe("synthetic-anthropic");
+          expect(
+            sql.queries.filter((query) => /\bauth_profile_(?:store|state)\b/i.test(query)),
+          ).toEqual([]);
+        } finally {
+          sql.restore();
+        }
+      },
+    );
+  });
+
   it("dispatches callback-based login to the owning provider plugin", async () => {
     const agentDir = makeAgentDir();
-    const storage = AuthStorage.forAgent(agentDir);
+    const storage = await AuthStorage.forAgentAsync(agentDir);
     const callbacks = {
       onAuth: vi.fn(),
       onPrompt: vi.fn(async () => ""),
@@ -247,7 +278,7 @@ describe("SQLite auth storage", () => {
       }),
       agentDir,
     );
-    const storage = PublicAuthStorage.forAgent(agentDir);
+    const storage = await PublicAuthStorage.forAgentAsync(agentDir);
     PublicModelRegistry.inMemory(storage).registerProvider("test-oauth", {
       oauth: {
         name: "Test OAuth",
@@ -267,7 +298,15 @@ describe("SQLite auth storage", () => {
       },
     });
 
-    await expect(storage.getApiKey("test-oauth")).resolves.toBe("fake-fresh-access");
+    const sql = observeHostDataSql();
+    try {
+      await expect(storage.getApiKey("test-oauth")).resolves.toBe("fake-fresh-access");
+      expect(
+        sql.queries.filter((query) => /\bauth_profile_(?:store|state)\b/i.test(query)),
+      ).toEqual([]);
+    } finally {
+      sql.restore();
+    }
     expect(loadPersistedAuthProfileStore(agentDir)?.profiles["test-oauth:default"]).toMatchObject({
       type: "oauth",
       provider: "test-oauth",
