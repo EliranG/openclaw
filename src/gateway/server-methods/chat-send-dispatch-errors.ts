@@ -2,6 +2,7 @@ import { ErrorCodes, errorShape } from "../../../packages/gateway-protocol/src/i
 import { renderAgentHarnessPreflightUserMessage } from "../../agents/embedded-agent-helpers/user-facing-text.js";
 import { describeFailoverError } from "../../agents/failover-error.js";
 import { renderFailoverCodeUserCopy } from "../../agents/failover/user-copy.js";
+import { resolveAgentRunErrorLifecycleFields } from "../../agents/run-termination.js";
 import { DispatchSessionRefreshRequiredError } from "../../auto-reply/reply/dispatch-session-refresh-error.js";
 import { SessionGoalOperationError } from "../../config/sessions/goals-operations.js";
 import { clearAgentRunContext, getAgentRunContext } from "../../infra/agent-run-registry.js";
@@ -42,6 +43,7 @@ export function formatReturnedAgentErrors(messages: string[]): string | undefine
 }
 
 type PendingDispatchLifecycleError = {
+  terminationFields: ReturnType<typeof resolveAgentRunErrorLifecycleFields>;
   endedAt: number;
   error: string;
   errorKind?: "state_contention";
@@ -243,6 +245,10 @@ export function createChatSendDispatchErrorLifecycle(params: {
     // Capture terminal ownership before durable cleanup yields: an explicit
     // abort has both its signal and canonical marker, but a restart may abort
     // only the signal and must retain its real dispatch-failure outcome.
+    const terminationFields = resolveAgentRunErrorLifecycleFields(
+      err,
+      activeRunAbort.controller.signal,
+    );
     const abortedAtDispatchReject = activeRunAbort.controller.signal.aborted;
     const abortMarkerAtDispatchReject = context.chatRunState.runs.get(clientRunId)?.abortMarker;
     const agentTerminalOwnedAtDispatchReject =
@@ -315,6 +321,7 @@ export function createChatSendDispatchErrorLifecycle(params: {
       !agentTerminalOwnedAtDispatchReject
     ) {
       pendingDispatchLifecycleError = {
+        terminationFields,
         endedAt: Date.now(),
         error: errorMessage,
         errorKind,
@@ -338,11 +345,12 @@ export function createChatSendDispatchErrorLifecycle(params: {
               runId: clientRunId,
               status: "error" as const,
               summary: errorMessage,
+              ...terminationFields,
             },
             error,
           },
         });
-        broadcastError({ errorMessage, errorKind });
+        broadcastError({ errorMessage, errorKind, stopReason: terminationFields.stopReason });
       };
       if (pendingDispatchLifecycleError) {
         // agent.wait consumes the cached terminal immediately. Commit the lifecycle
@@ -439,6 +447,7 @@ export function createChatSendDispatchErrorLifecycle(params: {
                 endedAt: dispatchError.endedAt,
                 error: dispatchError.error,
                 errorKind: dispatchError.errorKind,
+                ...dispatchError.terminationFields,
               },
             },
           });
