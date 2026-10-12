@@ -376,20 +376,27 @@ describe("device worker placement dispatch", () => {
       node: deviceProof(),
     }));
     const request = prepareCloudNodeDispatch(harness);
+    let isStarting = false;
 
     await expect(
-      harness.service.dispatch(request, undefined, () => {
-        if (harness.placements.current()?.state === "starting") {
-          vi.mocked(harness.environments.get).mockReturnValue({
-            ...harness.attached,
-            providerId: "generic-cloud-node",
-            profileId: "multi-mode-cloud",
-            nodeDeviceId: "replacement-node",
-            sshEndpoint: null,
-            sharedHost: false,
-          });
-        }
-      }),
+      harness.service.dispatch(
+        request,
+        (placement) => {
+          isStarting = placement.state === "starting";
+        },
+        () => {
+          if (isStarting) {
+            vi.mocked(harness.environments.get).mockReturnValue({
+              ...harness.attached,
+              providerId: "generic-cloud-node",
+              profileId: "multi-mode-cloud",
+              nodeDeviceId: "replacement-node",
+              sshEndpoint: null,
+              sharedHost: false,
+            });
+          }
+        },
+      ),
     ).rejects.toThrow("exact environment owner");
 
     expect(harness.environments.startTunnel).toHaveBeenCalledOnce();
@@ -478,17 +485,24 @@ describe("device worker placement dispatch", () => {
       node: currentNode,
     }));
     const request = prepareCloudNodeDispatch(harness);
+    let isStarting = false;
 
     await expect(
-      harness.service.dispatch(request, undefined, () => {
-        if (harness.placements.current()?.state === "starting") {
-          currentNode = {
-            ...currentNode,
-            connId: "replacement-connection",
-            pairingGeneration: "replacement-generation",
-          };
-        }
-      }),
+      harness.service.dispatch(
+        request,
+        (placement) => {
+          isStarting = placement.state === "starting";
+        },
+        () => {
+          if (isStarting) {
+            currentNode = {
+              ...currentNode,
+              connId: "replacement-connection",
+              pairingGeneration: "replacement-generation",
+            };
+          }
+        },
+      ),
     ).rejects.toThrow("pairing generation");
 
     expect(harness.environments.startTunnel).toHaveBeenCalledOnce();
@@ -517,20 +531,27 @@ describe("device worker placement dispatch", () => {
       node: currentNode,
     }));
     const request = prepareCloudNodeDispatch(harness);
+    let isStarting = false;
 
     await expect(
-      harness.service.dispatch(request, undefined, () => {
-        if (harness.placements.current()?.state === "starting") {
-          if (scenario.revocation === "command") {
-            currentNode = {
-              ...currentNode,
-              commands: currentNode.commands.filter((command) => command !== CODEX_COMMAND),
-            };
-          } else {
-            runtimeNodeCommandPolicy.commands = { deny: [CODEX_COMMAND] };
+      harness.service.dispatch(
+        request,
+        (placement) => {
+          isStarting = placement.state === "starting";
+        },
+        () => {
+          if (isStarting) {
+            if (scenario.revocation === "command") {
+              currentNode = {
+                ...currentNode,
+                commands: currentNode.commands.filter((command) => command !== CODEX_COMMAND),
+              };
+            } else {
+              runtimeNodeCommandPolicy.commands = { deny: [CODEX_COMMAND] };
+            }
           }
-        }
-      }),
+        },
+      ),
     ).rejects.toThrow();
 
     expect(harness.environments.startTunnel).toHaveBeenCalledOnce();
@@ -566,7 +587,9 @@ describe("device worker placement dispatch", () => {
 
     expect(states).toEqual(["requested", "failed"]);
     expect(harness.environments.createWithRequest).not.toHaveBeenCalled();
-    expect(createWorkerSessionPlacementStore({ database }).get(REQUEST.sessionId)).toMatchObject({
+    expect(
+      await createWorkerSessionPlacementStore({ database }).getAsync(REQUEST.sessionId),
+    ).toMatchObject({
       state: "failed",
       environmentId: null,
       recoveryError: expect.stringContaining("run openclaw update"),

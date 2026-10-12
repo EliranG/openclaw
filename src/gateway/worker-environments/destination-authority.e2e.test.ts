@@ -232,7 +232,7 @@ process.stdin.pipe(child.stdin);
                 listEnvironments: store.list,
                 getTransport: () => adapter,
                 workspaceTransfer: transfer,
-                validateWorkerTurn: placements.validateTurnClaim,
+                validateWorkerTurn: (claim) => placements.validateTurnClaim(claim),
                 launchNodeWorker: async () => {
                   throw new Error("No model turn belongs in destination proof");
                 },

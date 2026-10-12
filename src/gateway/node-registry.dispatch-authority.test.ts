@@ -22,7 +22,7 @@ it.each(["allowed", "denied", "revoked"] as const)(
     const frames: string[] = [];
     registerNodeSession(registry, makeClient("conn-1", "node-1", frames), {});
     let authorityActive = true;
-    const dispatched = createDeferred<void>();
+    const dispatched = createDeferred();
     const invoke = registry.invoke({
       nodeId: "node-1",
       command: "system.run",

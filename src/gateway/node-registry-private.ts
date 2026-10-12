@@ -270,14 +270,14 @@ async function invokeNodeRegistryCore(
   }
   // Serialization or durable approval preparation can consume the budget or close authority.
   // Revalidate both before arming pending state and handing off to transport.
-  if (params.signal?.aborted) {
-    return nodeInvokeError("ABORTED", "node invoke cancelled");
-  }
   if (params.isDispatchAuthorized?.() === false) {
     return nodeInvokeError(
       "APPROVAL_AUTHORITY_CLOSED",
       "runtime authority closed before node dispatch",
     );
+  }
+  if (params.signal?.aborted) {
+    return nodeInvokeError("ABORTED", "node invoke cancelled");
   }
   if (!state.context.isCommandAllowed(params.nodeId, params.command)) {
     return nodeInvokeError("POLICY_CHANGED", "node command is no longer allowed");

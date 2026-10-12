@@ -410,7 +410,7 @@ describe("dispatch Stop before provider allocation", () => {
             throw new Error(`Redispatch ended before preflight (${result})`);
           }),
         ]);
-        expect(placements.get(REQUEST.sessionId)?.state).toBe(
+        expect((await placements.getAsync(REQUEST.sessionId))?.state).toBe(
           state === "missing" ? undefined : "reclaimed",
         );
         stopping = runtime.dispatchService.reclaim(REQUEST).then(

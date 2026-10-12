@@ -58,6 +58,28 @@ describe("worker session placement store", () => {
     ).toThrow("Await retireSessionPlacementAsync");
   });
 
+  it("refreshes cached absence and placement state from another handle's committed writes", async () => {
+    const reader = createWorkerSessionPlacementStore({ database, now: () => nowMs });
+    expect(await reader.getAsync(SESSION.sessionId)).toBeUndefined();
+
+    const claim = await store.claimTurn({
+      ...SESSION,
+      owner: { kind: "local" },
+      claimId: "receipt-claim",
+      runId: "receipt-run",
+    });
+    expect((await reader.getAsync(SESSION.sessionId))?.turnClaim?.claimId).toBe(claim.claimId);
+
+    await store.releaseTurn(claim);
+    expect((await reader.getAsync(SESSION.sessionId))?.turnClaim).toBeNull();
+    await store.retireSessionPlacementAsync({
+      sessionId: SESSION.sessionId,
+      expectedState: "local",
+      expectedGeneration: 0,
+    });
+    expect(await reader.getAsync(SESSION.sessionId)).toBeUndefined();
+  });
+
   function advanceToActive(
     identity: WorkerSessionPlacementIdentity = SESSION,
     executionMode: WorkerPlacementExecutionMode = "worker-turn",

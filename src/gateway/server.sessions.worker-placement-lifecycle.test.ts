@@ -486,7 +486,7 @@ test("sessions.reset rechecks lifecycle ownership after draining before placemen
     sessionKey,
     storePath,
   });
-  const retireSessionPlacement = vi.fn((retirement: WorkerSessionPlacementRetirement) =>
+  const retireSessionPlacementAsync = vi.fn((retirement: WorkerSessionPlacementRetirement) =>
     placementStore.retireSessionPlacementAsync(retirement),
   );
   const { performGatewaySessionReset } = await import("./session-reset-service.js");
@@ -500,7 +500,7 @@ test("sessions.reset rechecks lifecycle ownership after draining before placemen
         workerPlacementContext: {
           workerSessionPlacementService: {
             getMany: (sessionIds: readonly string[]) => placementStore.getMany(sessionIds),
-            retireSessionPlacement,
+            retireSessionPlacementAsync,
           },
         },
         assertCurrent: () => {
@@ -511,7 +511,7 @@ test("sessions.reset rechecks lifecycle ownership after draining before placemen
       }),
     ).rejects.toThrow("stale lifecycle after drain");
     expect(events).toEqual(["admission:interrupt", "claim:released"]);
-    expect(retireSessionPlacement).not.toHaveBeenCalled();
+    expect(retireSessionPlacementAsync).not.toHaveBeenCalled();
     expect(placementStore.get(sessionId)).toMatchObject({ state: "local", turnClaim: null });
     expect(loadSessionEntry(sessionKey).entry?.sessionId).toBe(sessionId);
     expect(sessionHookMocks.triggerInternalHook).not.toHaveBeenCalled();

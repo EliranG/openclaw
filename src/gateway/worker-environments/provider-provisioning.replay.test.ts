@@ -298,9 +298,9 @@ describe("worker environment service provision replay", () => {
     });
     const uninstallReconcileGuard = restarted.installReconcileEnvironmentGuard(
       async (environmentId, reconcileEnvironmentCore) => {
-        const owners = placements
-          .list()
-          .filter((candidate) => candidate.environmentId === environmentId);
+        const owners = (await placements.listAsync()).filter(
+          (candidate) => candidate.environmentId === environmentId,
+        );
         if (owners.length !== 1 || owners[0]?.state !== "provisioning") {
           await reconcileEnvironmentCore();
           return;

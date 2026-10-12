@@ -104,7 +104,7 @@ export function createWorkerSessionPlacementStore(
     waitForTurnClaimRelease: (
       sessionId: string,
       waitOptions: { timeoutMs?: number; signal?: AbortSignal },
-    ) => waitForPlacementTurnClaimRelease(path, sessionId, waitOptions, store.getAsync),
+    ) => waitForPlacementTurnClaimRelease(path, sessionId, waitOptions, (id) => store.getAsync(id)),
     validateTurnClaim(claim: WorkerSessionTurnClaim): boolean {
       context.admission.assertCurrent();
       return isPublishedPlacementTurnClaimCurrent(context.admission.identity, claim);

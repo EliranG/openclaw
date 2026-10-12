@@ -755,7 +755,7 @@ describe("sessions.dispatch device targets", () => {
           { deviceId: "device-1" },
         );
 
-        const placement = placements.get(dispatchTestSessionId);
+        const placement = await placements.getAsync(dispatchTestSessionId);
         expect(placement).toBeUndefined();
         expect(harness.environments.createWithRequest).not.toHaveBeenCalled();
         expect(harness.environments.startTunnel).not.toHaveBeenCalled();

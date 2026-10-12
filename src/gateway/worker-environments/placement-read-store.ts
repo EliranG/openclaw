@@ -1,7 +1,7 @@
 import { captureOpenClawStateWorkerContext } from "../../state/openclaw-state-worker-context.js";
 import { runOpenClawStateWorkerOperation } from "../../state/openclaw-state-worker-store.js";
 import { required, type WorkerSessionPlacementRecord } from "./placement-record.js";
-import { capturePlacementReplicaRead } from "./placement-turn-authority.js";
+import { capturePlacementReplicaRead, readPlacementReplica } from "./placement-turn-authority.js";
 
 export function createPlacementReadStore(params: {
   path: string;
@@ -28,6 +28,13 @@ export function createPlacementReadStore(params: {
   ): Promise<ReadonlyMap<string, WorkerSessionPlacementRecord>> => {
     const ids = [...new Set(sessionIds.map((id) => required(id, "session id")))];
     context.admission.assertCurrent();
+    const cached = ids.map((id) => readPlacementReplica(context.admission.identity, id));
+    if (cached.every((entry) => entry !== undefined)) {
+      const records = cached.flatMap((entry) =>
+        entry.placement ? [structuredClone(entry.placement)] : [],
+      );
+      return new Map(decorate(records).map((record) => [record.sessionId, record]));
+    }
     const records = ids.length ? await read(ids) : [];
     return new Map(records.map((record) => [record.sessionId, record]));
   };
