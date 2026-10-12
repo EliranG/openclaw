@@ -50,6 +50,13 @@ execution kinds plus explicit exclusions or errors. Unknown, empty explicit,
 profile-incompatible, or lane-incompatible selections fail closed instead of
 being replaced by a default suite.
 
+QA Lab shutdown drains an accepted suite before closing its bus and capture
+store, using the suite's existing execution deadlines. It does not cancel that
+suite. While the HTTP server remains reachable during the drain, new suite,
+self-check, and reset requests return HTTP 503. Unaccepted requests may disconnect
+at the existing HTTP shutdown deadline; a suite whose planning crosses shutdown
+cannot start.
+
 For faster QA Lab UI iteration without rebuilding the Docker image each time,
 start the stack with a bind-mounted QA Lab bundle:
 
@@ -199,7 +206,7 @@ Discord also has Mantis-only opt-in scenarios for bug reproduction. Use
 reaction timeline, or `--scenario discord-thread-reply-filepath-attachment`
 to create a real Discord thread and verify that `message.thread-reply`
 preserves a `filePath` attachment. These scenarios stay out of the default
-live Discord lane because they are before/after repro probes rather than
+live Discord lane because they are before/after repro checks rather than
 broad smoke coverage. The thread-attachment Mantis workflow can also add a
 logged-in Discord Web witness video when
 `MANTIS_DISCORD_VIEWER_CHROME_PROFILE_DIR` or

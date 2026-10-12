@@ -1,10 +1,12 @@
 import path from "node:path";
+import { QA_CHANNEL_DEFAULT_SUITE_CONCURRENCY } from "./qa-channel-transport.js";
 import {
-  defaultQaSuiteConcurrencyForTransport,
   normalizeQaTransportId,
+  prepareQaTransportAdapterFactories,
   qaTransportSupportsModuleFlows,
 } from "./qa-transport-registry.js";
 import { readQaBootstrapScenarioCatalog } from "./scenario-catalog.js";
+import { expandQaScenarioExecutionCells } from "./scenario-lane.js";
 import { invalidateQaSuiteArtifactGeneration } from "./suite-artifacts.js";
 import { resolveRequestedQaSuiteModels } from "./suite-model-selection.js";
 import {
@@ -22,6 +24,8 @@ import { shouldCaptureGatewayHeapCheckpoints } from "./suite-support.js";
 import type { QaSuiteResolvedRunContext, QaSuiteResult, QaSuiteRunParams } from "./suite-types.js";
 import {
   formatQaSuiteRunStartProgress,
+  isQaSuiteNestedRun,
+  markQaSuiteNestedRun,
   runQaSuiteScenarioDefinitionForRuntime,
   shouldLogQaSuiteProgress,
   shouldRunQaSuiteWithIsolatedScenarioWorkers,
@@ -64,13 +68,30 @@ export async function runQaFlowSuiteFromRuntime(params?: QaSuiteRunParams): Prom
     !selectedScenarios.some((scenario) => scenario.id === params.roundTripProbe?.scenarioId)
   ) {
     throw new Error(
-      `QA round-trip probe scenario is not selected: ${params.roundTripProbe.scenarioId}`,
+      `QA round-trip check scenario is not selected: ${params.roundTripProbe.scenarioId}`,
     );
   }
   if (params?.roundTripProbe && params.runtimePair) {
-    throw new Error("QA round-trip probes are not supported with runtime-pair runs.");
+    throw new Error("QA round-trip checks are not supported with runtime-pair runs.");
   }
   await invalidateQaSuiteArtifactGeneration(outputDir);
+  const preparedParams = {
+    ...params,
+    adapterFactories: await prepareQaTransportAdapterFactories({
+      factories: params?.adapterFactories,
+      driver: channelDriver,
+      cells: expandQaScenarioExecutionCells({
+        scenarios: selectedScenarios,
+        channelDriver: channelDriver ?? transportId,
+        channel: params?.channelId,
+        expandChannels: false,
+      }),
+    }),
+  };
+  // Preparation copies params, so carry the child's publication ownership to the new object.
+  if (isQaSuiteNestedRun(params)) {
+    markQaSuiteNestedRun(preparedParams);
+  }
   const enabledPluginIds = [
     ...new Set([
       ...collectQaSuitePluginIds(selectedScenarios),
@@ -91,7 +112,7 @@ export async function runQaFlowSuiteFromRuntime(params?: QaSuiteRunParams): Prom
     : normalizeQaSuiteConcurrency(
         params?.concurrency,
         selectedScenarios.length,
-        channelDriver === "crabline" ? 1 : defaultQaSuiteConcurrencyForTransport(transportId),
+        channelDriver === "crabline" ? 1 : QA_CHANNEL_DEFAULT_SUITE_CONCURRENCY,
       );
   const progressEnabled = shouldLogQaSuiteProgress();
   const context: QaSuiteResolvedRunContext = {
@@ -130,7 +151,7 @@ export async function runQaFlowSuiteFromRuntime(params?: QaSuiteRunParams): Prom
   });
   if (params?.runtimePair) {
     return await runQaRuntimeParitySuite({
-      ...params,
+      ...preparedParams,
       ...context,
       runQaFlowSuite: runQaFlowSuiteFromRuntime,
       // Each parity child adds its scenario plugins during its own preparation.
@@ -139,6 +160,6 @@ export async function runQaFlowSuiteFromRuntime(params?: QaSuiteRunParams): Prom
     });
   }
   return useIsolatedScenarioWorkers
-    ? await runQaFlowSuiteIsolated(params, context, runQaFlowSuiteFromRuntime)
-    : await runQaFlowSuiteStandard(params, context, runQaSuiteScenarioDefinitionForRuntime);
+    ? await runQaFlowSuiteIsolated(preparedParams, context, runQaFlowSuiteFromRuntime)
+    : await runQaFlowSuiteStandard(preparedParams, context, runQaSuiteScenarioDefinitionForRuntime);
 }

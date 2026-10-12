@@ -1,10 +1,7 @@
-/**
- * Gemini CLI bundle MCP adapter that writes temporary system settings files.
- */
 import { filterStringEntries } from "@openclaw/normalization-core/string-normalization";
 import { applyMergePatch } from "../../config/merge-patch.js";
 import { tryReadJson } from "../../infra/json-files.js";
-import type { BundleMcpConfig, BundleMcpServerConfig } from "../../plugins/bundle-mcp.js";
+import type { BundleMcpConfig, BundleMcpServerConfig } from "../../plugins/bundle-mcp.types.js";
 import {
   decodeHeaderEnvPlaceholder,
   isRecord,
@@ -40,8 +37,9 @@ function mergeGeminiWebSearchDisabled(base: Record<string, unknown>): Record<str
 async function writeGeminiSettings(
   settings: Record<string, unknown>,
   inheritedEnv: Record<string, string> | undefined,
+  prefix = "openclaw-gemini-mcp-",
 ): Promise<{ env: Record<string, string>; cleanup: () => Promise<void> }> {
-  const temporary = await writeTemporaryBundleMcpJson("openclaw-gemini-mcp-", settings);
+  const temporary = await writeTemporaryBundleMcpJson(prefix, settings);
   return {
     env: { ...inheritedEnv, GEMINI_CLI_SYSTEM_SETTINGS_PATH: temporary.filePath },
     cleanup: temporary.cleanup,
@@ -109,7 +107,6 @@ function normalizeGeminiServerConfig(
   return next;
 }
 
-/** Writes merged Gemini system settings and returns env plus cleanup hook. */
 export async function writeGeminiSystemSettings(
   mergedConfig: BundleMcpConfig,
   inheritedEnv: Record<string, string> | undefined,
@@ -117,30 +114,25 @@ export async function writeGeminiSystemSettings(
   webSearchEnabled?: boolean,
 ): Promise<{ env: Record<string, string>; cleanup: () => Promise<void> }> {
   const base = await readGeminiBaseSettings(inheritedEnv);
-  const normalizedConfig: BundleMcpConfig = {
-    mcpServers: Object.fromEntries(
-      Object.entries(mergedConfig.mcpServers).flatMap(([name, server]) => {
-        const normalized = normalizeGeminiServerConfig(
-          server,
-          inheritedEnv,
-          mcpToolsDeny && Object.hasOwn(mcpToolsDeny, name) ? mcpToolsDeny[name] : undefined,
-        );
-        return normalized ? [[name, normalized]] : [];
-      }),
-    ) as BundleMcpConfig["mcpServers"],
-  };
+  const mcpServers = Object.fromEntries(
+    Object.entries(mergedConfig.mcpServers).flatMap(([name, server]) => {
+      const normalized = normalizeGeminiServerConfig(
+        server,
+        inheritedEnv,
+        mcpToolsDeny && Object.hasOwn(mcpToolsDeny, name) ? mcpToolsDeny[name] : undefined,
+      );
+      return normalized ? [[name, normalized]] : [];
+    }),
+  );
   const settings = applyMergePatch(
     webSearchEnabled === false ? mergeGeminiWebSearchDisabled(base) : base,
     {
       mcp: {
-        allowed: Object.keys(normalizedConfig.mcpServers),
+        allowed: Object.keys(mcpServers),
       },
-      mcpServers: normalizedConfig.mcpServers,
+      mcpServers,
     },
   ) as Record<string, unknown>;
-  if (!isRecord(settings.mcp) || !isRecord(settings.mcpServers)) {
-    throw new Error("Gemini MCP settings merge produced an invalid object");
-  }
   return await writeGeminiSettings(settings, inheritedEnv);
 }
 
@@ -154,15 +146,9 @@ export async function writeGeminiMcpCaptureSettings(params: {
     throw new Error("Gemini MCP capture requires prepared system settings");
   }
   const settings = await readJsonObject(existingSettingsPath);
-  const temporary = await writeTemporaryBundleMcpJson(
-    "openclaw-gemini-mcp-attempt-",
+  return await writeGeminiSettings(
     withOpenClawMcpCaptureHeader(settings, params.captureKey),
+    params.inheritedEnv,
+    "openclaw-gemini-mcp-attempt-",
   );
-  return {
-    env: {
-      ...params.inheritedEnv,
-      GEMINI_CLI_SYSTEM_SETTINGS_PATH: temporary.filePath,
-    },
-    cleanup: temporary.cleanup,
-  };
 }

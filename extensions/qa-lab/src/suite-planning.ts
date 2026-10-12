@@ -9,8 +9,8 @@ import {
 import { createQaArtifactRunId } from "./artifact-run-id.js";
 import { ensureRepoBoundDirectory, resolveRepoRelativeOutputDir } from "./cli-paths.js";
 import type { QaCliBackendAuthMode } from "./gateway-child.js";
-import { splitQaModelRef as splitModelRef, type QaProviderMode } from "./model-selection.js";
-import { readQaBootstrapScenarioCatalog, readQaScenarioPack } from "./scenario-catalog.js";
+import type { QaProviderMode } from "./model-selection.js";
+import { readQaScenarioPack, type QaSeedScenarioWithSource } from "./scenario-catalog.js";
 import {
   describeQaProviderLaneMismatches,
   scenarioMatchesQaProviderLane,
@@ -27,7 +27,7 @@ const QA_IMPLICIT_ISOLATION_FLOW_CALLS = new Set([
   "writeWorkspaceSkill",
 ]);
 
-type QaSeedScenario = ReturnType<typeof readQaBootstrapScenarioCatalog>["scenarios"][number];
+type QaSeedScenario = QaSeedScenarioWithSource;
 
 function selectQaScenarioDefinitionsForChannelResolution(params: {
   scenarioIds: string[];
@@ -57,7 +57,7 @@ function selectQaScenarioDefinitionsForChannelResolution(params: {
   );
 }
 function selectQaFlowSuiteScenarios(params: {
-  scenarios: ReturnType<typeof readQaBootstrapScenarioCatalog>["scenarios"];
+  scenarios: QaSeedScenario[];
   scenarioIds?: string[];
   providerMode: QaProviderMode;
   primaryModel: string;
@@ -66,8 +66,15 @@ function selectQaFlowSuiteScenarios(params: {
   claudeCliAuthMode?: QaCliBackendAuthMode;
   resolveModuleFlowSupport?: (channel?: string) => boolean;
 }) {
-  const requestedScenarioIds =
-    params.scenarioIds && params.scenarioIds.length > 0 ? params.scenarioIds : null;
+  const laneMismatches = (scenario: QaSeedScenario) =>
+    describeQaProviderLaneMismatches({
+      ...params,
+      scenario,
+      supportsModuleFlows: params.resolveModuleFlowSupport?.(
+        params.channel ?? scenario.execution.channel,
+      ),
+    });
+  const requestedScenarioIds = params.scenarioIds?.length ? params.scenarioIds : null;
   if (requestedScenarioIds) {
     const scenarioById = new Map(params.scenarios.map((scenario) => [scenario.id, scenario]));
     const missingScenarioIds = [...requestedScenarioIds].filter(
@@ -92,23 +99,13 @@ function selectQaFlowSuiteScenarios(params: {
         `suite execution requires flow scenarios; unsupported scenario(s): ${scenarioList}`,
       );
     }
-    const laneMismatches = selectedScenarios.flatMap((scenario) => {
-      const mismatches = describeQaProviderLaneMismatches({
-        scenario,
-        providerMode: params.providerMode,
-        primaryModel: params.primaryModel,
-        channelDriver: params.channelDriver,
-        channel: params.channel,
-        claudeCliAuthMode: params.claudeCliAuthMode,
-        supportsModuleFlows: params.resolveModuleFlowSupport?.(
-          params.channel ?? scenario.execution.channel,
-        ),
-      });
+    const mismatchedScenarios = selectedScenarios.flatMap((scenario) => {
+      const mismatches = laneMismatches(scenario);
       return mismatches.length > 0 ? [`${scenario.id} (${mismatches.join(", ")})`] : [];
     });
-    if (laneMismatches.length > 0) {
+    if (mismatchedScenarios.length > 0) {
       throw new Error(
-        `selected QA scenario(s) do not match the current QA lane: ${laneMismatches.join(", ")}`,
+        `selected QA scenario(s) do not match the current QA lane: ${mismatchedScenarios.join(", ")}`,
       );
     }
     return selectedScenarios;
@@ -117,17 +114,7 @@ function selectQaFlowSuiteScenarios(params: {
     (scenario) =>
       scenario.execution.kind === "flow" &&
       scenario.execution.config?.agentE2e !== true &&
-      scenarioMatchesQaProviderLane({
-        scenario,
-        providerMode: params.providerMode,
-        primaryModel: params.primaryModel,
-        channelDriver: params.channelDriver,
-        channel: params.channel,
-        claudeCliAuthMode: params.claudeCliAuthMode,
-        supportsModuleFlows: params.resolveModuleFlowSupport?.(
-          params.channel ?? scenario.execution.channel,
-        ),
-      }),
+      laneMismatches(scenario).length === 0,
   );
 }
 
@@ -135,9 +122,7 @@ function normalizeQaSuiteScenarioChannel(scenario: QaSeedScenario) {
   return scenario.execution.channel?.trim().toLowerCase() || undefined;
 }
 
-function listQaSuiteScenarioChannels(
-  scenarios: ReturnType<typeof readQaBootstrapScenarioCatalog>["scenarios"],
-) {
+function listQaSuiteScenarioChannels(scenarios: QaSeedScenario[]) {
   return [
     ...new Set(
       scenarios
@@ -147,11 +132,9 @@ function listQaSuiteScenarioChannels(
   ];
 }
 
-function resolveQaSuiteScenarioChannel(params: {
-  defaultChannel: string;
-  explicitChannel?: string | null;
-  scenarios: ReturnType<typeof readQaBootstrapScenarioCatalog>["scenarios"];
-}) {
+function resolveQaSuiteScenarioChannel(
+  params: Parameters<typeof resolveQaSuiteScenarioChannels>[0],
+) {
   const scenarioChannels = resolveQaSuiteScenarioChannels(params);
   const [scenarioChannel] = scenarioChannels;
   if (scenarioChannels.length === 1 && scenarioChannel) {
@@ -165,7 +148,7 @@ function resolveQaSuiteScenarioChannel(params: {
 function resolveQaSuiteScenarioChannels(params: {
   defaultChannel: string;
   explicitChannel?: string | null;
-  scenarios: ReturnType<typeof readQaBootstrapScenarioCatalog>["scenarios"];
+  scenarios: QaSeedScenario[];
 }) {
   const scenarioChannels = listQaSuiteScenarioChannels(params.scenarios);
   const explicitChannel = params.explicitChannel?.trim().toLowerCase();
@@ -192,17 +175,11 @@ function resolveQaSuiteScenarioChannels(params: {
     : scenarioChannels;
 }
 
-function collectQaSuitePluginIds(
-  scenarios: ReturnType<typeof readQaBootstrapScenarioCatalog>["scenarios"],
-) {
+function collectQaSuitePluginIds(scenarios: QaSeedScenario[]) {
   return [
     ...new Set(
       scenarios.flatMap((scenario) =>
-        Array.isArray(scenario.plugins)
-          ? scenario.plugins
-              .map((pluginId) => pluginId.trim())
-              .filter((pluginId) => pluginId.length > 0)
-          : [],
+        (scenario.plugins ?? []).map((pluginId) => pluginId.trim()).filter(Boolean),
       ),
     ),
   ];
@@ -246,7 +223,7 @@ function resolveQaGatewayConfigPatchSelectedAccount(
 // baseline siblings it removed survive. Startup replays them in order against
 // the real config, which is the semantics a scenario author writes.
 function collectQaSuiteGatewayConfigPatches(
-  scenarios: ReturnType<typeof readQaBootstrapScenarioCatalog>["scenarios"],
+  scenarios: QaSeedScenario[],
   selectedAccountId = "sut",
 ): Record<string, unknown>[] {
   const resolvedSelectedAccountId = selectedAccountId.trim() || "sut";
@@ -274,29 +251,29 @@ function applyQaSuiteGatewayConfigPatches(
   return patches.reduce<unknown>((next, patch) => applyQaMergePatch(next, patch), config);
 }
 
-function collectQaSuiteGatewayRuntimeOptions(
-  scenarios: ReturnType<typeof readQaBootstrapScenarioCatalog>["scenarios"],
-) {
+function collectQaSuiteGatewayRuntimeOptions(scenarios: QaSeedScenario[]) {
   let allowUnhealthyStartup = false;
   let forwardHostHome = false;
   let preserveDebugArtifacts = false;
+  const env: Record<string, string> = {};
   for (const scenario of scenarios) {
     allowUnhealthyStartup ||= scenario.gatewayRuntime?.allowUnhealthyStartup === true;
     forwardHostHome ||= scenario.gatewayRuntime?.forwardHostHome === true;
     preserveDebugArtifacts ||= scenario.gatewayRuntime?.preserveDebugArtifacts === true;
+    Object.assign(env, scenario.gatewayRuntime?.env);
   }
-  return allowUnhealthyStartup || forwardHostHome || preserveDebugArtifacts
+  const hasEnv = Object.keys(env).length > 0;
+  return allowUnhealthyStartup || forwardHostHome || preserveDebugArtifacts || hasEnv
     ? {
         ...(allowUnhealthyStartup ? { allowUnhealthyStartup: true } : {}),
         ...(forwardHostHome ? { forwardHostHome: true } : {}),
         ...(preserveDebugArtifacts ? { preserveDebugArtifacts: true } : {}),
+        ...(hasEnv ? { env } : {}),
       }
     : undefined;
 }
 
-function collectQaSuiteTransportPolicy(
-  scenarios: ReturnType<typeof readQaBootstrapScenarioCatalog>["scenarios"],
-) {
+function collectQaSuiteTransportPolicy(scenarios: QaSeedScenario[]) {
   let directMessageOnly = false;
   let requireGroupMention = false;
   let topLevelReplies = false;
@@ -331,7 +308,7 @@ function collectQaSuiteTransportPolicy(
 }
 
 function shouldUseIsolatedQaSuiteScenarioWorkers(params: {
-  scenarios: ReturnType<typeof readQaBootstrapScenarioCatalog>["scenarios"];
+  scenarios: QaSeedScenario[];
   concurrency: number;
 }) {
   return (
@@ -352,12 +329,13 @@ function scenarioRequiresIsolatedQaSuiteWorker(scenario: QaSeedScenario) {
   return (
     scenario.execution.suiteIsolation === "isolated" ||
     scenario.execution.runtime !== undefined ||
+    scenario.execution.liveConfiguredRuntime !== undefined ||
     // Transport policy is fixed when the gateway starts; sharing it would leak routing rules.
     scenario.execution.transportPolicy !== undefined ||
     scenario.execution.config?.agentE2e === true ||
     isRecord(scenario.gatewayConfigPatch) ||
     scenario.gatewayRuntime !== undefined ||
-    (Array.isArray(scenario.plugins) && scenario.plugins.length > 0) ||
+    (scenario.plugins?.length ?? 0) > 0 ||
     normalizeLowercaseStringOrEmpty(scenario.surface) === "memory" ||
     scenario.execution.config?.ensureImageGeneration === true ||
     flowContainsImplicitIsolationCall(scenario.execution.flow)
@@ -415,28 +393,15 @@ async function mapQaSuiteWithConcurrency<T, U>(
   concurrency: number,
   mapper: (item: T, index: number) => Promise<U>,
   opts?: {
-    signal?: AbortSignal;
-    canStart?: () => boolean;
     startStaggerMs?: number;
     sleepImpl?: (ms: number) => Promise<unknown>;
     shouldStop?: (result: U, index: number) => boolean;
   },
 ) {
   let stopped = false;
-  const admissionClosed = () => stopped || opts?.signal?.aborted || opts?.canStart?.() === false;
   let nextStartGate = Promise.resolve();
   const startStaggerMs = Math.max(0, Math.floor(opts?.startStaggerMs ?? 0));
-  const sleepImpl =
-    opts?.sleepImpl ??
-    (async (ms: number) => {
-      try {
-        await sleep(ms, undefined, { signal: opts?.signal });
-      } catch (error) {
-        if (!opts?.signal?.aborted) {
-          throw error;
-        }
-      }
-    });
+  const sleepImpl = opts?.sleepImpl ?? sleep;
   async function waitForStartSlot(shouldReleaseNextSlot: boolean) {
     const currentGate = nextStartGate;
     let releaseNextSlot: (() => void) | undefined;
@@ -451,7 +416,7 @@ async function mapQaSuiteWithConcurrency<T, U>(
     }
     void (async () => {
       try {
-        if (!admissionClosed() && startStaggerMs > 0) {
+        if (!stopped && startStaggerMs > 0) {
           await sleepImpl(startStaggerMs);
         }
       } finally {
@@ -461,11 +426,11 @@ async function mapQaSuiteWithConcurrency<T, U>(
   }
   const { results, hasError, firstError } = await runTasksWithConcurrency({
     tasks: items.map((item, index) => async () => {
-      if (admissionClosed()) {
+      if (stopped) {
         return undefined;
       }
       await waitForStartSlot(index < items.length - 1);
-      if (admissionClosed()) {
+      if (stopped) {
         return undefined;
       }
       const result = await mapper(item, index);
@@ -494,104 +459,17 @@ async function mapQaSuiteWithConcurrency<T, U>(
   return completed;
 }
 
-async function runWeightedQaSuiteTasks<Result>(
-  tasks: readonly { weight: number; exclusiveKey?: string; run(): Promise<Result> }[],
-  maxWeight: number,
-  opts?: { signal?: AbortSignal; canStart?: () => boolean },
-) {
-  if (tasks.length === 0) {
-    return [];
-  }
-  const limit = Math.max(1, Math.floor(maxWeight));
-  const results: Result[] = [];
-  const pending = tasks.map((task, index) => ({ index, task }));
-  const activeExclusiveKeys = new Set<string>();
-  let activeWeight = 0;
-  return await new Promise<Result[]>((resolve, reject) => {
-    let firstError: Error | undefined;
-    let finished = false;
-    const finishIfSettled = () => {
-      if (finished || activeWeight > 0) {
-        return;
-      }
-      finished = true;
-      if (firstError) {
-        reject(firstError);
-        return;
-      }
-      resolve(results.filter((result) => result !== undefined));
-    };
-    const launch = () => {
-      if (firstError || opts?.signal?.aborted || opts?.canStart?.() === false) {
-        finishIfSettled();
-        return;
-      }
-      while (pending.length > 0 && !opts?.signal?.aborted && opts?.canStart?.() !== false) {
-        const pendingIndex = pending.findIndex(({ task }) => {
-          const taskWeight = Math.max(1, Math.min(limit, Math.floor(task.weight)));
-          return (
-            (activeWeight === 0 || activeWeight + taskWeight <= limit) &&
-            (!task.exclusiveKey || !activeExclusiveKeys.has(task.exclusiveKey))
-          );
-        });
-        if (pendingIndex === -1) {
-          return;
-        }
-        const pendingTask = pending.splice(pendingIndex, 1)[0];
-        if (!pendingTask) {
-          throw new Error("failed to select a pending QA suite partition task");
-        }
-        const { index, task } = pendingTask;
-        const taskWeight = Math.max(1, Math.min(limit, Math.floor(task.weight)));
-        activeWeight += taskWeight;
-        if (task.exclusiveKey) {
-          activeExclusiveKeys.add(task.exclusiveKey);
-        }
-        task.run().then(
-          (result) => {
-            results[index] = result;
-            activeWeight -= taskWeight;
-            if (task.exclusiveKey) {
-              activeExclusiveKeys.delete(task.exclusiveKey);
-            }
-            if (pending.length === 0 && activeWeight === 0) {
-              finishIfSettled();
-              return;
-            }
-            launch();
-          },
-          (error: unknown) => {
-            firstError = error instanceof Error ? error : new Error(String(error));
-            activeWeight -= taskWeight;
-            if (task.exclusiveKey) {
-              activeExclusiveKeys.delete(task.exclusiveKey);
-            }
-            finishIfSettled();
-          },
-        );
-      }
-      if (activeWeight === 0) {
-        finishIfSettled();
-      }
-    };
-    launch();
-  });
-}
-
 async function resolveQaSuiteOutputDir(repoRoot: string, outputDir?: string) {
   const targetDir = !outputDir
     ? path.join(repoRoot, ".artifacts", "qa-e2e", `suite-${createQaArtifactRunId()}`)
     : outputDir;
-  if (!path.isAbsolute(targetDir)) {
-    const resolved = resolveRepoRelativeOutputDir(repoRoot, targetDir);
-    if (!resolved) {
-      throw new Error("QA suite outputDir must be set.");
-    }
-    return await ensureRepoBoundDirectory(repoRoot, resolved, "QA suite outputDir", {
-      mode: 0o700,
-    });
+  const resolved = path.isAbsolute(targetDir)
+    ? targetDir
+    : resolveRepoRelativeOutputDir(repoRoot, targetDir);
+  if (!resolved) {
+    throw new Error("QA suite outputDir must be set.");
   }
-  return await ensureRepoBoundDirectory(repoRoot, targetDir, "QA suite outputDir", {
+  return await ensureRepoBoundDirectory(repoRoot, resolved, "QA suite outputDir", {
     mode: 0o700,
   });
 }
@@ -603,7 +481,6 @@ export {
   collectQaSuiteTransportPolicy,
   collectQaSuitePluginIds,
   mapQaSuiteWithConcurrency,
-  runWeightedQaSuiteTasks,
   normalizeQaSuiteConcurrency,
   normalizeQaSuiteScenarioChannel,
   resolveQaSuiteScenarioChannel,
@@ -615,5 +492,4 @@ export {
   selectQaFlowSuiteScenarios,
   selectQaScenarioDefinitionsForChannelResolution,
   shouldUseIsolatedQaSuiteScenarioWorkers,
-  splitModelRef,
 };

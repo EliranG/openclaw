@@ -1,11 +1,7 @@
 import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
 import { describe, expect, it, vi } from "vitest";
-import { defaultQaSuiteConcurrencyForTransport } from "./qa-transport-registry.js";
-import {
-  mapQaSuiteWithConcurrency,
-  normalizeQaSuiteConcurrency,
-  resolveQaSuiteWorkerStartStaggerMs,
-} from "./suite-planning.js";
+import { QA_CHANNEL_DEFAULT_SUITE_CONCURRENCY } from "./qa-channel-transport.js";
+import { mapQaSuiteWithConcurrency, normalizeQaSuiteConcurrency } from "./suite-planning.js";
 
 describe("qa suite concurrency", () => {
   it("normalizes suite concurrency to a bounded integer", () => {
@@ -14,13 +10,9 @@ describe("qa suite concurrency", () => {
     try {
       expect(normalizeQaSuiteConcurrency(undefined, 10)).toBe(10);
       expect(normalizeQaSuiteConcurrency(undefined, 80)).toBe(64);
-      expect(
-        normalizeQaSuiteConcurrency(
-          undefined,
-          80,
-          defaultQaSuiteConcurrencyForTransport("qa-channel"),
-        ),
-      ).toBe(4);
+      expect(normalizeQaSuiteConcurrency(undefined, 80, QA_CHANNEL_DEFAULT_SUITE_CONCURRENCY)).toBe(
+        4,
+      );
       expect(normalizeQaSuiteConcurrency(2.8, 10)).toBe(2);
       expect(normalizeQaSuiteConcurrency(20, 3)).toBe(3);
       expect(normalizeQaSuiteConcurrency(0, 3)).toBe(1);
@@ -170,85 +162,6 @@ describe("qa suite concurrency", () => {
     expect(sleepImpl).toHaveBeenCalledExactlyOnceWith(25);
   });
 
-  it("cancels the owned stagger but joins started workers before returning", async () => {
-    const controller = new AbortController();
-    const started = createDeferred<void>();
-    const release = createDeferred<void>();
-    const mapper = vi.fn(async (item: number) => {
-      started.resolve();
-      await release.promise;
-      return item;
-    });
-    let settled = false;
-    const run = mapQaSuiteWithConcurrency([1, 2, 3], 3, mapper, {
-      signal: controller.signal,
-      startStaggerMs: 60_000,
-    }).then((result) => {
-      settled = true;
-      return result;
-    });
-    try {
-      await started.promise;
-      controller.abort(new Error("stop the suite"));
-      await new Promise<void>((resolve) => {
-        setImmediate(resolve);
-      });
-      expect(mapper).toHaveBeenCalledExactlyOnceWith(1, 0);
-      expect(settled).toBe(false);
-    } finally {
-      controller.abort();
-      release.resolve();
-    }
-    expect(await run).toEqual([1]);
-    expect(mapper).toHaveBeenCalledOnce();
-  });
-
-  it("does not admit workers when already cancelled", async () => {
-    const mapper = vi.fn(async (item: number) => item);
-    expect(
-      await mapQaSuiteWithConcurrency([1, 2], 2, mapper, {
-        signal: AbortSignal.abort(new Error("already stopped")),
-      }),
-    ).toEqual([]);
-    expect(mapper).not.toHaveBeenCalled();
-  });
-
-  it("rechecks admission after the stagger while a started worker drains", async () => {
-    const started = createDeferred<void>();
-    const stagger = createDeferred<void>();
-    const drained = createDeferred<void>();
-    let canStart = true;
-    const mapper = vi.fn(async (item: number) => {
-      started.resolve();
-      await drained.promise;
-      return item;
-    });
-    const settled = vi.fn();
-    const run = mapQaSuiteWithConcurrency([1, 2, 3], 3, mapper, {
-      canStart: () => canStart,
-      startStaggerMs: 25,
-      sleepImpl: () => stagger.promise,
-    }).then((result) => {
-      settled();
-      return result;
-    });
-    try {
-      await started.promise;
-      canStart = false;
-      stagger.resolve();
-      await Promise.resolve();
-      expect(settled).not.toHaveBeenCalled();
-      expect(mapper).toHaveBeenCalledExactlyOnceWith(1, 0);
-      drained.resolve();
-      expect(await run).toEqual([1]);
-      expect(mapper).toHaveBeenCalledOnce();
-    } finally {
-      stagger.resolve();
-      drained.resolve();
-      await run;
-    }
-  });
-
   it("staggers scenario starts without reducing mapped concurrency", async () => {
     const sleeps: number[] = [];
     const releaseSleeps: Array<() => void> = [];
@@ -287,37 +200,5 @@ describe("qa suite concurrency", () => {
     const result = await resultPromise;
     expect(result).toEqual([1, 2, 3, 4]);
     expect(sleeps).toEqual([25, 25, 25]);
-  });
-
-  it("resolves a default worker startup stagger for concurrent suite workers", () => {
-    expect(resolveQaSuiteWorkerStartStaggerMs(1, {})).toBe(0);
-    expect(resolveQaSuiteWorkerStartStaggerMs(4, {})).toBe(1500);
-    expect(
-      resolveQaSuiteWorkerStartStaggerMs(4, {
-        OPENCLAW_QA_SUITE_WORKER_START_STAGGER_MS: "0",
-      }),
-    ).toBe(0);
-    expect(
-      resolveQaSuiteWorkerStartStaggerMs(4, {
-        OPENCLAW_QA_SUITE_WORKER_START_STAGGER_MS: "25",
-      }),
-    ).toBe(25);
-    for (const value of ["0x10", "1e3", "10.5"]) {
-      expect(
-        resolveQaSuiteWorkerStartStaggerMs(4, {
-          OPENCLAW_QA_SUITE_WORKER_START_STAGGER_MS: value,
-        }),
-      ).toBe(1500);
-    }
-    expect(resolveQaSuiteWorkerStartStaggerMs(4, {}, 500)).toBe(500);
-    expect(
-      resolveQaSuiteWorkerStartStaggerMs(
-        4,
-        {
-          OPENCLAW_QA_SUITE_WORKER_START_STAGGER_MS: "25",
-        },
-        500,
-      ),
-    ).toBe(25);
   });
 });

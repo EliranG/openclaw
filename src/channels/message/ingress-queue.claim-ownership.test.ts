@@ -2,9 +2,10 @@ import { deserialize } from "node:v8";
 import { Worker } from "node:worker_threads";
 import { expectDefined } from "@openclaw/normalization-core";
 import { describe, expect, it, vi } from "vitest";
+import * as workerReplies from "../../infra/sqlite-worker-broker-reply.js";
 import type { SqliteWorkerRequest } from "../../infra/sqlite-worker-contract.js";
-import * as workerLifecycle from "../../infra/sqlite-worker-lifecycle-preparation.js";
 import * as workerAdmission from "../../infra/sqlite-worker-operation-admission.js";
+import { sqliteWorkerOwnerProbe as probe } from "../../infra/sqlite-worker-owner-probe.test-support.js";
 import { createTestIngressQueue, withTempState } from "./ingress-drain.test-helpers.js";
 import { createChannelIngressQueue } from "./ingress-queue.js";
 
@@ -29,17 +30,12 @@ describe("channel ingress claim ownership", () => {
           { laneKey: "chat:456:topic:9", receivedAt: 2 },
         );
         let policyChanged = false;
-        const createAdmission = workerAdmission.createSqliteWorkerOperationAdmission;
-        const admission = vi
-          .spyOn(workerAdmission, "createSqliteWorkerOperationAdmission")
-          .mockImplementation((admit, attachment) =>
-            createAdmission((request, grant) => {
-              if (request.stage === stage) {
-                policyChanged = true;
-              }
-              admit(request, grant);
-            }, attachment),
-          );
+        const admission = probe.admission(workerAdmission, (request, grant, admit) => {
+          if (request.stage === stage) {
+            policyChanged = true;
+          }
+          admit(request, grant);
+        });
         try {
           const claimed = await queue.claimNext({
             ownerId: "worker",
@@ -86,18 +82,13 @@ describe("channel ingress claim ownership", () => {
         let committing = false;
         let failed = false;
         let transactions = 0;
-        const createAdmission = workerAdmission.createSqliteWorkerOperationAdmission;
-        const admission = vi
-          .spyOn(workerAdmission, "createSqliteWorkerOperationAdmission")
-          .mockImplementation((admit, attachment) =>
-            createAdmission((request, grant) => {
-              if (request.stage === "transaction") {
-                transactions++;
-              }
-              committing = request.stage === "commit";
-              admit(request, grant);
-            }, attachment),
-          );
+        const admission = probe.admission(workerAdmission, (request, grant, admit) => {
+          if (request.stage === "transaction") {
+            transactions++;
+          }
+          committing = request.stage === "commit";
+          admit(request, grant);
+        });
         try {
           await expect(
             queue.claimNext({
@@ -158,41 +149,22 @@ describe("channel ingress claim ownership", () => {
         }
         return originalPost.call(this, request, transferList);
       });
-      const prepareLifecycle = workerLifecycle.createSqliteWorkerLifecyclePreparation;
-      const lifecycle = vi
-        .spyOn(workerLifecycle, "createSqliteWorkerLifecyclePreparation")
-        .mockImplementation((params) =>
-          prepareLifecycle({
-            ...params,
-            receiveResult(reply, pumping) {
-              if (
-                reply &&
-                typeof reply === "object" &&
-                "id" in reply &&
-                reply.id === claimRequest &&
-                "ok" in reply &&
-                reply.ok === false &&
-                stopClaimWorker &&
-                !stopped
-              ) {
-                stopped = stopClaimWorker();
-                return;
-              }
-              params.receiveResult(reply, pumping);
-            },
-          }),
-        );
-      const createAdmission = workerAdmission.createSqliteWorkerOperationAdmission;
-      const admission = vi
-        .spyOn(workerAdmission, "createSqliteWorkerOperationAdmission")
-        .mockImplementation((admit, attachment) =>
-          createAdmission((request, grant) => {
-            if (request.stage === "commit" && claimRequest !== undefined) {
-              policyChanged = true;
-            }
-            admit(request, grant);
-          }, attachment),
-        );
+      const receiveReply = workerReplies.receiveSqliteWorkerReply;
+      const replies = vi
+        .spyOn(workerReplies, "receiveSqliteWorkerReply")
+        .mockImplementation((slot, reply, owner) => {
+          if (reply.id === claimRequest && !reply.ok && stopClaimWorker && !stopped) {
+            stopped = stopClaimWorker();
+            return;
+          }
+          receiveReply(slot, reply, owner);
+        });
+      const admission = probe.admission(workerAdmission, (request, grant, admit) => {
+        if (request.stage === "commit" && claimRequest !== undefined) {
+          policyChanged = true;
+        }
+        admit(request, grant);
+      });
       try {
         await queue.enqueue("event-1", { text: "lane" });
         await expect(
@@ -212,7 +184,7 @@ describe("channel ingress claim ownership", () => {
       } finally {
         admission.mockRestore();
         post.mockRestore();
-        lifecycle.mockRestore();
+        replies.mockRestore();
         await stopped;
       }
     });
@@ -225,19 +197,14 @@ describe("channel ingress claim ownership", () => {
         let clock = 10;
         const queue = createTestIngressQueue(stateDir, { now: () => clock });
         await queue.enqueue("event-1", { text: "queued" });
-        const createAdmission = workerAdmission.createSqliteWorkerOperationAdmission;
         let admitted = false;
-        const admission = vi
-          .spyOn(workerAdmission, "createSqliteWorkerOperationAdmission")
-          .mockImplementation((admit, attachment) =>
-            createAdmission((request, grant) => {
-              if (request.stage === "transaction") {
-                admitted = true;
-                clock = 1_000;
-              }
-              admit(request, grant);
-            }, attachment),
-          );
+        const admission = probe.admission(workerAdmission, (request, grant, admit) => {
+          if (request.stage === "transaction") {
+            admitted = true;
+            clock = 1_000;
+          }
+          admit(request, grant);
+        });
         try {
           const claim = method === "claim" ? await queue.claim("event-1") : await queue.claimNext();
           expect(admitted).toBe(true);
@@ -272,100 +239,59 @@ describe("channel ingress claim ownership", () => {
     });
   });
 
-  it("refreshes claimed rows only with the active claim token", async () => {
-    await withTempState(async (stateDir) => {
-      const queue = createTestIngressQueue(stateDir, { now: () => 10 });
-
-      await queue.enqueue("event-1", { text: "claimed" });
-      const claimed = await queue.claim("event-1", { ownerId: "worker" });
-      if (!claimed) {
-        throw new Error("Expected a claimed ingress event");
-      }
-
-      expect(await queue.refreshClaim?.(claimed, { refreshedAt: 20 })).toBe(true);
-      expect(
-        (await queue.listClaims()).map((claim) => ({
-          id: claim.id,
-          claimedAt: claim.claim.claimedAt,
-          updatedAt: claim.updatedAt,
-        })),
-      ).toEqual([{ id: "event-1", claimedAt: 20, updatedAt: 20 }]);
-
-      expect(
-        await queue.refreshClaim?.(
-          { id: "event-1", claim: { token: "wrong" } },
-          {
-            refreshedAt: 30,
-          },
-        ),
-      ).toBe(false);
-      expect((await queue.listClaims())[0]?.claim.claimedAt).toBe(20);
-    });
-  });
-
-  it("does not let old claim tokens refresh recovered and reclaimed rows", async () => {
-    await withTempState(async (stateDir) => {
-      const queue = createTestIngressQueue(stateDir, { now: () => 10 });
-
-      await queue.enqueue("event-1", { text: "claimed" });
-      const oldClaim = await queue.claim("event-1", { ownerId: "worker-1" });
-      if (!oldClaim) {
-        throw new Error("Expected a claimed ingress event");
-      }
-      expect(await queue.recoverStaleClaims({ staleMs: 5, now: 20 })).toBe(1);
-      const newClaim = await queue.claim("event-1", { ownerId: "worker-2" });
-      if (!newClaim) {
-        throw new Error("Expected reclaimed ingress event");
-      }
-
-      expect(await queue.refreshClaim?.(oldClaim, { refreshedAt: 30 })).toBe(false);
-      expect(await queue.refreshClaim?.(newClaim, { refreshedAt: 40 })).toBe(true);
-      expect((await queue.listClaims())[0]?.claim).toMatchObject({
-        ownerId: "worker-2",
-        claimedAt: 40,
-      });
-    });
-  });
-
-  it.each(["refreshed", "reclaimed"] as const)(
-    "does not recover a claim %s after stale recovery snapshots it",
+  it.each(["refreshed", "reclaimed", "recovered"] as const)(
+    "fences stale recovery and refresh against a %s claim",
     async (change) => {
       await withTempState(async (stateDir) => {
         const queue = createTestIngressQueue(stateDir, { now: () => 10 });
-
         await queue.enqueue("event-1", { text: "claimed" });
-        const claimed = await queue.claim("event-1", { ownerId: "worker" });
-        if (!claimed) {
-          throw new Error("Expected a claimed ingress event");
-        }
-
+        const claimed = expectDefined(
+          await queue.claim("event-1", { ownerId: "worker" }),
+          "original claim",
+        );
         let currentClaim = claimed;
-        expect(
-          await queue.recoverStaleClaims({
-            staleMs: 5,
-            now: 20,
-            shouldRecover: async (claim) => {
-              expect(claim.id).toBe("event-1");
-              if (change === "refreshed") {
-                expect(await queue.refreshClaim?.(claim, { refreshedAt: 20 })).toBe(true);
-              } else {
-                expect(await queue.release(claim, { recordAttempt: false })).toBe(true);
-                currentClaim = expectDefined(
-                  await queue.claim(claim.id, { ownerId: "replacement" }),
-                  "replacement claim",
-                );
-                expect(currentClaim.claim.token).not.toBe(claim.claim.token);
-              }
-              return true;
-            },
-          }),
-        ).toBe(0);
+        const reclaim = async () => {
+          currentClaim = expectDefined(
+            await queue.claim(claimed.id, { ownerId: "replacement" }),
+            "replacement claim",
+          );
+          expect(currentClaim.claim.token).not.toBe(claimed.claim.token);
+        };
+        if (change === "recovered") {
+          expect(await queue.recoverStaleClaims({ staleMs: 5, now: 20 })).toBe(1);
+          await reclaim();
+        } else {
+          expect(
+            await queue.recoverStaleClaims({
+              staleMs: 5,
+              now: 20,
+              shouldRecover: async (claim) => {
+                expect(claim.id).toBe("event-1");
+                if (change === "refreshed") {
+                  expect(await queue.refreshClaim?.(claim, { refreshedAt: 20 })).toBe(true);
+                } else {
+                  expect(await queue.release(claim, { recordAttempt: false })).toBe(true);
+                  await reclaim();
+                }
+                return true;
+              },
+            }),
+          ).toBe(0);
+        }
         expect((await queue.listPending()).map((record) => record.id)).toEqual([]);
         expect((await queue.listClaims())[0]?.claim).toMatchObject({
           token: currentClaim.claim.token,
           ownerId: change === "refreshed" ? "worker" : "replacement",
           claimedAt: change === "refreshed" ? 20 : 10,
         });
+        if (change === "recovered") {
+          expect(await queue.refreshClaim?.(claimed, { refreshedAt: 30 })).toBe(false);
+          expect((await queue.listClaims())[0]?.claim.claimedAt).toBe(10);
+          expect(await queue.refreshClaim?.(currentClaim, { refreshedAt: 40 })).toBe(true);
+          expect(await queue.listClaims()).toMatchObject([
+            { id: "event-1", updatedAt: 40, claim: { ownerId: "replacement", claimedAt: 40 } },
+          ]);
+        }
       });
     },
   );

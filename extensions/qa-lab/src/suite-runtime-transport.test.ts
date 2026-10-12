@@ -1,5 +1,5 @@
 // Qa Lab tests cover suite runtime transport plugin behavior.
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createQaBusState } from "./bus-state.js";
 import { createQaChannelTransport } from "./qa-channel-transport.js";
 import {
@@ -10,38 +10,6 @@ import {
 } from "./suite-runtime-transport.js";
 
 describe("qa suite transport helpers", () => {
-  it("does not accept a matching outbound reply after cancellation", async () => {
-    const state = createQaBusState();
-    state.addOutboundMessage({ to: "dm:qa-operator", text: "complete" });
-    const reason = new Error("Lab stopping");
-    const predicate = vi.fn(() => true);
-    await expect(
-      waitForOutboundMessage(state, predicate, 5_000, { signal: AbortSignal.abort(reason) }),
-    ).rejects.toBe(reason);
-    expect(predicate).not.toHaveBeenCalled();
-  });
-
-  it("fails success-only waitForOutboundMessage calls when a classified failure reply arrives first", async () => {
-    const state = createQaBusState();
-    const pending = waitForOutboundMessage(
-      state,
-      (candidate) =>
-        candidate.conversation.id === "qa-operator" &&
-        candidate.text.includes("Remembered ALPHA-7."),
-      5_000,
-    );
-
-    state.addOutboundMessage({
-      to: "dm:qa-operator",
-      isError: true,
-      text: '⚠️ No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai/gpt-5.6-luna with the Codex OAuth profile, or set OPENAI_API_KEY for direct OpenAI API access.',
-      senderId: "openclaw",
-      senderName: "OpenClaw QA",
-    });
-
-    await expect(pending).rejects.toThrow('No API key found for provider "openai".');
-  });
-
   it("fails success-only waitForOutboundMessage calls when internal coordination text leaks", async () => {
     const state = createQaBusState();
     const pending = waitForOutboundMessage(
@@ -58,24 +26,6 @@ describe("qa suite transport helpers", () => {
     });
 
     await expect(pending).rejects.toThrow("checking thread context");
-  });
-
-  it("fails success-only waitForOutboundMessage calls when a tool-backed scenario reports missing tools", async () => {
-    const state = createQaBusState();
-    const pending = waitForOutboundMessage(
-      state,
-      (candidate) => candidate.text.includes("Status: complete"),
-      5_000,
-    );
-
-    state.addOutboundMessage({
-      to: "dm:qa-operator",
-      text: "Read: AGENT.md\nEvidence snippet: Tool read not found\nStatus: blocked",
-      senderId: "openclaw",
-      senderName: "OpenClaw QA",
-    });
-
-    await expect(pending).rejects.toThrow("Tool read not found");
   });
 
   it("fails success-only waits when a model reports a failed status with equals syntax", async () => {

@@ -5,7 +5,6 @@ import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { resolvePositiveTimerTimeoutMs } from "openclaw/plugin-sdk/number-runtime";
 import { assertQaSuiteArtifactWritten } from "./artifact-assertion.js";
 import { resolveQaArtifactPath, toRepoArtifactPath } from "./cli-paths.js";
-import { QaSuiteCleanupError } from "./errors.js";
 import { captureQaEvidenceLaunchIdentity } from "./evidence-environment.js";
 import { createQaEvidenceInvocation } from "./evidence-invocation.js";
 import { resolveQaEvidenceContainment } from "./evidence-summary-schema.js";
@@ -22,11 +21,7 @@ import {
 } from "./evidence-summary.js";
 import { sanitizeQaProgressValue } from "./progress-format.js";
 import type { QaProviderMode } from "./providers/index.js";
-import type {
-  QaSeedScenarioWithSource,
-  QaTestFileExecutionKind,
-  QaTestFileScenario,
-} from "./scenario-catalog.js";
+import type { QaSeedScenarioWithSource, QaTestFileScenario } from "./scenario-catalog.js";
 import type { QaScorecardEvidenceMode } from "./scorecard-taxonomy.js";
 import { shellQuote } from "./shell-quote.js";
 import {
@@ -39,6 +34,7 @@ import {
   dockerLaneName,
   isDockerE2eScenario,
   runDockerE2eBatch,
+  splitDockerE2eScenarioBatches,
   type QaPreparedDockerEvidence,
 } from "./test-file-scenario-docker-batch.js";
 import {
@@ -46,7 +42,6 @@ import {
   testFileEvidenceBuilders,
   type QaScenarioCommandStep,
 } from "./test-file-scenario-runner-commands.js";
-import { buildQaTestFileExecutionUnits } from "./test-file-scenario-runner-planning.js";
 import {
   readScriptProducerEvidence,
   statusFromProducerEntries,
@@ -55,15 +50,11 @@ import { readNativeVitestExecutionFailure } from "./test-file-scenario-vitest-re
 export type { QaScenarioCommandExecution } from "./test-file-scenario-command-lifecycle.js";
 
 type QaTestFileScenarioRunParams = {
-  signal?: AbortSignal;
-  forwardParentSignals?: boolean;
   commandTimeoutMs?: number;
   evidenceMode?: QaScorecardEvidenceMode;
   evidenceAnchors?: readonly QaEvidenceOccurrence[];
   evidenceContinuation?: QaEvidenceSummaryV3Json;
   onEvidence?: (summary: QaEvidenceSummaryV3Json) => void;
-  onScenarioStarted?: (instanceId: string) => void;
-  onResultCommitted?: (result: QaTestFileScenarioResult) => void;
   preparedDockerEvidence?: QaPreparedDockerEvidence;
   env?: NodeJS.ProcessEnv;
   envMode?: "replace";
@@ -80,9 +71,17 @@ type QaTestFileScenarioRunParams = {
 };
 
 type QaScenarioCommandRunner = typeof runQaScenarioCommandLifecycle;
+type QaScenarioCommandRunParams = Pick<
+  QaTestFileScenarioRunParams,
+  "onCommandOutput" | "outputDir" | "repoRoot"
+> & {
+  env: NodeJS.ProcessEnv;
+  commandTimeoutMs: number;
+  runCommand: QaScenarioCommandRunner;
+  scenario: QaTestFileScenario;
+};
 
 type QaTestFileScenarioResult = {
-  cleanupFailure?: Error;
   evidenceOccurrenceId?: string;
   durationMs: number;
   failureMessage?: string;
@@ -94,13 +93,21 @@ type QaTestFileScenarioResult = {
   status: QaEvidenceStatus;
 };
 
-export type QaTestFileScenarioRunResult = {
-  evidence: QaEvidenceSummaryJson;
-  evidencePath: string;
-  executionKind: QaTestFileExecutionKind;
-  outputDir: string;
-  results: QaTestFileScenarioResult[];
-};
+type QaTestFileExecutionUnit =
+  | {
+      kind: "docker-batch";
+      order: number;
+      scenarios: Parameters<typeof runDockerE2eBatch>[0]["scenarios"];
+      timeoutMs: number;
+    }
+  | {
+      kind: "scenario";
+      order: number;
+      scenario: QaTestFileScenario;
+      timeoutMs: number;
+    };
+
+export type QaTestFileScenarioRunResult = Awaited<ReturnType<typeof runQaTestFileScenarios>>;
 
 const DEFAULT_QA_TEST_FILE_COMMAND_TIMEOUT_MS = 30 * 60_000;
 export function isQaTestFileScenario(
@@ -147,22 +154,23 @@ function withScenarioCoverage<T extends QaEvidenceSummaryJson["entries"][number]
   };
 }
 
-async function runScenarioCommandSteps(params: {
-  commandTimeoutMs: number;
-  env: NodeJS.ProcessEnv;
-  onCommandOutput?: QaScenarioCommandExecution["onOutput"];
-  outputDir: string;
-  repoRoot: string;
-  runCommand: QaScenarioCommandRunner;
-  scenario: QaTestFileScenario;
-  steps: readonly QaScenarioCommandStep[];
-}): Promise<QaTestFileScenarioResult> {
+async function runQaTestFileScenario(params: QaScenarioCommandRunParams) {
+  const requiresProducerEvidence =
+    params.scenario.execution.kind === "script" && !isDockerE2eScenario(params.scenario);
+  if (requiresProducerEvidence) {
+    const scenarioOutputDir = path.join(params.outputDir, params.scenario.id);
+    // The enclosing attempt root is exclusive, so old runs remain untouched.
+    await fs.mkdir(scenarioOutputDir);
+  }
+  const steps = buildQaScenarioCommandSteps(params.scenario, {
+    outputDir: params.outputDir,
+    repoRoot: params.repoRoot,
+  });
   const startedAt = Date.now();
   const logPath = path.join(params.outputDir, `${params.scenario.id}.log`);
   const logChunks: string[] = [];
   let failureMessage: string | undefined;
-  let cleanupFailure: Error | undefined;
-  for (const step of params.steps) {
+  for (const step of steps) {
     logChunks.push(`$ ${formatCommand(step)}\n`);
     try {
       const isNativeVitestStep =
@@ -182,17 +190,9 @@ async function runScenarioCommandSteps(params: {
         timeoutMs,
       });
       logChunks.push(formatQaScenarioCommandOutput(result));
-      cleanupFailure =
-        result.cleanupFailure && result.error
-          ? new QaSuiteCleanupError(
-              [result.error, result.cleanupFailure],
-              result.failureMessage ?? `${result.error.message}; ${result.cleanupFailure.message}`,
-            )
-          : result.cleanupFailure;
-      if (cleanupFailure || result.failureMessage || result.exitCode !== 0 || result.signal) {
+      if (result.failureMessage || result.exitCode !== 0 || result.signal) {
         failureMessage =
           result.failureMessage ??
-          cleanupFailure?.message ??
           (result.signal
             ? `${path.basename(step.command)} terminated by ${result.signal}`
             : `${path.basename(step.command)} exited with ${result.exitCode}`);
@@ -208,57 +208,21 @@ async function runScenarioCommandSteps(params: {
         }
       }
     } catch (error) {
-      if (error instanceof QaSuiteCleanupError) {
-        cleanupFailure = error;
-      }
       failureMessage = formatErrorMessage(error);
       logChunks.push(`${failureMessage}\n`);
       break;
     }
     logChunks.push("\n");
   }
-  try {
-    await fs.writeFile(logPath, logChunks.join(""), "utf8");
-  } catch (error) {
-    if (cleanupFailure) {
-      throw new QaSuiteCleanupError(
-        [cleanupFailure, error],
-        `QA native cleanup and log publication failed: ${formatErrorMessage(error)}`,
-      );
-    }
-    throw error;
-  }
+  await fs.writeFile(logPath, logChunks.join(""), "utf8");
   const durationMs = Math.max(1, Date.now() - startedAt);
-  return {
+  const result: QaTestFileScenarioResult = {
     scenario: params.scenario,
     status: failureMessage ? "fail" : "pass",
     durationMs,
     logPath,
-    ...(cleanupFailure ? { cleanupFailure } : {}),
     ...(failureMessage ? { failureMessage } : {}),
   };
-}
-
-async function runQaTestFileScenario(params: {
-  env: NodeJS.ProcessEnv;
-  commandTimeoutMs: number;
-  onCommandOutput?: QaScenarioCommandExecution["onOutput"];
-  outputDir: string;
-  repoRoot: string;
-  runCommand: QaScenarioCommandRunner;
-  scenario: QaTestFileScenario;
-}) {
-  const requiresProducerEvidence =
-    params.scenario.execution.kind === "script" && !isDockerE2eScenario(params.scenario);
-  if (requiresProducerEvidence) {
-    const scenarioOutputDir = path.join(params.outputDir, params.scenario.id);
-    // The enclosing attempt root is exclusive, so old runs remain untouched.
-    await fs.mkdir(scenarioOutputDir);
-  }
-  const result = await runScenarioCommandSteps({
-    ...params,
-    steps: buildQaScenarioCommandSteps(params.scenario, { outputDir: params.outputDir }),
-  });
   if (params.scenario.execution.kind !== "script") {
     return result;
   }
@@ -271,22 +235,17 @@ async function runQaTestFileScenario(params: {
       requireCurrentRunEvidence: requiresProducerEvidence,
     });
   } catch (error) {
-    if (result.status !== "pass") {
-      return result;
+    if (result.status === "pass") {
+      result.failureMessage = `Script producer evidence is invalid: ${formatErrorMessage(error)}`;
+      result.status = "fail";
     }
-    return {
-      ...result,
-      failureMessage: `Script producer evidence is invalid: ${formatErrorMessage(error)}`,
-      status: "fail" as const,
-    };
+    return result;
   }
   if (!producerEvidenceResult.producerEvidence) {
     if (requiresProducerEvidence && result.status === "pass") {
-      return {
-        ...result,
-        failureMessage: "Script exited successfully without writing fresh producer QA evidence.",
-        status: "fail" as const,
-      };
+      result.failureMessage =
+        "Script exited successfully without writing fresh producer QA evidence.";
+      result.status = "fail";
     }
     return result;
   }
@@ -311,6 +270,58 @@ async function runQaTestFileScenario(params: {
   };
 }
 
+function resolveScenarioTimeoutMs(scenario: QaTestFileScenario, commandTimeoutMs: number) {
+  return scenario.execution.kind === "script"
+    ? resolvePositiveTimerTimeoutMs(scenario.execution.timeoutMs, commandTimeoutMs)
+    : commandTimeoutMs;
+}
+
+function buildExecutionUnits(params: {
+  commandTimeoutMs: number;
+  failFast: boolean;
+  scenarios: readonly QaTestFileScenario[];
+}): QaTestFileExecutionUnit[] {
+  const scenarioOrder = new Map(params.scenarios.map((scenario, index) => [scenario, index]));
+  const dockerBatchScenarios =
+    !params.failFast && params.scenarios[0]?.execution.kind === "script"
+      ? params.scenarios.filter(isDockerE2eScenario)
+      : [];
+  const dockerBatchGroups = new Map<number, typeof dockerBatchScenarios>();
+  for (const scenario of dockerBatchScenarios) {
+    const timeoutMs = resolveScenarioTimeoutMs(scenario, params.commandTimeoutMs);
+    const group = dockerBatchGroups.get(timeoutMs) ?? [];
+    group.push(scenario);
+    dockerBatchGroups.set(timeoutMs, group);
+  }
+  const batchedScenarios = new Set<QaTestFileScenario>(dockerBatchScenarios);
+  const units: QaTestFileExecutionUnit[] = [
+    ...[...dockerBatchGroups].flatMap(([timeoutMs, scenarios]) =>
+      splitDockerE2eScenarioBatches(scenarios).map((batch) => ({
+        kind: "docker-batch" as const,
+        order: Math.min(...batch.map((scenario) => scenarioOrder.get(scenario) ?? 0)),
+        scenarios: batch,
+        timeoutMs,
+      })),
+    ),
+    ...params.scenarios
+      .filter((scenario) => !batchedScenarios.has(scenario))
+      .map((scenario) => ({
+        kind: "scenario" as const,
+        order: scenarioOrder.get(scenario) ?? 0,
+        scenario,
+        timeoutMs: resolveScenarioTimeoutMs(scenario, params.commandTimeoutMs),
+      })),
+  ];
+  if (!params.failFast && params.scenarios[0]?.execution.kind === "script") {
+    // Native producers stay serial because they may rebuild shared dist output.
+    // Longest declared budgets run first so one late producer cannot starve at the suite deadline.
+    units.sort((left, right) => right.timeoutMs - left.timeoutMs || left.order - right.order);
+  } else {
+    units.sort((left, right) => left.order - right.order);
+  }
+  return units;
+}
+
 function resolveTestFileExecutionKind(scenarios: readonly QaTestFileScenario[]) {
   const kinds = new Set(scenarios.map((scenario) => scenario.execution.kind));
   if (kinds.size > 1) {
@@ -322,10 +333,7 @@ function resolveTestFileExecutionKind(scenarios: readonly QaTestFileScenario[]) 
   return kind;
 }
 
-export async function runQaTestFileScenarios(
-  params: QaTestFileScenarioRunParams,
-): Promise<QaTestFileScenarioRunResult> {
-  params.signal?.throwIfAborted();
+export async function runQaTestFileScenarios(params: QaTestFileScenarioRunParams) {
   // Each scheduled instance owns its own object identity, even for repeated ids.
   const scenarios = params.scenarios
     .filter(isQaTestFileScenario)
@@ -335,7 +343,7 @@ export async function runQaTestFileScenarios(
     throw new Error("qa suite found no script, Vitest, or Playwright scenarios to run.");
   }
   await fs.mkdir(params.outputDir, { recursive: true });
-  const executeCommand = params.runCommand ?? runQaScenarioCommandLifecycle;
+  const runCommand = params.runCommand ?? runQaScenarioCommandLifecycle;
   const commandTimeoutMs = resolvePositiveTimerTimeoutMs(
     params.commandTimeoutMs,
     DEFAULT_QA_TEST_FILE_COMMAND_TIMEOUT_MS,
@@ -360,7 +368,6 @@ export async function runQaTestFileScenarios(
   });
   const scenarioOrder = new Map(scenarios.map((scenario, index) => [scenario, index]));
   const observationIds = new Map<QaTestFileScenario, string>();
-  const cleanupFailures = new Set<Error>();
   const snapshot = () => {
     const summary = invocation.snapshot({
       generatedAt: new Date().toISOString(),
@@ -393,37 +400,12 @@ export async function runQaTestFileScenarios(
   publish();
   const attemptsDir = path.join(params.outputDir, "occurrences");
   await fs.mkdir(attemptsDir, { recursive: true });
-  const beginObservation = (scenario: QaTestFileScenario) => {
-    const index = scenarioOrder.get(scenario)!;
-    const id = invocation.begin(index);
+  const start = (scenario: QaTestFileScenario) => {
+    const id = invocation.begin(scenarioOrder.get(scenario)!);
     observationIds.set(scenario, id);
     return id;
   };
-  const runCommandFor = (instances: readonly QaTestFileScenario[]): QaScenarioCommandRunner => {
-    let started = false;
-    return (command) => {
-      params.signal?.throwIfAborted();
-      // Setup may fail or be cancelled before a command is dispatched. A
-      // multi-step scenario or Docker batch admits each instance only once.
-      if (!started) {
-        started = true;
-        for (const scenario of instances) {
-          params.onScenarioStarted?.(invocation.anchors[scenarioOrder.get(scenario)!]!.id);
-        }
-      }
-      return executeCommand({
-        ...command,
-        ...(params.signal ? { signal: params.signal } : {}),
-        ...(params.forwardParentSignals === undefined
-          ? {}
-          : { forwardParentSignals: params.forwardParentSignals }),
-      });
-    };
-  };
   const record = async (result: QaTestFileScenarioResult) => {
-    if (result.cleanupFailure) {
-      cleanupFailures.add(result.cleanupFailure);
-    }
     const index = scenarioOrder.get(result.scenario)!;
     const id = observationIds.get(result.scenario)!;
     const artifact = {
@@ -564,104 +546,81 @@ export async function runQaTestFileScenarios(
       delete result.producerArtifact;
       delete result.includeFallbackEvidence;
     }
-    params.onResultCommitted?.(result);
     publish();
   };
   const results: QaTestFileScenarioResult[] = [];
-  const executionUnits = buildQaTestFileExecutionUnits({
+  const executionUnits = buildExecutionUnits({
     commandTimeoutMs,
     failFast: params.failFast === true,
     scenarios,
   });
-  try {
-    for (const unit of executionUnits) {
-      if (params.signal?.aborted || cleanupFailures.size > 0) {
-        break;
-      }
-      if (unit.kind === "docker-batch") {
-        params.progress?.(
-          `native docker-batch start scenarios=${unit.scenarios.length} timeoutMs=${unit.timeoutMs}`,
-        );
-        const startedAt = Date.now();
-        const ids = unit.scenarios.map(beginObservation);
-        const batchDir = path.join(attemptsDir, ids[0]!);
-        await fs.mkdir(batchDir);
-        const batchResults = await runDockerE2eBatch({
-          commandTimeoutMs: unit.timeoutMs,
-          env,
-          onCommandOutput: params.onCommandOutput,
-          outputDir: batchDir,
-          repoRoot: params.repoRoot,
-          runCommand: runCommandFor(unit.scenarios),
-          scenarios: unit.scenarios,
-        });
-        for (const result of batchResults) {
-          await record(result);
-        }
-        results.push(...batchResults);
-        params.progress?.(
-          `native docker-batch finish passed=${batchResults.filter((result) => result.status === "pass").length} failed=${batchResults.filter((result) => result.status !== "pass").length} durationMs=${Math.max(1, Date.now() - startedAt)}`,
-        );
-        continue;
-      }
-      const scenarioId = sanitizeQaProgressValue(unit.scenario.id);
-      const id = beginObservation(unit.scenario);
-      const attemptDir = path.join(attemptsDir, id);
-      await fs.mkdir(attemptDir);
-      params.progress?.(`native ${kind} start scenario=${scenarioId} timeoutMs=${unit.timeoutMs}`);
-      const result = await runQaTestFileScenario({
-        env,
-        commandTimeoutMs,
-        onCommandOutput: params.onCommandOutput,
-        outputDir: attemptDir,
-        repoRoot: params.repoRoot,
-        runCommand: runCommandFor([unit.scenario]),
-        scenario: unit.scenario,
-      });
-      await record(result);
-      results.push(result);
+  for (const unit of executionUnits) {
+    if (unit.kind === "docker-batch") {
       params.progress?.(
-        `native ${kind} finish scenario=${scenarioId} status=${result.status} durationMs=${result.durationMs}`,
+        `native docker-batch start scenarios=${unit.scenarios.length} timeoutMs=${unit.timeoutMs}`,
       );
-      if (params.failFast && result.status !== "pass") {
-        break;
+      const startedAt = Date.now();
+      const ids = unit.scenarios.map(start);
+      const batchDir = path.join(attemptsDir, ids[0]!);
+      await fs.mkdir(batchDir);
+      const batchResults = await runDockerE2eBatch({
+        commandTimeoutMs: unit.timeoutMs,
+        env,
+        onCommandOutput: params.onCommandOutput,
+        outputDir: batchDir,
+        repoRoot: params.repoRoot,
+        runCommand,
+        scenarios: unit.scenarios,
+      });
+      for (const result of batchResults) {
+        await record(result);
       }
+      results.push(...batchResults);
+      params.progress?.(
+        `native docker-batch finish passed=${batchResults.filter((result) => result.status === "pass").length} failed=${batchResults.filter((result) => result.status !== "pass").length} durationMs=${Math.max(1, Date.now() - startedAt)}`,
+      );
+      continue;
     }
-    results.sort(
-      (left, right) =>
-        (scenarioOrder.get(left.scenario) ?? 0) - (scenarioOrder.get(right.scenario) ?? 0),
+    const scenarioId = sanitizeQaProgressValue(unit.scenario.id);
+    const id = start(unit.scenario);
+    const attemptDir = path.join(attemptsDir, id);
+    await fs.mkdir(attemptDir);
+    params.progress?.(`native ${kind} start scenario=${scenarioId} timeoutMs=${unit.timeoutMs}`);
+    const result = await runQaTestFileScenario({
+      env,
+      commandTimeoutMs,
+      onCommandOutput: params.onCommandOutput,
+      outputDir: attemptDir,
+      repoRoot: params.repoRoot,
+      runCommand,
+      scenario: unit.scenario,
+    });
+    await record(result);
+    results.push(result);
+    params.progress?.(
+      `native ${kind} finish scenario=${scenarioId} status=${result.status} durationMs=${result.durationMs}`,
     );
-    const evidence = snapshot();
-    const evidencePath = path.join(params.outputDir, QA_EVIDENCE_FILENAME);
-    if (params.writeEvidenceFile ?? true) {
-      await fs.writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
-      await assertQaSuiteArtifactWritten("evidence", evidencePath);
-    } else {
-      await fs.rm(evidencePath, { force: true });
+    if (params.failFast && result.status !== "pass") {
+      break;
     }
-    if (cleanupFailures.size > 0) {
-      throw new QaSuiteCleanupError(
-        [...cleanupFailures],
-        `QA native command cleanup failed: ${[...cleanupFailures].map(formatErrorMessage).join("; ")}`,
-      );
-    }
-    return {
-      evidencePath,
-      evidence,
-      executionKind: kind,
-      outputDir: params.outputDir,
-      results,
-    };
-  } catch (error) {
-    if (error instanceof QaSuiteCleanupError) {
-      throw error;
-    }
-    if (cleanupFailures.size > 0) {
-      throw new QaSuiteCleanupError(
-        [...cleanupFailures, error],
-        `QA native evidence and cleanup failed: ${formatErrorMessage(error)}`,
-      );
-    }
-    throw error;
   }
+  results.sort(
+    (left, right) =>
+      (scenarioOrder.get(left.scenario) ?? 0) - (scenarioOrder.get(right.scenario) ?? 0),
+  );
+  const evidence = snapshot();
+  const evidencePath = path.join(params.outputDir, QA_EVIDENCE_FILENAME);
+  if (params.writeEvidenceFile ?? true) {
+    await fs.writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
+    await assertQaSuiteArtifactWritten("evidence", evidencePath);
+  } else {
+    await fs.rm(evidencePath, { force: true });
+  }
+  return {
+    evidencePath,
+    evidence,
+    executionKind: kind,
+    outputDir: params.outputDir,
+    results,
+  };
 }

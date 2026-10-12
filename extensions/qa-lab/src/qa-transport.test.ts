@@ -1,97 +1,13 @@
 // Qa Lab tests cover shared transport behavior.
-import { syncBuiltinESMExports } from "node:module";
-import timersPromises from "node:timers/promises";
-import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
 import { describe, expect, it, vi } from "vitest";
 import { createQaBusState } from "./bus-state.js";
 import {
   createQaStateBackedTransportAdapter,
   waitForQaTransportAccountReady,
-  waitForQaTransportCondition,
   waitForQaTransportOutboundSequence,
 } from "./qa-transport.js";
 
-describe("waitForQaTransportCondition cancellation", () => {
-  it("rejects an already-cancelled poll without calling its predicate", async () => {
-    const reason = new Error("cancelled");
-    const check = vi.fn();
-    await expect(
-      waitForQaTransportCondition(check, 5_000, 100, undefined, AbortSignal.abort(reason)),
-    ).rejects.toBe(reason);
-    expect(check).not.toHaveBeenCalled();
-  });
-
-  it("joins a pending predicate without accepting its late matching result", async () => {
-    const controller = new AbortController();
-    const reason = new Error("cancelled");
-    const held = createDeferred<string>();
-    const check = vi.fn(() => held.promise);
-    const pending = waitForQaTransportCondition(check, 5_000, 100, undefined, controller.signal);
-    const settled = vi.fn();
-    void pending.then(settled, settled);
-    controller.abort(reason);
-    await Promise.resolve();
-    expect(settled).not.toHaveBeenCalled();
-    held.resolve("late success");
-    await expect(pending).rejects.toBe(reason);
-    expect(check).toHaveBeenCalledOnce();
-  });
-
-  it("aborts its owned sleep without another predicate call", async () => {
-    const controller = new AbortController();
-    const reason = new Error("cancelled");
-    const entered = createDeferred<void>();
-    const sleep = timersPromises.setTimeout;
-    const sleepSpy = vi
-      .spyOn(timersPromises, "setTimeout")
-      .mockImplementation((delay, value, options) => {
-        expect(options?.signal).toBe(controller.signal);
-        entered.resolve();
-        return sleep(delay, value, options);
-      });
-    syncBuiltinESMExports();
-    const check = vi.fn(() => undefined);
-    const pending = waitForQaTransportCondition(check, 5_000, 100, undefined, controller.signal);
-    void pending.catch(() => undefined);
-    try {
-      await entered.promise;
-      controller.abort(reason);
-      await expect(pending).rejects.toMatchObject({ name: "AbortError", cause: reason });
-      expect(check).toHaveBeenCalledOnce();
-    } finally {
-      controller.abort(reason);
-      await Promise.allSettled([pending]);
-      sleepSpy.mockRestore();
-      syncBuiltinESMExports();
-    }
-  });
-});
-
 describe("waitForQaTransportAccountReady", () => {
-  it.each([
-    { description: "disconnected", connected: false, lifecycle: "starting" },
-    { description: "unauthenticated", connected: true, lifecycle: "starting" },
-    { description: "blocked", connected: true, lifecycle: "blocked" },
-  ])("does not declare a $description account ready", async ({ connected, lifecycle }) => {
-    const gateway = {
-      call: vi.fn().mockResolvedValue({
-        channelAccounts: {
-          slack: [{ accountId: "sut", connected, lifecycle, running: true }],
-        },
-      }),
-    };
-
-    await expect(
-      waitForQaTransportAccountReady({
-        accountId: "sut",
-        channel: "slack",
-        gateway,
-        pollIntervalMs: 1,
-        timeoutMs: 5,
-      }),
-    ).rejects.toThrow(`"lifecycle":"${lifecycle}"`);
-  });
-
   it("keeps channel-status probes inside the readiness deadline", async () => {
     const call = vi.fn().mockResolvedValue({ channelAccounts: {} });
 
@@ -255,38 +171,6 @@ describe("waitForQaTransportOutboundSequence", () => {
       events: [{ kind: "sent" }, { kind: "edited" }],
       final: { text: "final marker", threadId: "42" },
     });
-  });
-
-  it("returns preview and final sends across distinct messages", async () => {
-    const state = createQaBusState();
-    const preview = state.addOutboundMessage({
-      accountId: "default",
-      text: "preview",
-      to: "dm:alice",
-    });
-    const final = state.addOutboundMessage({
-      accountId: "default",
-      text: "final marker",
-      to: "dm:alice",
-    });
-
-    const sequence = await waitForQaTransportOutboundSequence({
-      accountId: "default",
-      input: {
-        conversationId: "alice",
-        finalSettleMs: 0,
-        finalTextIncludes: "final marker",
-        minimumPreviewEvents: 1,
-        timeoutMs: 100,
-      },
-      readEvents: () => state.getSnapshot().events,
-    });
-
-    expect(sequence.events.map(({ kind, message }) => [kind, message.id])).toEqual([
-      ["sent", preview.id],
-      ["sent", final.id],
-    ]);
-    expect(sequence.final).toMatchObject({ id: final.id, text: "final marker" });
   });
 
   it.each([

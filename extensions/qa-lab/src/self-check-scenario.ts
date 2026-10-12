@@ -1,6 +1,6 @@
+import type { QaBusMessage } from "openclaw/plugin-sdk/qa-channel-protocol";
 import { extractToolPayload as extractQaToolPayload } from "openclaw/plugin-sdk/tool-payload";
 import type { QaTransportState } from "./qa-transport.js";
-import type { QaBusMessage } from "./runtime-api.js";
 import type { QaScenarioDefinition } from "./scenario.js";
 import { waitForOutboundMessage } from "./suite-runtime-transport.js";
 
@@ -9,7 +9,7 @@ export function createQaSelfCheckScenario(options?: {
 }): QaScenarioDefinition {
   const waitTimeoutMs = options?.waitTimeoutMs ?? 5_000;
   let lifecycle: { target: string; threadId: string; message: QaBusMessage } | undefined;
-  const waitForReply = (state: QaTransportState, inbound: QaBusMessage, signal?: AbortSignal) =>
+  const waitForReply = (state: QaTransportState, inbound: QaBusMessage) =>
     waitForOutboundMessage(
       state,
       (message) =>
@@ -18,26 +18,26 @@ export function createQaSelfCheckScenario(options?: {
         message.threadId === inbound.threadId &&
         message.text.includes(`qa-echo: ${inbound.text}`),
       waitTimeoutMs,
-      { accountId: inbound.accountId, signal },
+      { accountId: inbound.accountId },
     );
   return {
     name: "Synthetic Slack-class roundtrip",
     steps: [
       {
         name: "DM echo roundtrip",
-        async run({ state, signal }) {
+        async run({ state }) {
           const inbound = await state.addInboundMessage({
             conversation: { id: "alice", kind: "direct" },
             senderId: "alice",
             senderName: "Alice",
             text: "hello from qa",
           });
-          await waitForReply(state, inbound, signal);
+          await waitForReply(state, inbound);
         },
       },
       {
         name: "Thread create and threaded echo",
-        async run({ state, performAction, signal }) {
+        async run({ state, performAction }) {
           if (!performAction) {
             throw new Error("self-check action dispatcher is not configured");
           }
@@ -45,7 +45,6 @@ export function createQaSelfCheckScenario(options?: {
             channelId: "qa-room",
             title: "QA thread",
           });
-          signal?.throwIfAborted();
           const threadPayload = extractQaToolPayload(
             threadResult as Parameters<typeof extractQaToolPayload>[0],
           ) as { target?: string; threadId?: string; thread?: { id?: string } } | undefined;
@@ -64,14 +63,14 @@ export function createQaSelfCheckScenario(options?: {
           lifecycle = {
             target: threadPayload.target,
             threadId,
-            message: await waitForReply(state, inbound, signal),
+            message: await waitForReply(state, inbound),
           };
           return threadId;
         },
       },
       {
         name: "Reaction, edit, delete lifecycle",
-        async run({ state, performAction, signal }) {
+        async run({ state, performAction }) {
           if (!performAction) {
             throw new Error("self-check action dispatcher is not configured");
           }
@@ -79,52 +78,43 @@ export function createQaSelfCheckScenario(options?: {
             throw new Error("threaded outbound message and target not found");
           }
           const { target, threadId, message: outboundMessage } = lifecycle;
-
-          await performAction("react", {
-            to: target,
-            threadId,
-            messageId: outboundMessage.id,
-            emoji: "white_check_mark",
-          });
-          signal?.throwIfAborted();
-          const reacted = await state.readMessage({ messageId: outboundMessage.id });
-          signal?.throwIfAborted();
-          if (!reacted) {
-            throw new Error("reacted message not found");
-          }
-          if (reacted.reactions.length === 0) {
-            throw new Error("reaction not recorded");
-          }
-
-          await performAction("edit", {
-            to: target,
-            threadId,
-            messageId: outboundMessage.id,
-            text: "qa-echo: inside thread (edited)",
-          });
-          signal?.throwIfAborted();
-          const edited = await state.readMessage({ messageId: outboundMessage.id });
-          signal?.throwIfAborted();
-          if (!edited) {
-            throw new Error("edited message not found");
-          }
-          if (!edited.text.includes("(edited)")) {
-            throw new Error("edit not recorded");
-          }
-
-          await performAction("delete", {
-            to: target,
-            threadId,
-            messageId: outboundMessage.id,
-          });
-          signal?.throwIfAborted();
-          const deleted = await state.readMessage({ messageId: outboundMessage.id });
-          signal?.throwIfAborted();
-          if (!deleted) {
-            throw new Error("deleted message not found");
-          }
-          if (!deleted.deleted) {
-            throw new Error("delete not recorded");
+          const actions = [
+            {
+              action: "react",
+              args: { emoji: "white_check_mark" },
+              missing: "reacted message not found",
+              unrecorded: "reaction not recorded",
+              recorded: (message: QaBusMessage) => message.reactions.length !== 0,
+            },
+            {
+              action: "edit",
+              args: { text: "qa-echo: inside thread (edited)" },
+              missing: "edited message not found",
+              unrecorded: "edit not recorded",
+              recorded: (message: QaBusMessage) => message.text.includes("(edited)"),
+            },
+            {
+              action: "delete",
+              args: {},
+              missing: "deleted message not found",
+              unrecorded: "delete not recorded",
+              recorded: (message: QaBusMessage) => message.deleted,
+            },
+          ] as const;
+          for (const { action, args, missing, unrecorded, recorded } of actions) {
+            await performAction(action, {
+              to: target,
+              threadId,
+              messageId: outboundMessage.id,
+              ...args,
+            });
+            const message = await state.readMessage({ messageId: outboundMessage.id });
+            if (!message) {
+              throw new Error(missing);
+            }
+            if (!recorded(message)) {
+              throw new Error(unrecorded);
+            }
           }
         },
       },
