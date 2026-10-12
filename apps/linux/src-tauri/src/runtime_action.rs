@@ -328,8 +328,12 @@ fn install(
             "--runtime-path",
         ])
         .map_err(|error| error.to_string())?;
+    // The Windows service owner writes this path into its cmd.exe launcher.
+    #[cfg(target_os = "windows")]
+    command.arg(windows_process_path(&runtime.bun)?);
+    #[cfg(not(target_os = "windows"))]
+    command.arg(&runtime.bun);
     command
-        .arg(&runtime.bun)
         .arg("--expected-runtime-pin")
         .arg(serde_json::to_string(&confirmed.expected_pin()?).map_err(|error| error.to_string())?)
         .env_remove("OPENCLAW_SQLITE_LIBRARY")
