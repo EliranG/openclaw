@@ -32,6 +32,10 @@ import type {
   SessionTranscriptAccountingSnapshot,
 } from "./session-transcript-accounting.types.js";
 import type { SessionTranscriptWorkerReadError } from "./session-transcript-worker-error.types.js";
+import type {
+  ReadRecentSessionConversationTextOptions,
+  SessionRecentConversationText,
+} from "./transcript-recent-text.js";
 import type { InternalSessionEntry, SessionEntry } from "./types.js";
 
 export type ChatHistoryResponsePage<Messages extends unknown[] | Uint8Array = unknown[]> = {
@@ -179,6 +183,13 @@ export type ChatHistoryDisplayResult =
 
 export type SessionHistoryWorkerRequest =
   | {
+      kind: "recent-text";
+      params: {
+        target: SessionTranscriptReadScope;
+        options: ReadRecentSessionConversationTextOptions;
+      };
+    }
+  | {
       kind: "active-accounting";
       params: { target: SessionTranscriptReadScope; options: SessionTranscriptAccountingOptions };
     }
@@ -269,6 +280,7 @@ export type SessionHistoryWorkerRequest =
   | { kind: "http"; params: SessionHistoryReadParams };
 
 export type SessionHistoryWorkerResult =
+  | { kind: "recent-text"; result: SessionRecentConversationText[] }
   | { kind: "active-accounting"; result: SessionTranscriptAccountingSnapshot }
   | { kind: "bounded-tail"; result: SessionTranscriptBoundedMessageTailPage }
   | { kind: "inline-visibility"; subagentCoordination: SessionHistorySubagentFacts }
