@@ -20,6 +20,7 @@ import { publishSessionEntryPlaceholderInsertion } from "./session-accessor.sqli
 import { getSessionKysely, type ResolvedTranscriptScope } from "./session-accessor.sqlite-scope.js";
 import { parseSessionEntryJson } from "./session-accessor.sqlite-status.js";
 import { readSessionActorTransactionState } from "./session-actor-transaction.js";
+import { readSessionActorTranscriptState } from "./session-actor-transcript-state.js";
 import {
   assertCanonicalSqliteSessionRootWrite,
   canonicalSessionKeyMigrationRequiredError,
@@ -117,7 +118,7 @@ export function readTranscriptContextVersionInTransaction(
   database: Pick<OpenClawAgentDatabase, "db">,
   sessionId: string,
 ) {
-  const actor = readSessionActorTransactionState(database, { sessionId });
+  const actor = readSessionActorTranscriptState(database, { sessionId });
   if (actor) {
     return { ...actor.hot.transcript.version };
   }
@@ -132,7 +133,7 @@ export function readTranscriptContextStateInTransaction(
   database: Pick<OpenClawAgentDatabase, "db">,
   sessionId: string,
 ) {
-  const actor = readSessionActorTransactionState(database, { sessionId });
+  const actor = readSessionActorTranscriptState(database, { sessionId });
   if (actor) {
     return {
       coldArchive: actor.transcript.coldArchive,

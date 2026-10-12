@@ -5918,3 +5918,15 @@ committed timestamp without a follow-up read. Generic synchronous machine-state
 APIs retain other callers pending their owner-level cutover; these changes do not
 classify those callers as worker-only. Schemas, retention, stored bytes, and
 update behavior are unchanged.
+
+### Resident transcript read facts
+
+Prepared transcript reads on the serialized agent execution worker borrow the
+session actor's committed watermark, cold-archive metadata, and projection
+counters. The existing scoped write receipt invalidates residency after another
+writer changes the session. These synchronous reads do not reacquire facts the
+actor already owns; payload rows still come from the same SQLite read snapshot.
+A missing, evicted, invalidated, or restarted actor uses the existing database
+reader, and arbitrary native snapshots do not borrow the actor's current view.
+The read-only scope never lends mutable actor state to a writer. Schema, stored
+bytes, retention, permissions, and update behavior are unchanged.

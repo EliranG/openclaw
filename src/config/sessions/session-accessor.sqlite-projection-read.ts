@@ -20,7 +20,7 @@ import type {
 } from "./session-accessor.sqlite-contract.js";
 import type { UnindexedHistoryControl } from "./session-accessor.sqlite-history-navigation.types.js";
 import type { resolveSqliteTranscriptReadScope } from "./session-accessor.sqlite-scope.js";
-import { readSessionActorTransactionState } from "./session-actor-transaction.js";
+import { readSessionActorTranscriptState } from "./session-actor-transcript-state.js";
 import { SessionTranscriptColdError } from "./session-cold-storage-state.js";
 import { retainTranscriptContextFacts } from "./session-transcript-context-facts.js";
 import type { SessionTranscriptProjectionState } from "./session-transcript-index.js";
@@ -387,7 +387,7 @@ const projectionSnapshotReader = createSqliteQueryCache((db) =>
 );
 
 function readProjectionSnapshot(database: TranscriptReadDatabase, sessionId: string) {
-  const actor = readSessionActorTransactionState(database, { sessionId });
+  const actor = readSessionActorTranscriptState(database, { sessionId });
   if (actor) {
     const { active, coldArchive, identities, navigation, projection } = actor.transcript;
     let latestIndexedReset: CurrentTranscriptProjection["latestIndexedReset"] = null;

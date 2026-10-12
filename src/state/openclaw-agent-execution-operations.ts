@@ -41,6 +41,7 @@ export async function loadAgentTranscriptReadOperations() {
     agents,
     errors,
     watermark,
+    actorTranscript,
   ] = await Promise.all([
     import("../config/sessions/session-accessor.sqlite-delta.js"),
     import("../config/sessions/session-accessor.sqlite-active-events.js"),
@@ -54,6 +55,7 @@ export async function loadAgentTranscriptReadOperations() {
     import("@openclaw/normalization-core/agent-id"),
     import("../config/sessions/session-history-worker-errors.js"),
     import("../config/sessions/session-accessor.sqlite-transcript-watermark.js"),
+    import("../config/sessions/session-actor-transcript-state.js"),
   ]);
   const readResult = <T>(read: () => T): SessionTranscriptExecutionReadResult<T> => {
     try {
@@ -117,12 +119,18 @@ export async function loadAgentTranscriptReadOperations() {
       expectedIdentity: SessionTranscriptExecutionReadInputs["cold"]["expectedIdentity"];
       resolved?: ResolvedTranscriptReadScope;
       scope?: SessionTranscriptReadScope;
+      sessionId?: string;
     },
     context: AgentWorkerOperationContext,
     read: (database: ReturnType<AgentWorkerOperationContext["open"]>) => T,
   ) => {
     const database = open(input, context);
-    return reader.readOpenClawAgentDatabaseSnapshot(database, () => read(database));
+    const sessionId = input.resolved?.sessionId ?? input.scope?.sessionId ?? input.sessionId;
+    return reader.readOpenClawAgentDatabaseSnapshot(database, () =>
+      sessionId
+        ? actorTranscript.withSessionActorTranscriptRead(database, sessionId, () => read(database))
+        : read(database),
+    );
   };
   return {
     "session.transcript.watermark.read": (
@@ -130,8 +138,10 @@ export async function loadAgentTranscriptReadOperations() {
       context,
     ) =>
       readResult(() => {
-        open(input, context);
-        return watermark.readSessionTranscriptWatermark(input.scope);
+        const database = open(input, context);
+        return actorTranscript.withSessionActorTranscriptRead(database, input.scope.sessionId, () =>
+          watermark.readSessionTranscriptWatermark(input.scope),
+        );
       }),
     "session.transcript.rawDelta.read": (
       input: SessionTranscriptExecutionReadInputs["raw"],
@@ -150,13 +160,18 @@ export async function loadAgentTranscriptReadOperations() {
       context,
     ) =>
       readResult(() => {
-        open(input, context);
+        const database = open(input, context);
         // Projection kernels admit and read the retained writer in their own deferred snapshot.
-        return fence.runWithSessionTranscriptReadFence(input.admission, () =>
-          visible.readSessionTranscriptVisibleMessageDeltaCore(input.scope, input.limits, {
-            readOnly: true,
-            resolvedScope: input.resolved,
-          }),
+        return actorTranscript.withSessionActorTranscriptRead(
+          database,
+          input.resolved.sessionId,
+          () =>
+            fence.runWithSessionTranscriptReadFence(input.admission, () =>
+              visible.readSessionTranscriptVisibleMessageDeltaCore(input.scope, input.limits, {
+                readOnly: true,
+                resolvedScope: input.resolved,
+              }),
+            ),
         );
       }),
     "session.transcript.memoryCapture.read": (
@@ -164,13 +179,18 @@ export async function loadAgentTranscriptReadOperations() {
       context,
     ) =>
       readResult(() => {
-        open(input, context);
-        return fence.runWithSessionTranscriptReadFence(input.admission, () =>
-          memory.readSessionMemoryCapture({
-            scope: input.scope,
-            resolvedScope: input.resolved,
-            messageCount: input.messageCount,
-          }),
+        const database = open(input, context);
+        return actorTranscript.withSessionActorTranscriptRead(
+          database,
+          input.resolved.sessionId,
+          () =>
+            fence.runWithSessionTranscriptReadFence(input.admission, () =>
+              memory.readSessionMemoryCapture({
+                scope: input.scope,
+                resolvedScope: input.resolved,
+                messageCount: input.messageCount,
+              }),
+            ),
         );
       }),
     "session.transcript.anchors.read": (

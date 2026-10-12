@@ -6,7 +6,7 @@ import {
   prepareSqliteQuerySync,
 } from "../../infra/kysely-sync.js";
 import type { DB } from "../../state/openclaw-agent-db.generated.js";
-import { readSessionActorTransactionState } from "./session-actor-transaction.js";
+import { readSessionActorTranscriptState } from "./session-actor-transcript-state.js";
 import { readTranscriptContextFacts } from "./session-transcript-context-facts.js";
 
 export type SessionColdArchive = Selectable<DB["session_transcript_cold_archives"]>;
@@ -58,7 +58,7 @@ export function readSessionColdTranscript(
   db: DatabaseSync,
   sessionId: string,
 ): Omit<SessionColdArchive, "archive_blob"> | undefined {
-  const actor = readSessionActorTransactionState({ db }, { sessionId });
+  const actor = readSessionActorTranscriptState({ db }, { sessionId });
   if (actor) {
     return actor.transcript.coldArchive && { ...actor.transcript.coldArchive };
   }
@@ -76,7 +76,7 @@ export class SessionTranscriptColdError extends Error {
 }
 
 export function assertSessionTranscriptHot(db: DatabaseSync, sessionId: string): void {
-  const actor = readSessionActorTransactionState({ db }, { sessionId });
+  const actor = readSessionActorTranscriptState({ db }, { sessionId });
   if (actor) {
     if (actor.transcript.coldArchive) {
       throw new SessionTranscriptColdError(sessionId);
