@@ -32,7 +32,6 @@ import {
   captureNativeSessionWorkerDeletion,
   preparedSessionDeletionRequiresNativeTransaction,
 } from "./session-accessor.sqlite-deletion.js";
-import { assertSessionSubagentRunsCurrent } from "./session-accessor.sqlite-descendant-basis.js";
 import { publishSessionEntryWorkerInvalidations } from "./session-accessor.sqlite-entry-worker-publication.js";
 import type {
   SessionDeletionPlanningOperation,
@@ -188,7 +187,6 @@ export async function runSqliteSessionReclamation(params: {
               beforeMutation: params.assertCommitAllowed,
               onCommit: (database, result) => {
                 // The native connection now sees its own removals; row guards ran before mutation.
-                assertSessionSubagentRunsCurrent(params.plan, params.plan.databaseOptions.env);
                 const publish = prepareReclamationPublication(
                   params.plan,
                   readOpenClawAgentDatabaseIdentity(database).identity,
