@@ -442,6 +442,8 @@ function prepareChatSessionAbort(
     result.aborted = params.onAuthorizedBeforeEmbeddedAbort?.() || result.aborted;
     const wasActive = Boolean(persistedSessionId && isEmbeddedAgentRunActive(persistedSessionId));
     params.assertCurrent?.();
+    // The legacy no-handle fallback also aborts reply operations. A captured
+    // Gateway controller must publish cancellation before that reply settles.
     const embeddedAborted = Boolean(
       params.stopEmbeddedRun &&
       !params.runId &&
@@ -450,7 +452,9 @@ function prepareChatSessionAbort(
       !embeddedController &&
       (sessionEmbeddedRun
         ? sessionEmbeddedRun.abort()
-        : params.requiredSessionId === undefined && abortEmbeddedAgentRun(persistedSessionId)),
+        : params.requiredSessionId === undefined &&
+          !authorizedRuns.some((run) => run.sessionId === persistedSessionId) &&
+          abortEmbeddedAgentRun(persistedSessionId)),
     );
     if (embeddedAborted) {
       result.aborted = true;
@@ -549,6 +553,8 @@ function prepareChatSessionAbort(
         recordRun(runId);
       }
     }
+    // Protected owners still fence broad lifecycle cleanup before active cancellation.
+    abortAdditional();
     params.assertCurrent?.();
     if (commands.cancel()) {
       result.aborted = true;
@@ -579,11 +585,7 @@ function prepareChatSessionAbort(
         recordRun(runId);
       }
     }
-    // Commit Gateway cancellation before reply cleanup can make its controller
-    // non-abortable. Protected owners still fence broad lifecycle cleanup.
-    abortAdditional();
     const endedAt = Date.now();
-    const stopReason = params.stopReason ?? "rpc";
     for (const [kind, plan] of [
       ["agent", pendingAgent],
       ["chat", pendingChat],
@@ -594,7 +596,7 @@ function prepareChatSessionAbort(
         const abort = {
           context: params.context,
           runId,
-          stopReason,
+          stopReason: params.stopReason ?? "rpc",
           endedAt,
           expectedPayload: payload,
         };

@@ -252,12 +252,6 @@ export async function prepareSessionLifecycleDrain(
               assertCurrent: () => params.authorize?.(),
             });
             let aborted = cleared.followupCleared > 0 || cleared.laneCleared > 0;
-            for (const operation of replyRuns) {
-              params.authorize?.();
-              if (isReplyOperationForSession(params, operation)) {
-                aborted = operation.abortByUser() || aborted;
-              }
-            }
             // Agent deletion captured its exact owner before asynchronous inventory.
             // Ordinary session Stop owns embedded cancellation and its persistence.
             if (params.embeddedRun !== undefined || params.sessionKey === "global") {
@@ -270,6 +264,16 @@ export async function prepareSessionLifecycleDrain(
           onAuthorizedAfterQueuedAbort: ({ aborted }) => {
             embeddedAborted ||= aborted;
             return false;
+          },
+          onCancellationStarted: () => {
+            // Gateway controllers must publish cancellation before their reply
+            // operation becomes non-abortable; controller-less owners still drain.
+            for (const operation of replyRuns) {
+              params.authorize?.();
+              if (isReplyOperationForSession(params, operation)) {
+                operation.abortByUser();
+              }
+            }
           },
         });
         // Observe failures immediately while the short mutation releases its queues.

@@ -1,18 +1,25 @@
 // Preserve the cancellation fixture setup before importing its consumers.
 // oxfmt-ignore
 import { useChatAbortRegistryFixture } from "./chat.abort-registry.test-support.js";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+import { createDeferred } from "../../../test/helpers/promise.js";
 import {
   createReplyOperation,
   isReplyRunAbortableForSignal,
 } from "../../auto-reply/reply/reply-run-registry.js";
 import { getRuntimeConfig } from "../../config/config.js";
+import { resolveSessionStorePathCore } from "../../config/sessions/paths.js";
 import { upsertSessionEntryCore } from "../../config/sessions/session-accessor.js";
 import { onAgentRuntimeEvent } from "../../infra/agent-events.js";
-import { createChatAbortOps } from "../chat-abort-ops.js";
+import { createTestGatewayScheduler } from "../../test-utils/gateway-scheduler-clock.js";
 import { registerChatAbortController } from "../chat-abort.js";
+import {
+  createSessionEventSubscriberRegistry,
+  createSessionMessageSubscriberRegistry,
+} from "../server-chat-state.js";
 import { createDirectChatContext } from "../server-chat.agent-events.test-helpers.js";
-import { abortChatRunsForSessionKeyWithPartials } from "./chat-abort-runtime.js";
+import { startGatewayEventSubscriptions } from "../server-runtime-subscriptions.js";
+import { prepareSessionLifecycleDrain } from "./sessions-lifecycle-drain.js";
 
 useChatAbortRegistryFixture();
 
@@ -38,6 +45,26 @@ it("publishes deletion cancellation before aborting the reply operation", async 
     resetTriggered: false,
     upstreamAbortSignal: registration.controller.signal,
   });
+  const subscriptions = startGatewayEventSubscriptions({
+    scheduler: createTestGatewayScheduler(),
+    signal: new AbortController().signal,
+    log: context.logGateway,
+    broadcast: context.broadcast,
+    broadcastToConnIds: context.broadcastToConnIds,
+    nodeHasSessionSubscribers: () => false,
+    nodeSendToSession: context.nodeSendToSession,
+    agentRunSeq: context.agentRunSeq,
+    chatRunState: context.chatRunState,
+    toolEventRecipients: context.chatRunState.toolEventRecipients,
+    sessionEventSubscribers: createSessionEventSubscriberRegistry(),
+    sessionMessageSubscribers: createSessionMessageSubscriberRegistry(),
+    chatAbortControllers: context.chatAbortControllers,
+    restartRecoveryCandidates: new Map(),
+    refreshConnectedUserProfiles: vi.fn(),
+  });
+  const aborted = createDeferred();
+  operation.abortSignal.addEventListener("abort", () => aborted.resolve(), { once: true });
+  let draining: ReturnType<typeof prepareSessionLifecycleDrain> | undefined;
   const terminals: unknown[] = [];
   const unsubscribe = onAgentRuntimeEvent((event) => {
     if (event.runId === runId && event.stream === "lifecycle") {
@@ -45,18 +72,21 @@ it("publishes deletion cancellation before aborting the reply operation", async 
     }
   });
   try {
-    await abortChatRunsForSessionKeyWithPartials({
+    draining = prepareSessionLifecycleDrain({
+      action: "delete",
       context,
-      ops: createChatAbortOps(context),
+      storePath: resolveSessionStorePathCore(getRuntimeConfig().session?.store, {
+        agentId: "main",
+      }),
+      sessionKeys: [sessionKey],
       sessionKey,
       sessionId,
       agentId: "main",
       defaultAgentId: "main",
-      stopReason: "delete",
-      abortOrigin: "rpc",
-      requester: { isAdmin: true },
-      onAuthorizedBeforeEmbeddedAbort: () => operation.abortByUser(),
+      lifecycleIdentities: [sessionKey, sessionId],
     });
+    void draining.catch(() => {});
+    await aborted.promise;
     expect(registration.controller.signal.aborted).toBe(true);
     expect(registration.entry?.abortStopReason).toBe("delete");
     expect(operation.result?.kind).toBe("aborted");
@@ -67,5 +97,11 @@ it("publishes deletion cancellation before aborting the reply operation", async 
     unsubscribe();
     operation.complete();
     registration.cleanup();
+    const drain = await draining;
+    drain?.release();
+    await subscriptions.agentUnsub();
+    subscriptions.heartbeatUnsub();
+    subscriptions.transcriptUnsub();
+    subscriptions.lifecycleUnsub();
   }
 });
