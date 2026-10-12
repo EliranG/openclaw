@@ -47,8 +47,8 @@ import {
   sessionEntryCommitGuardOptions,
 } from "../config/sessions/session-source-authority.js";
 import { resolveSqliteTargetFromSessionStorePath } from "../config/sessions/session-sqlite-target.js";
-import { loadTranscriptEvents as loadAccessorTranscriptEvents } from "../config/sessions/session-transcript-events.js";
-import { readTranscriptStatsAsync as readAccessorTranscriptStatsAsync } from "../config/sessions/session-transcript-stats.js";
+import { loadSessionTranscriptEvents } from "../config/sessions/session-transcript-events.js";
+import { readSessionTranscriptStats } from "../config/sessions/session-transcript-stats.js";
 import { normalizeResolvedMaintenanceConfigInput } from "../config/sessions/store-maintenance.js";
 import type { ResolvedSessionMaintenanceConfigInput } from "../config/sessions/store-maintenance.js";
 import type { AmbientTranscriptWatermark, SessionEntry } from "../config/sessions/types.js";
@@ -272,7 +272,7 @@ function loadTranscriptEventsSyncLegacy(
 export function loadTranscriptEvents(
   params: SessionStoreTranscriptReadParams,
 ): Promise<SessionStoreTranscriptEvent[]> {
-  return loadAccessorTranscriptEvents(params);
+  return loadSessionTranscriptEvents(params);
 }
 
 /** @deprecated Use readTranscriptStatsAsync; removed in the next Plugin SDK major. */
@@ -298,7 +298,7 @@ export {
 export function readTranscriptStatsAsync(
   params: SessionStoreTranscriptReadParams,
 ): Promise<{ eventCount: number; maxSeq: number; sizeBytes: number }> {
-  return readAccessorTranscriptStatsAsync(params);
+  return readSessionTranscriptStats(params);
 }
 
 /** Resolves the persisted session key for one SQLite transcript identity. */

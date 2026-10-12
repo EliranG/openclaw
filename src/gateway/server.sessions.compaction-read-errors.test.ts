@@ -17,11 +17,11 @@ vi.hoisted(() => {
   vi.resetModules();
 });
 
-type ReadTranscriptStatsAsync =
-  (typeof import("../config/sessions/session-transcript-stats.js"))["readTranscriptStatsAsync"];
+type ReadTranscriptStats =
+  (typeof import("../config/sessions/session-transcript-stats.js"))["readSessionTranscriptStats"];
 
 const transcriptReads = vi.hoisted(() => ({
-  stats: vi.fn<ReadTranscriptStatsAsync>(),
+  stats: vi.fn<ReadTranscriptStats>(),
 }));
 
 vi.mock("../config/sessions/session-transcript-stats.js", async (importOriginal) => {
@@ -29,20 +29,20 @@ vi.mock("../config/sessions/session-transcript-stats.js", async (importOriginal)
     await importOriginal<typeof import("../config/sessions/session-transcript-stats.js")>();
   return {
     ...actual,
-    readTranscriptStatsAsync: transcriptReads.stats,
+    readSessionTranscriptStats: transcriptReads.stats,
   };
 });
 
 const { createSessionStoreDir, openClient } = setupGatewaySessionsTestHarness();
 
-let realTranscriptStatsReader: ReadTranscriptStatsAsync;
+let realTranscriptStatsReader: ReadTranscriptStats;
 
 beforeEach(async () => {
   transcriptReads.stats.mockReset();
   const actual = await vi.importActual<
     typeof import("../config/sessions/session-transcript-stats.js")
   >("../config/sessions/session-transcript-stats.js");
-  realTranscriptStatsReader = actual.readTranscriptStatsAsync;
+  realTranscriptStatsReader = actual.readSessionTranscriptStats;
   transcriptReads.stats.mockImplementation(realTranscriptStatsReader);
 });
 
@@ -95,7 +95,7 @@ const transcriptReadError = () =>
 // Background reads must not consume the failure intended for the compaction RPC.
 function failTranscriptStatsForSession(
   sessionId: string,
-  options?: { succeedFirstWith: Awaited<ReturnType<ReadTranscriptStatsAsync>> },
+  options?: { succeedFirstWith: Awaited<ReturnType<ReadTranscriptStats>> },
 ): void {
   let sessionReads = 0;
   transcriptReads.stats.mockImplementation(async (scope) => {

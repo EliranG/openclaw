@@ -8,7 +8,7 @@ import { readIncognitoSessionHistory } from "./session-incognito-history-read.js
 import { withSessionTranscriptReadSource } from "./session-transcript-read-source.js";
 
 /** Read hot and cold statistics through the captured history owner's read-only worker. */
-export function readTranscriptStatsAsync(scope: SessionTranscriptReadScope) {
+export function readSessionTranscriptStats(scope: SessionTranscriptReadScope) {
   const incognitoSource = captureIncognitoSessionSource(scope);
   if (incognitoSource && "kind" in incognitoSource) {
     incognitoSource.assertCurrent();

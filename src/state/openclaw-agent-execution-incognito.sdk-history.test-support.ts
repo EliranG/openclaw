@@ -9,7 +9,7 @@ import { readSessionTranscriptModelContextAsync } from "../config/sessions/sessi
 import { withSessionTranscriptDeltaReader } from "../config/sessions/session-transcript-delta-read.js";
 import { prepareSessionTranscriptHydration } from "../config/sessions/session-transcript-hydration.js";
 import { reconcileSessionTranscriptIndexes } from "../config/sessions/session-transcript-reconcile.js";
-import { readTranscriptStatsAsync } from "../config/sessions/session-transcript-stats.js";
+import { readSessionTranscriptStats as readTranscriptStatsAsync } from "../config/sessions/session-transcript-stats.js";
 import { readSessionTranscriptWatermarkAsync } from "../config/sessions/session-transcript-watermark.js";
 import {
   readLatestAssistantTextFromSessionTranscript,

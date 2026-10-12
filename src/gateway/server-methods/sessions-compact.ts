@@ -20,7 +20,7 @@ import {
 import { projectCompactionAccountingPatch } from "../../config/sessions/session-entry-projection.js";
 import { readSessionEntryReadOnlyInWorker } from "../../config/sessions/session-entry-read-runtime.js";
 import { composeSessionSourceAssertion } from "../../config/sessions/session-source-authority.js";
-import { readTranscriptStatsAsync } from "../../config/sessions/session-transcript-stats.js";
+import { readSessionTranscriptStats } from "../../config/sessions/session-transcript-stats.js";
 import type { InternalSessionEntry } from "../../config/sessions/types.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { getCommandLaneSnapshot } from "../../process/command-queue.js";
@@ -163,7 +163,7 @@ export const sessionCompactHandlers: GatewayRequestHandlers = {
           return;
         }
       } else {
-        const transcriptStats = await readTranscriptStatsAsync(transcriptScope);
+        const transcriptStats = await readSessionTranscriptStats(transcriptScope);
         assertRequestCurrent();
         if (transcriptStats.eventCount === 0) {
           respondNotCompacted({ reason: "no transcript" });
@@ -322,7 +322,7 @@ export const sessionCompactHandlers: GatewayRequestHandlers = {
             respond(false, undefined, sessionChangedError());
             return;
           }
-          const transcriptStats = await readTranscriptStatsAsync(transcriptScope);
+          const transcriptStats = await readSessionTranscriptStats(transcriptScope);
           assertRequestCurrent();
           if (transcriptStats.eventCount === 0) {
             respondNotCompacted({ reason: "no transcript" });

@@ -16,7 +16,7 @@ import {
   type SessionSourceAssertion,
 } from "./session-source-authority.js";
 import { withSessionTranscriptReadSource } from "./session-transcript-read-source.js";
-import { readTranscriptStatsAsync } from "./session-transcript-stats.js";
+import { readSessionTranscriptStats } from "./session-transcript-stats.js";
 import { resolveSessionWorkStartError } from "./session-work-start.js";
 import { SessionWorkStartChangedError } from "./work-start-error.js";
 export { persistCompactionBoundaryWithSessionEntrySync } from "./session-accessor.sqlite-compaction.js";
@@ -43,7 +43,7 @@ export {
   readTranscriptIdentityByEventId,
 } from "./session-accessor.sqlite-read.js";
 export { hasSessionTranscriptMessage } from "./session-transcript-message-presence.js";
-export { loadTranscriptEvents } from "./session-transcript-events.js";
+export { loadSessionTranscriptEvents as loadTranscriptEvents } from "./session-transcript-events.js";
 export {
   loadTranscriptSuffixEventsBoundedSync,
   readPreviousIndexedTranscriptEventSync,
@@ -76,7 +76,7 @@ export async function preflightSessionTranscriptForManualCompact(
   scope: SessionTranscriptRuntimeScope,
   params: { maxLines: number; sessionFile?: string },
 ): Promise<SessionTranscriptManualTrimPreflightResult> {
-  const { eventCount } = await readTranscriptStatsAsync(scope);
+  const { eventCount } = await readSessionTranscriptStats(scope);
   if (eventCount === 0) {
     return { compacted: false, reason: "no transcript" };
   }

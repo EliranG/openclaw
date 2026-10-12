@@ -33,7 +33,7 @@ import {
   type IncognitoParentForkBinding,
 } from "./session-parent-fork.js";
 import type { ParentForkEntryPatch, ParentForkEntryParams } from "./session-parent-fork.types.js";
-import { loadTranscriptEvents } from "./session-transcript-events.js";
+import { loadSessionTranscriptEvents } from "./session-transcript-events.js";
 import { prepareSessionTranscriptHydration } from "./session-transcript-hydration.js";
 import { normalizeStoreSessionKey } from "./store-entry.js";
 import type { SessionEntry } from "./types.js";
@@ -211,7 +211,10 @@ export async function resolveSessionParentForkDecision(
         binding,
       )
     : resolveParentForkSourceTranscript(
-        await loadTranscriptEvents({ storePath: params.storePath, sessionId: parentSessionId }),
+        await loadSessionTranscriptEvents({
+          storePath: params.storePath,
+          sessionId: parentSessionId,
+        }),
       );
   return planParentForkDecision(parentEntry, estimateParentForkPromptTokens(source));
 }

@@ -9,7 +9,7 @@ import type { IncognitoSessionAuthority } from "../config/sessions/session-incog
 import type { IncognitoLifecycleEntry } from "../config/sessions/session-incognito-lifecycle-contract.js";
 import { readSessionPendingInputReceiptsInWorker } from "../config/sessions/session-pending-input-receipts.js";
 import { readSessionTranscriptModelContextAsync } from "../config/sessions/session-transcript-context-read.js";
-import { loadTranscriptEvents } from "../config/sessions/session-transcript-events.js";
+import { loadSessionTranscriptEvents as loadTranscriptEvents } from "../config/sessions/session-transcript-events.js";
 import { prepareSessionTranscriptHydration } from "../config/sessions/session-transcript-hydration.js";
 import { findTranscriptEvent } from "../config/sessions/session-transcript-match.js";
 import { hasSessionTranscriptMessage } from "../config/sessions/session-transcript-message-presence.js";
@@ -18,7 +18,7 @@ import {
   waitForSessionTranscriptIndexReconcile,
 } from "../config/sessions/session-transcript-reconcile.js";
 import { searchSessionTranscripts } from "../config/sessions/session-transcript-search.js";
-import { readTranscriptStatsAsync } from "../config/sessions/session-transcript-stats.js";
+import { readSessionTranscriptStats as readTranscriptStatsAsync } from "../config/sessions/session-transcript-stats.js";
 import { readSessionTranscriptWatermarkAsync } from "../config/sessions/session-transcript-watermark.js";
 import * as cronJobNames from "../cron/store/job-name.js";
 import { readChatHistoryDelta } from "../gateway/server-methods/chat-history-delta.js";

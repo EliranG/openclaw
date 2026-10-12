@@ -13,7 +13,7 @@ import { runWithSessionActorStorage } from "./session-actor-storage-binding.js";
 import type { SessionActorStorageOutcome } from "./session-actor-storage-contract.js";
 import { readLatestTranscriptAssistantTextAsync } from "./session-transcript-assistant-read.js";
 import { withSessionTranscriptDeltaReader } from "./session-transcript-delta-read.js";
-import { loadTranscriptEvents } from "./session-transcript-events.js";
+import { loadSessionTranscriptEvents as loadTranscriptEvents } from "./session-transcript-events.js";
 import { prepareSessionTranscriptHydration } from "./session-transcript-hydration.js";
 import { runWithSessionTranscriptReadFence } from "./session-transcript-read-fence.js";
 
