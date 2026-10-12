@@ -1505,9 +1505,9 @@ const reviewedOperations = new Map([
     [
       {
         tier: "W",
-        operations: ["selectAcpSessionRows"],
+        operations: ["selectAcpSessionRows", "selectAcpSessionRowsByKeys"],
         evidence:
-          "src/acp/runtime/session-meta-list.ts:21 submits acpSessions.list → src/state/openclaw-state-read.worker.ts:264.",
+          "session-meta-list.ts submits acpSessions.list to the shared read worker. Batched exact-key reads are called only by session-meta-read.worker.ts; ordinary bundled entry readers await that worker and the deprecated synchronous SDK reader uses its separate single-row operation.",
       },
     ],
   ],
@@ -1787,11 +1787,15 @@ const reviewedOperations = new Map([
           "openPackageActivationJournal.readRow",
           "openPackageActivationJournal.transition",
           "openPackageActivationJournal.replaceCompleted",
+          "openJournal.withDatabase.validate",
+          "openJournal.readRow",
+          "openJournal.transition",
+          "openJournal.replaceCompleted",
           "createPackageActivationJournal",
           "createPackageActivationJournal.verifyPrivate",
         ],
         evidence:
-          "CLI admission/status: src/cli/update-cli/update-command-run.ts:208, status.ts:240. Guarded swap: update-command-package.ts:542,645 → src/infra/package-update-swap.ts:342,356 → package-update-activation-prepare.ts:189,298; standalone recovery package-update-activation-sealed.ts:39,62,63.",
+          "CLI admission/status: src/cli/update-cli/update-command-run.ts:208, status.ts:240. Guarded swap: update-command-package.ts:542,645 → src/infra/package-update-swap.ts:342,356 → package-update-activation-prepare.ts:189,298; standalone recovery package-update-activation-sealed.ts opens strict or settlement-only inspection through openJournal; both are cold CLI-only paths with unchanged SQL operations.",
       },
     ],
   ],

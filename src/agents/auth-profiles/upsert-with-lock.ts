@@ -4,20 +4,32 @@ import { normalizeProviderId } from "@openclaw/model-catalog-core/provider-id";
 import { normalizeAuthProfileCredential } from "./credential-normalize.js";
 import { withOAuthProfileLock, withOAuthProfileLocks } from "./oauth-profile-lock.js";
 import { isOAuthRefreshFence, isSameOAuthRefreshGeneration } from "./oauth-refresh-marker.js";
-import { resolveSharedMainAuthAgentDir } from "./shared-main-dir.js";
-import {
-  findPersistedAuthProfileCredentialAsync,
-  updateAuthProfileStoreWithLock,
-} from "./store-runtime.js";
+import { loadPersistedAuthProfileStore, loadPersistedSharedAuthProfileStore } from "./persisted.js";
+import { updateAuthProfileStoreWithLock } from "./store-runtime.js";
 import { publishAuthProfileStoreUpdate } from "./store-update-publication.js";
 import { runAuthProfileStoreUpdate } from "./store-update.js";
-import { getScopedAuthProfileEnv, withAuthProfileStoreAgentDir } from "./store.js";
+import { findPersistedAuthProfileCredential, getScopedAuthProfileEnv } from "./store.js";
 import type {
   AuthProfileCredential,
   AuthProfileStore,
+  OAuthCredential,
   PreparedAuthProfileStoreOwner,
 } from "./types.js";
 import { resetAuthProfileFailureState } from "./usage-state.js";
+
+function loadAuthProfileWriteTarget(params: {
+  agentDir?: string;
+  stateDir?: string;
+}): AuthProfileStore | null {
+  if (params.agentDir || !params.stateDir) {
+    return loadPersistedAuthProfileStore(params.agentDir);
+  }
+  return loadPersistedSharedAuthProfileStore({
+    ...process.env,
+    OPENCLAW_STATE_DIR: params.stateDir,
+    OPENCLAW_AGENT_DIR: undefined,
+  });
+}
 
 function resolveAuthProfileWriteEnv(params: { stateDir?: string }): NodeJS.ProcessEnv {
   return params.stateDir
@@ -25,19 +37,44 @@ function resolveAuthProfileWriteEnv(params: { stateDir?: string }): NodeJS.Proce
     : (getScopedAuthProfileEnv() ?? process.env);
 }
 
-async function loadAuthProfileWriteAuthority(
+function loadAuthProfileWriteAuthorities(
   params: { agentDir?: string; stateDir?: string },
-  profileId: string,
-): Promise<AuthProfileCredential | undefined> {
-  const read = () =>
-    findPersistedAuthProfileCredentialAsync({ agentDir: params.agentDir, profileId });
-  if (!params.stateDir) {
-    return read();
+  profileIds: readonly string[],
+): ReadonlyMap<string, AuthProfileCredential | undefined> {
+  if (profileIds.length === 0) {
+    return new Map();
   }
-  return withAuthProfileStoreAgentDir(
-    params.agentDir ?? resolveSharedMainAuthAgentDir(resolveAuthProfileWriteEnv(params)),
-    params.stateDir,
-    read,
+  const target = loadAuthProfileWriteTarget(params);
+  const missingIds = profileIds.filter((profileId) => !target?.profiles[profileId]);
+  let inherited: ReadonlyMap<string, AuthProfileCredential | undefined> | undefined;
+  if (params.agentDir && missingIds.length > 0) {
+    if (params.stateDir) {
+      const shared = loadAuthProfileWriteTarget({ stateDir: params.stateDir });
+      inherited = new Map(missingIds.map((profileId) => [profileId, shared?.profiles[profileId]]));
+    } else {
+      inherited = new Map(
+        missingIds.map((profileId) => [
+          profileId,
+          findPersistedAuthProfileCredential({ agentDir: params.agentDir, profileId }),
+        ]),
+      );
+    }
+  }
+  return new Map(
+    profileIds.map((profileId) => [
+      profileId,
+      target?.profiles[profileId] ?? inherited?.get(profileId),
+    ]),
+  );
+}
+
+function needsOAuthRefreshAuthority(
+  credential: AuthProfileCredential,
+): credential is OAuthCredential {
+  return (
+    credential.type === "oauth" &&
+    credential.copyToAgents !== true &&
+    !isOAuthRefreshFence(credential)
   );
 }
 
@@ -49,11 +86,7 @@ function rejectsOAuthRefreshGenerationReplacement(params: {
   incoming: AuthProfileCredential;
   allowOAuthGenerationReplacement: boolean;
 }): boolean {
-  if (
-    params.incoming.type !== "oauth" ||
-    params.incoming.copyToAgents === true ||
-    isOAuthRefreshFence(params.incoming)
-  ) {
+  if (!needsOAuthRefreshAuthority(params.incoming)) {
     return false;
   }
   let supersedes: boolean;
@@ -133,19 +166,12 @@ export async function persistAuthProfileBatch(
     const result = { unrevertedProfileIds: new Set<string>() };
     return { rollback: async () => result };
   }
-  const observedProfiles = new Map(
-    await Promise.all(
-      [...profiles].flatMap(([profileId, entry]) =>
-        entry.credential.type === "oauth"
-          ? [
-              loadAuthProfileWriteAuthority(params, profileId).then(
-                (credential) => [profileId, credential] as const,
-              ),
-            ]
-          : [],
-      ),
-    ),
-  );
+  const authorityProfileIds = [...profiles.entries()]
+    .filter(([, entry]) => needsOAuthRefreshAuthority(entry.credential))
+    .map(([profileId]) => profileId);
+  const readAuthorities = () => loadAuthProfileWriteAuthorities(params, authorityProfileIds);
+  // Capture before yielding so a queued batch cannot restore an OAuth generation consumed while waiting.
+  const observedProfiles = readAuthorities();
 
   return await withOAuthProfileLocks(
     [...profiles.entries()].flatMap(([profileId, entry]) =>
@@ -335,6 +361,7 @@ type AuthProfileUpsertParams = {
   validateCurrentCredential?: (credential: AuthProfileCredential | undefined) => void;
   assertCurrent?: () => void;
   preserveApiKeyMetadata?: boolean;
+  resetFailureState?: boolean;
   credential: AuthProfileCredential;
   agentDir?: string;
   stateDir?: string;
@@ -345,10 +372,9 @@ export async function upsertAuthProfileWithLock(
   params: AuthProfileUpsertParams,
 ): Promise<AuthProfileStore | null> {
   const credential = normalizeAuthProfileCredential(params.credential);
-  const observed =
-    credential.type === "oauth"
-      ? await loadAuthProfileWriteAuthority(params, params.profileId)
-      : undefined;
+  const observed = needsOAuthRefreshAuthority(credential)
+    ? loadAuthProfileWriteAuthorities(params, [params.profileId]).get(params.profileId)
+    : undefined;
   let rejectedFencedGeneration = false;
   const update = async () => {
     return await updateAuthProfileStoreWithLock({
@@ -392,6 +418,10 @@ export async function upsertAuthProfileWithLock(
           store.profiles[params.profileId] = { ...metadata, ...credential };
         } else {
           store.profiles[params.profileId] = credential;
+        }
+        const existingStats = store.usageStats?.[params.profileId];
+        if (params.resetFailureState && store.usageStats && existingStats) {
+          store.usageStats[params.profileId] = resetAuthProfileFailureState(existingStats);
         }
         return true;
       },

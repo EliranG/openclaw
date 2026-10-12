@@ -280,8 +280,8 @@ reuses the database owner's admitted table and index facts.
 Durable Board writes with ordinary request callbacks use the existing worker.
 Cross-store source authority and native incognito retain their explicit native
 adapter. Board reads inside a transaction reuse its snapshot without a nested
-savepoint. Ambient-watch preparation uses the existing read worker; its unused
-synchronous reader is removed.
+savepoint. Ambient-watch preparation uses the existing read worker; the released
+synchronous prompt adapter remains deprecated with a runtime warning.
 
 Plugin metadata reads, including retained artifact snapshots, use the shared read
 worker. Opening a database no longer reloads Claw provenance: explicit config
@@ -300,6 +300,22 @@ Released synchronous SDK and unbound native incognito owners remain explicit
 inventory debt, including config health, pairing allowlists, skill-library
 selection, upstream links, and native session reset. Schema, stored formats,
 retention, and update behavior are unchanged.
+
+Bundled ACP readers use the existing metadata worker. Session patches reuse one
+metadata result, and sends reuse their prepared result unless they create a new
+target. The worker applies lifecycle filtering once. Model catalog creation,
+refresh, and disk-backed provider removal have asynchronous SDK replacements;
+captured in-memory catalogs keep their immediate behavior. Auth profile batch
+updates and compensation use the auth worker, while ordinary labels and CLI
+fingerprints await prepared reads.
+
+Native binding leases pin committed plugin-state facts for their lifetime and
+consume writer receipts at their final effect checks. A confirmed compound
+rollback refreshes those facts once through the existing settlement path.
+Claw config preparation similarly reuses committed provenance until lifecycle
+invalidation. External database writes while the Gateway owns state are not
+observed. Deprecated SDK adapters, native incognito, and atomic credential or
+deletion effects retain their explicitly inventoried synchronous paths.
 
 Config set, patch, and unset commands require exclusive offline ownership. Stop
 the Gateway through its service owner before editing config with these commands.
@@ -5785,6 +5801,9 @@ Worker-owned retirement cleanup borrows its retained executor instead of acquiri
 a native read candidate. The exact cleanup scope rechecks host liveness, while
 worker grants keep the durable journal and lease checks. Ordinary cold reads keep
 the native read-candidate owner and its existing release ordering.
+Only a store owned by the deleted agent receives an exclusive cleanup executor.
+Purging that agent's entries from a surviving agent's shared store borrows the
+survivor's admitted owner without closing it or cancelling its other borrowers.
 
 OAuth peer fencing, restoration, and settlement use the existing auth reader and
 agent writer. Discovery retains each candidate's physical database identity,
