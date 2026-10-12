@@ -178,7 +178,12 @@ impl Observation {
             && self.text("/service/runtimeIntent/pin/runtime") == Some("bun")
             && self
                 .text("/service/runtimeIntent/pin/path")
-                .is_some_and(|path| Path::new(path) == runtime.bun)
+                .is_some_and(|path| {
+                    Path::new(path) == runtime.bun
+                        || (cfg!(target_os = "windows")
+                            && fs::canonicalize(path).ok().as_deref()
+                                == Some(runtime.bun.as_path()))
+                })
             && self.flag("/service/loaded") == Some(true)
             && self.text("/service/targetRole") == Some("target")
             && self.text("/service/runtime/status") == Some("running")
@@ -647,7 +652,7 @@ fn render(launcher: &Launcher) -> Result<Vec<u8>, String> {
         })
         .transpose()?
         .unwrap_or_default();
-    Ok(format!("@setlocal DisableDelayedExpansion\r\n{MARKER}{}\r\n@set OPENCLAW_SQLITE_LIBRARY=\r\n@set LD_LIBRARY_PATH=\r\n{sqlite}@{} --no-install {} %*\r\n@exit /b %errorlevel%\r\n",
+    Ok(format!("@setlocal DisableDelayedExpansion\r\n{MARKER}{}\r\n@chcp 65001 >nul\r\n@set OPENCLAW_SQLITE_LIBRARY=\r\n@set LD_LIBRARY_PATH=\r\n{sqlite}@{} --no-install {} %*\r\n@exit /b %errorlevel%\r\n",
         serde_json::to_string(launcher).map_err(|error| error.to_string())?,
         cmd_quote(&launcher.runtime.bun)?, cmd_quote(&launcher.entry)?).into_bytes())
 }
@@ -671,3 +676,7 @@ fn check_current(is_current: &dyn Fn() -> bool) -> Result<(), String> {
 #[cfg(all(test, unix))]
 #[path = "runtime_action_tests.rs"]
 mod tests;
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "runtime_action_windows_tests.rs"]
+mod windows_tests;
