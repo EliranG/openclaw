@@ -62,8 +62,6 @@ export async function patchSessionEntryInWorker(params: {
   assertCommitAllowed?: () => void;
   shouldCommit?: () => boolean;
   guard?: SessionEntryPatchGuard;
-  assertCommitAllowed?: () => void;
-  shouldCommit?: () => boolean;
   preparedSource?: PreparedSessionSourceAuthority;
   reduction?: SessionEntryPatchReduction;
   prepare(snapshot: SqliteLifecycleTargetSnapshot): Promise<SessionEntryPatchCommit | undefined>;
@@ -103,7 +101,6 @@ export async function patchSessionEntryInWorker(params: {
         params.guard?.assertCurrent?.();
         source?.assertCurrent();
         params.guard?.assertMutationAllowed?.();
-        params.assertCommitAllowed?.();
         if (ensureIdentitySource) {
           if (!transactionFacts) {
             throw new Error("Entry ensure omitted its transaction authority facts");
@@ -165,7 +162,7 @@ export async function patchSessionEntryInWorker(params: {
         }),
     async run(worker, commit) {
       const prepared = input;
-      if (!prepared || params.shouldCommit?.() === false) {
+      if (!prepared) {
         return { entry: null, wrote: false };
       }
       if (source) {

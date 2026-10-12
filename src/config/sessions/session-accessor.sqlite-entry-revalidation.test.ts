@@ -4,7 +4,7 @@ import { setImmediate } from "node:timers/promises";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTempDirTracker } from "../../../test/helpers/temp-dir.js";
 import { openNodeSqliteDatabase } from "../../infra/node-sqlite.js";
-import { setSqliteBusyTimeout } from "../../infra/sqlite-busy-timeout.js";
+import { readSqliteBusyTimeout, setSqliteBusyTimeout } from "../../infra/sqlite-busy-timeout.js";
 import { withSqlitePostCommitPublications } from "../../infra/sqlite-post-commit.js";
 import { admitSqliteSchema } from "../../infra/sqlite-schema-facts.js";
 import {
