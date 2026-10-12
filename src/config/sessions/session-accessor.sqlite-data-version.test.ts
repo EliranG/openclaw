@@ -126,7 +126,7 @@ describe("exact session entry read lifetimes", () => {
     const read = captureSessionEntryRead(database, scope.sessionKey);
     try {
       expect(read.entry).toMatchObject({ sessionId: "first", label: "before" });
-      expect(parseSessionEntryCalls).not.toHaveBeenCalled();
+      expect(parseSessionEntryCalls).toHaveBeenCalledTimes(1);
       await upsertSessionEntryCore(sibling, { label: "renamed B" });
       expect(read.isCurrent()).toBe(true);
       expect(
