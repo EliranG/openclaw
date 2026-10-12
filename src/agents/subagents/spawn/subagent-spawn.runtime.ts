@@ -35,4 +35,7 @@ export {
 } from "../../../utils/delivery-context.shared.js";
 export { resolveAgentConfig } from "../../agent-scope.js";
 export { AGENT_LANE_SUBAGENT } from "../../lanes.js";
-export { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
+export {
+  resolveSandboxRuntimeStatus,
+  withSandboxRuntimeStatusInWorker,
+} from "../../sandbox/runtime-status.js";

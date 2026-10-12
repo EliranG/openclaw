@@ -444,6 +444,19 @@ export async function loadSubagentSpawnModuleForTest(params: {
     resolveAgentConfig: params.resolveAgentConfig ?? (() => undefined),
     resolveSandboxRuntimeStatus:
       params.resolveSandboxRuntimeStatus ?? (() => ({ sandboxed: false })),
+    withSandboxRuntimeStatusInWorker: async (
+      input: Parameters<
+        typeof import("../../sandbox/runtime-status.js").withSandboxRuntimeStatusInWorker
+      >[0],
+      source: { assertCurrent(): void },
+      consume: (runtime: { sandboxed: boolean }) => Promise<unknown>,
+    ) => {
+      source.assertCurrent();
+      const runtime = params.resolveSandboxRuntimeStatus?.(input) ?? { sandboxed: false };
+      const result = await consume(runtime);
+      source.assertCurrent();
+      return result;
+    },
   }));
 
   vi.doMock("./subagent-depth.js", () => ({

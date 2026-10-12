@@ -17,8 +17,13 @@ import { prepareCronRunReceiptWriteSchema } from "./run-receipt-write-admission.
 import type {
   CronRunReceiptHandle,
   CronRunReceiptOwnerObservation,
-  PreparedCronRunReceiptClaim,
+  PreparedCronRunReceiptAdjudication,
 } from "./run-receipt.types.js";
+
+type PreparedCronRunReceiptClaim = PreparedCronRunReceiptAdjudication & {
+  handle: CronRunReceiptHandle;
+  requestRunId?: string;
+};
 
 export function inspectActiveCronRunReceipt(params: { storePath: string; jobId: string }) {
   return runOpenClawStateWriteTransaction(({ db }) =>

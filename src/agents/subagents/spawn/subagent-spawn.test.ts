@@ -2,6 +2,10 @@ import os from "node:os";
 import { createRequireRecord } from "openclaw/plugin-sdk/test-fixtures";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDeferred } from "../../../../test/helpers/promise.js";
+import {
+  isSessionEntryDataSql,
+  observeHostDataSql,
+} from "../../../../test/helpers/sqlite-statement-execution-counter.js";
 import { upsertSessionEntryCore } from "../../../config/sessions/session-accessor.js";
 import {
   captureExternalSessionCommitGuard,
@@ -12,7 +16,10 @@ import type { OpenClawConfig } from "../../../config/types.openclaw.js";
 import type { DispatchGatewayMethodInProcessOptions } from "../../../gateway/server-plugin-in-process-dispatch.types.js";
 import { withOpenClawTestState } from "../../../test-utils/openclaw-test-state.js";
 import { resolveUserPath } from "../../../utils.js";
-import { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
+import {
+  resolveSandboxRuntimeStatus,
+  withSandboxRuntimeStatusInWorker,
+} from "../../sandbox/runtime-status.js";
 import { installAcceptedSubagentGatewayMock } from "../../test-helpers/subagent-gateway.js";
 import type { RegisterSubagentRunOptions } from "../registry/subagent-registry.types.js";
 import { testing as swarmSchedulerTesting } from "../swarm/swarm-scheduler.test-support.js";
@@ -175,15 +182,11 @@ describe("spawnSubagentDirect seam flow", () => {
           return { runId: "run-1", status: "accepted" };
         },
       );
-      const result = await spawn(
-        { task: "preserve parent authority" },
-        {
-          assertActive: Object.assign(assertCurrent, {
-            nativeSource,
-            prepareSessionSource: async () => ({ nativeSource, checks: [], assertCurrent }),
-          }),
-        },
-      );
+      const assertActive = Object.assign(assertCurrent, {
+        nativeSource,
+        prepareSessionSource: async () => ({ nativeSource, checks: [], assertCurrent }),
+      });
+      const result = await spawn({ task: "preserve parent authority" }, { assertActive });
       expect(result.status).toBe("accepted");
       expect(forwarded?.nativeSource).toBe(nativeSource);
       current = false;
@@ -913,7 +916,7 @@ describe("spawnSubagentDirect seam flow", () => {
     { required: false, source: "profile", sandbox: "inherit" },
     { required: true, source: "profile", sandbox: "require" },
   ] as const)(
-    "inherits native child $source provenance from a required parent ($required) with sandbox=$sandbox",
+    "inherits native child $source provenance without host session SQL ($required) with sandbox=$sandbox",
     async ({ required, source, sandbox }) => {
       await withOpenClawTestState({ prefix: "openclaw-spawn-required-parent-" }, async (state) => {
         const storePath = state.statePath("agents", "main", "sessions", "sessions.json");
@@ -945,19 +948,28 @@ describe("spawnSubagentDirect seam flow", () => {
           },
         });
 
-        const result = await spawn(
-          { task: "continue under the parent's isolation policy", sandbox },
-          { agentSessionKey: parentSessionKey },
-        );
+        const workerRead = vi
+          .spyOn(await import("./subagent-spawn.runtime.js"), "withSandboxRuntimeStatusInWorker")
+          .mockImplementation(withSandboxRuntimeStatusInWorker);
+        const sql = observeHostDataSql();
+        try {
+          const result = await spawn(
+            { task: "continue under the parent's isolation policy", sandbox },
+            { agentSessionKey: parentSessionKey },
+          );
 
-        expect(result.status).toBe("accepted");
-        const entry = persistedStore?.[result.childSessionKey as string];
-        expect(entry).toMatchObject({
-          createdVia: "spawn",
-          createdActor: required ? actor : { type: "agent", id: "main" },
-          parentSessionKey,
-        });
-        expect(entry?.sandbox).toBe(required ? "required" : undefined);
+          expect(result.status).toBe("accepted");
+          expect(persistedStore?.[result.childSessionKey as string]).toMatchObject({
+            createdVia: "spawn",
+            createdActor: required ? actor : { type: "agent", id: "main" },
+            parentSessionKey,
+            sandbox: required ? "required" : undefined,
+          });
+          expect(sql.queries.filter(isSessionEntryDataSql)).toEqual([]);
+        } finally {
+          sql.restore();
+          workerRead.mockRestore();
+        }
       });
     },
   );
