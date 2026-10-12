@@ -2,7 +2,7 @@
 
 import { html, nothing, render } from "lit";
 import { AsyncDirective, directive } from "lit/async-directive.js";
-import { Show, createMemo, createSignal, onCleanup } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { mountSolid } from "../test-helpers/mount-solid.ts";
 import { flush } from "../test-helpers/solid-settle.ts";
@@ -233,6 +233,49 @@ describe("Lit and Solid content boundaries", () => {
     } finally {
       render(nothing, container);
       container.remove();
+    }
+  });
+
+  it("remounts an unowned Lit directive reconnected by a Solid effect", async () => {
+    const disposed = vi.fn();
+    function Content() {
+      onCleanup(disposed);
+      return <button type="button">Restored content</button>;
+    }
+    const container = document.body.appendChild(document.createElement("div"));
+    const part = render(html`${solidContent(Content, {})}`, container);
+    const original = container.querySelector("button")!;
+    container.remove();
+    part.setConnected(false);
+    await Promise.resolve();
+    expect(disposed).toHaveBeenCalledOnce();
+
+    const [connected, setConnected] = createSignal(false);
+    const view = mountSolid(() => {
+      createEffect(connected, (active) => {
+        if (active) {
+          document.body.append(container);
+          part.setConnected(true);
+        }
+      });
+      return null;
+    });
+    try {
+      setConnected(true);
+      expect(() => flush()).not.toThrow();
+      await Promise.resolve();
+      const restored = container.querySelector("button")!;
+      expect(restored.textContent).toBe("Restored content");
+      expect(restored).not.toBe(original);
+      expect(disposed).toHaveBeenCalledOnce();
+
+      render(nothing, container);
+      await Promise.resolve();
+      expect(disposed).toHaveBeenCalledTimes(2);
+    } finally {
+      render(nothing, container);
+      container.remove();
+      view.unmount();
     }
   });
 

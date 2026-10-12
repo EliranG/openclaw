@@ -5,6 +5,7 @@ import { Compile } from "typebox/compile";
 import { describe, expect, vi } from "vitest";
 import { ChannelsPairingListResultSchema } from "../../../packages/gateway-protocol/src/schema/channel-pairing.ts";
 import { ChannelsStatusResultSchema } from "../../../packages/gateway-protocol/src/schema/channels.ts";
+import { MigrationProtocolSchemas } from "../../../packages/gateway-protocol/src/schema/migrations.ts";
 import {
   PluginsCatalogBrowseResultSchema,
   PluginsCatalogCategoriesResultSchema,
@@ -52,6 +53,22 @@ it("serves protocol-valid empty plugin discovery defaults", async ({ gatewayPage
   const catalog = await request("plugin-catalog", "plugins.catalog.browse", {});
   expect(Compile(PluginsCatalogBrowseResultSchema).Check(catalog)).toBe(true);
   expect(catalog.items).toEqual([]);
+});
+
+it("serves protocol-valid empty memory plans for the requested agent", async ({ gatewayPage }) => {
+  gatewayPage.execute(createControlUiMockGatewayInitScript());
+  const { request } = gatewayPage.connect();
+  await flushMockTimers();
+  const validate = Compile(MigrationProtocolSchemas.MigrationsMemoryPlanResult);
+
+  for (const agentId of ["main", "research"]) {
+    const plan = await request(`memory-plan-${agentId}`, "migrations.memory.plan", { agentId });
+    expect(validate.Check(plan)).toBe(true);
+    expect(plan).toMatchObject({ agentId, providers: [] });
+  }
+  const fallback = await request("memory-plan-default", "migrations.memory.plan", {});
+  expect(validate.Check(fallback)).toBe(true);
+  expect(fallback.agentId).toBe("main");
 });
 
 it("keeps handler responses and events on the requesting socket", async ({ gatewayPage }) => {

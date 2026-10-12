@@ -167,6 +167,7 @@ class SolidContent extends AsyncDirective {
   private dispose?: () => void;
   private roots = currentLitRoots;
   private root?: NestedSolidRoot;
+  private remountQueued = false;
 
   render(_component: Component<Record<string, unknown>>, _props: Record<string, unknown>) {
     return this.element ?? nothing;
@@ -259,8 +260,15 @@ class SolidContent extends AsyncDirective {
     if (this.dispose) {
       this.updateProps?.(this.props);
       this.updatePresented?.(true);
-    } else {
-      this.mount();
+    } else if (!this.remountQueued) {
+      this.remountQueued = true;
+      // Lit can reconnect an unowned directive during a Solid effect callback.
+      queueMicrotask(() => {
+        this.remountQueued = false;
+        if (this.isConnected && !this.dispose) {
+          this.mount();
+        }
+      });
     }
   }
 }
