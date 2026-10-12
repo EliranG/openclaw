@@ -77,13 +77,16 @@ type Reply = {
 describe("plugin SDK sandbox process ownership", () => {
   it("refuses foreign live-owner mutations while preserving disabled and standalone SDK calls", async () => {
     const root = roots.make("openclaw-sdk-state-owner-");
+    const bunCache = roots.make("openclaw-sdk-state-owner-bun-cache-");
     vi.stubEnv("HOME", root);
     vi.stubEnv("USERPROFILE", root);
+    vi.stubEnv("BUN_INSTALL_CACHE_DIR", bunCache);
     const env = {
       PATH: process.env.PATH,
       SystemRoot: process.env.SystemRoot,
       HOME: root,
       USERPROFILE: root,
+      BUN_INSTALL_CACHE_DIR: bunCache,
       OPENCLAW_HOME: root,
       OPENCLAW_STATE_DIR: path.join(root, "state"),
       OPENCLAW_CONFIG_PATH: path.join(root, "openclaw.json"),

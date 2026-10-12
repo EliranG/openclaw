@@ -109,6 +109,7 @@ export type PendingAgentDatabaseOpen = {
   operations: number;
   releaseBorrow?: () => void;
   validation?: OpenClawAgentDatabaseValidation;
+  integrityRevoked?: boolean;
   workerPrepared?: boolean;
 };
 type RetainedAgentDatabaseClose = { agentId: string; path: string; close: () => void };

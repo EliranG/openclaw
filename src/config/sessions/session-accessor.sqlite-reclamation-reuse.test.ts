@@ -128,6 +128,7 @@ test.each(["two-leases-missing", "revoked-after-open", "revoked-during-open"] as
   async (proof) => {
     const { database, options, plans, scopes } = createFixture(["victim"]);
     closeOpenClawAgentDatabasesForTest(options.env.OPENCLAW_STATE_DIR);
+    validation.admissionPath = database.path;
     const { source, wasRevokedDuringOpen } = createNativeReclamationSource(
       { database, options },
       proof === "revoked-during-open",
@@ -259,6 +260,7 @@ test.each([
     const fixture = createFixture(undefined, agentId);
     const { options, database, plans, scopes } = fixture;
     invalidateOpenClawAgentDatabaseValidation(database.path);
+    validation.admissionPath = database.path;
     const leases = observeReclamationLeaseReceipts(database);
     const spawned = observeReclamationWorkers(leases.onSpawn);
     const context = new AsyncLocalStorage<number>();
@@ -478,6 +480,7 @@ test("joins explicit Worker retirement before opening a different agent store", 
   const second = createFixture();
   invalidateOpenClawAgentDatabaseValidation(first.database.path);
   invalidateOpenClawAgentDatabaseValidation(second.database.path);
+  validation.admissionPath = first.database.path;
   const closeEntered = createDeferredCore();
   let closeRetained: (() => Promise<void>) | undefined;
   const withWorker = reclamationWorker.withSqliteReclamationWorker;
@@ -512,6 +515,7 @@ test("joins explicit Worker retirement before opening a different agent store", 
     }
   });
   await runSqliteSessionReclamation({ forceInProcess: false, plan: first.plans[0]! });
+  validation.admissionPath = second.database.path;
   expect(leasesFor(first)).toHaveLength(2);
   const previous = spawned[0];
   const survivor = first.scopes[1];
@@ -658,6 +662,7 @@ test.each(["idle", "active"] as const)(
 test("retires after thirty idle minutes and opens a new Worker for the next request", async () => {
   const fixture = createFixture(["first", "second", "third"]);
   invalidateOpenClawAgentDatabaseValidation(fixture.database.path);
+  validation.admissionPath = fixture.database.path;
   const spawned = observeReclamationWorkers();
   await runSqliteSessionReclamation({ forceInProcess: false, plan: fixture.plans[0]! });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldClearNativeTimers: true });

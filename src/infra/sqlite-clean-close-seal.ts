@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import fs, { type BigIntStats } from "node:fs";
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { hasErrnoCode } from "./errno.js";
 import { readDatabaseIdentityBirthtime } from "./sqlite-worker-identity.js";
 
@@ -48,24 +49,17 @@ export function readSqliteCleanCloseSeal(
     }
     const envelope: unknown = JSON.parse(fs.readFileSync(sealPath, "utf8"));
     if (
-      !envelope ||
-      typeof envelope !== "object" ||
-      !("payload" in envelope) ||
+      !isRecord(envelope) ||
       typeof envelope.payload !== "string" ||
-      !("checksum" in envelope) ||
       envelope.checksum !== checksum(envelope.payload)
     ) {
       return undefined;
     }
     const payload: unknown = JSON.parse(envelope.payload);
     if (
-      !payload ||
-      typeof payload !== "object" ||
-      !("version" in payload) ||
+      !isRecord(payload) ||
       payload.version !== 1 ||
-      !("schemaIdentity" in payload) ||
       payload.schemaIdentity !== schemaIdentity ||
-      !("verifiedAt" in payload) ||
       typeof payload.verifiedAt !== "number" ||
       !Number.isSafeInteger(payload.verifiedAt) ||
       !("facts" in payload) ||
@@ -77,9 +71,7 @@ export function readSqliteCleanCloseSeal(
     if (
       age < 0 ||
       age > fullVerificationIntervalMs ||
-      !Object.entries(fileFields(file)).every(
-        ([key, value]) => key in payload && Reflect.get(payload, key) === value,
-      ) ||
+      !Object.entries(fileFields(file)).every(([key, value]) => payload[key] === value) ||
       !hasNoJournal(pathname)
     ) {
       return undefined;

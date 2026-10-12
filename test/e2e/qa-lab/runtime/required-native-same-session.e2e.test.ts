@@ -433,7 +433,7 @@ it.skipIf(process.platform === "win32")(
             let aClaim: string | undefined;
             let aRun: string | undefined;
             let bRun: string | undefined;
-            let aDone = false;
+            let aTerminal: AgentJobTerminalSnapshot | undefined;
             let sawPending = false;
             let finishReleased = false;
             let sawClear = false;
@@ -544,7 +544,7 @@ it.skipIf(process.platform === "win32")(
             };
             await send(key, markers.A);
             const aWait = wait(markers.A).then((value) => {
-              aDone = true;
+              aTerminal = value;
               if (value.status !== "ok") {
                 observationFailure.reject(new Error("A agent.wait: " + JSON.stringify(value)));
               }
@@ -576,7 +576,7 @@ it.skipIf(process.platform === "win32")(
             expect(
               committed.messages.some((message) => wireMessageText(message) === markers.A),
             ).toBe(true);
-            expect(aDone).toBe(false);
+            expect(aTerminal).toBeUndefined();
             const placed = readSettlement(gateway, key).placement!;
             if (retained) {
               expect(placed.session_id).toBe(retained.session_id);
@@ -623,7 +623,7 @@ it.skipIf(process.platform === "win32")(
             }
             continueQuiesce.resolve();
             await checkpoint(atResume.promise, "A never accepted its unchanged workspace result");
-            expect(aDone).toBe(false);
+            expect(aTerminal).toBeUndefined();
             finishReleased = true;
             continueResume.resolve();
             expect(await aWait).toMatchObject({ status: "ok" });

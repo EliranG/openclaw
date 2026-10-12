@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import type { DatabaseSync } from "node:sqlite";
 import { threadId } from "node:worker_threads";
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { SQLITE_DATABASE_SEAL_SCHEMA } from "../state/openclaw-database-seal-schema.js";
 import {
   invalidateSqliteCleanCloseSeal,
@@ -37,8 +38,12 @@ const sealedKeys = new Set([
 ]);
 
 function encodeSealValue(_key: string, value: unknown): unknown {
-  if (value instanceof Map) return { sealType: "map", entries: [...value] };
-  if (value instanceof Set) return { sealType: "set", entries: [...value] };
+  if (value instanceof Map) {
+    return { sealType: "map", entries: [...value] };
+  }
+  if (value instanceof Set) {
+    return { sealType: "set", entries: [...value] };
+  }
   if (value instanceof SharedArrayBuffer) {
     return { sealType: "shared", entries: [...new Int32Array(value)] };
   }
@@ -46,16 +51,15 @@ function encodeSealValue(_key: string, value: unknown): unknown {
 }
 
 function decodeSealValue(_key: string, value: unknown): unknown {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("sealType" in value) ||
-    !("entries" in value) ||
-    !Array.isArray(value.entries)
-  )
+  if (!isRecord(value) || !Array.isArray(value.entries)) {
     return value;
-  if (value.sealType === "map") return new Map(value.entries);
-  if (value.sealType === "set") return new Set(value.entries);
+  }
+  if (value.sealType === "map") {
+    return new Map(value.entries);
+  }
+  if (value.sealType === "set") {
+    return new Set(value.entries);
+  }
   if (value.sealType === "shared") {
     const shared = new SharedArrayBuffer(value.entries.length * Int32Array.BYTES_PER_ELEMENT);
     new Int32Array(shared).set(value.entries);
@@ -83,15 +87,21 @@ export class SqliteDatabaseCleanCloseSeals {
   load(record: Admission): void {
     // Only descriptor custody can admit restart proof. Workers consume the host's
     // shared facts; rereading a seal there could revive an explicitly revoked fact.
-    if (threadId !== 0) return;
-    if (this.loaded.has(record)) return;
+    if (threadId !== 0) {
+      return;
+    }
+    if (this.loaded.has(record)) {
+      return;
+    }
     this.loaded.add(record);
     const seal = readSqliteCleanCloseSeal(
       record.location,
       SQLITE_DATABASE_SEAL_SCHEMA,
       fs.fstatSync(record.descriptor, { bigint: true }),
     );
-    if (!seal || typeof seal.facts !== "string") return;
+    if (!seal || typeof seal.facts !== "string") {
+      return;
+    }
     try {
       const facts: unknown = JSON.parse(seal.facts, decodeSealValue);
       if (
@@ -109,8 +119,9 @@ export class SqliteDatabaseCleanCloseSeals {
         !facts.some(
           ([name, , value]) => name === schemaAdmission.name && schemaAdmission.read(value),
         )
-      )
+      ) {
         return;
+      }
       for (const [name, schemaDependent, value] of facts) {
         this.publishFact(
           record,
@@ -137,23 +148,31 @@ export class SqliteDatabaseCleanCloseSeals {
     record: Admission | undefined,
     verifiedAt: number | undefined,
   ): () => boolean {
-    if (!record || database.isTransaction) return () => false;
-    if (verifiedAt === undefined) return () => false;
+    if (!record || database.isTransaction) {
+      return () => false;
+    }
+    if (verifiedAt === undefined) {
+      return () => false;
+    }
     const facts = [...record.facts].filter(
       ([name, fact]) => sealedKeys.has(name) && valid(record, fact),
     );
-    if (!facts.some(([name]) => name === "sqlite-schema")) return () => false;
+    if (!facts.some(([name]) => name === "sqlite-schema")) {
+      return () => false;
+    }
     const serialized = JSON.stringify(
       facts.map(([name, fact]) => [name, fact.schemaDependent, fact.value]),
       encodeSealValue,
     );
     return () => {
-      if (database.isOpen || isRetired(record) || facts.some(([, fact]) => !valid(record, fact)))
+      if (database.isOpen || isRetired(record) || facts.some(([, fact]) => !valid(record, fact))) {
         return false;
+      }
       try {
         const file = fs.fstatSync(record.descriptor, { bigint: true });
-        if (identity(fs.statSync(record.location, { bigint: true })) !== record.identity)
+        if (identity(fs.statSync(record.location, { bigint: true })) !== record.identity) {
           return false;
+        }
         const written = writeSqliteCleanCloseSeal(
           record.location,
           SQLITE_DATABASE_SEAL_SCHEMA,

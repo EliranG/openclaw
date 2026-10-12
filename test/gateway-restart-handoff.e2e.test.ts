@@ -1,19 +1,25 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { statSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { afterEach, expect, it } from "vitest";
 import type { GatewayClient } from "../src/gateway/client.js";
 import type { SessionsListResult } from "../src/gateway/session-utils.types.js";
 import { buildMockOpenAiResponsesProvider } from "../src/gateway/test-openai-responses-model.js";
 import { loadOrCreateDeviceIdentity } from "../src/infra/device-identity.js";
+import { resolveLoadedCommitHash } from "../src/infra/git-commit.js";
 import { openNodeSqliteDatabase } from "../src/infra/node-sqlite.js";
 import { writeGatewayRestartIntentSync } from "../src/infra/restart-intent.js";
 import { readSqliteCleanCloseSeal } from "../src/infra/sqlite-clean-close-seal.js";
-import { SQLITE_DATABASE_SEAL_SCHEMA } from "../src/state/openclaw-database-seal-schema.js";
+import { OPENCLAW_AGENT_SCHEMA_SQL } from "../src/state/openclaw-agent-schema.js";
+import { OPENCLAW_STATE_SCHEMA_SQL } from "../src/state/openclaw-state-schema.js";
+import {
+  readBuildIdFromBuildInfoForModuleUrl,
+  resolveVersionFromModuleUrl,
+} from "../src/version.js";
 import { acquireGatewayTestClient } from "./helpers/gateway-client.js";
 import { startGatewayRestartProvider } from "./helpers/gateway-restart-provider.js";
 import {
@@ -305,9 +311,30 @@ it.skipIf(process.platform !== "linux")(
         expect(deadline, instance.logs()).toBeUndefined();
         expect(serviceStop, instance.logs()).toBeDefined();
         expect(serviceStop!.at).toBeLessThanOrEqual(exitedAt);
+        const [entrypoint] = await instance.entrypoint();
+        if (!entrypoint) {
+          throw new Error("Restart proof lost its Gateway artifact entrypoint");
+        }
+        const moduleUrl = pathToFileURL(path.resolve(entrypoint)).href;
+        const version = resolveVersionFromModuleUrl(moduleUrl);
+        if (!version) {
+          throw new Error("Restart proof cannot identify its Gateway artifact version");
+        }
+        // The child runs built artifacts; this source test has a different build identity.
+        // Bind the expected seal to the actual artifact and its canonical schema inputs.
+        const artifactSchema = createHash("sha256")
+          .update(version)
+          .update(
+            readBuildIdFromBuildInfoForModuleUrl(moduleUrl) ??
+              resolveLoadedCommitHash({ moduleUrl }) ??
+              "source",
+          )
+          .update(OPENCLAW_AGENT_SCHEMA_SQL)
+          .update(OPENCLAW_STATE_SCHEMA_SQL)
+          .digest("hex");
         const seal = readSqliteCleanCloseSeal(
           agentPath,
-          SQLITE_DATABASE_SEAL_SCHEMA,
+          artifactSchema,
           statSync(agentPath, { bigint: true }),
         );
         expect(seal).toBeDefined();

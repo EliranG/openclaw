@@ -24,8 +24,10 @@ import { replaceSessionEntrySync } from "../config/sessions/session-accessor.sql
 import { appendTranscriptEventSync } from "../config/sessions/session-accessor.sqlite-transcript-write.test-support.js";
 import { purgeDeletedAgentSessionEntries } from "../config/sessions/session-agent-purge.js";
 import { openNodeSqliteDatabase } from "../infra/node-sqlite.js";
-import { captureSqliteDatabaseAdmissions } from "../infra/sqlite-database-admission.js";
-import { revokeSqliteDatabaseAdmissionsForPath } from "../infra/sqlite-database-admission.js";
+import {
+  captureSqliteDatabaseAdmissions,
+  revokeSqliteDatabaseAdmissionsForPath,
+} from "../infra/sqlite-database-admission.js";
 import { SQLITE_IDLE_HANDLE_TTL_MS } from "../infra/sqlite-handle-lifecycle.js";
 import * as integrityWorker from "../infra/sqlite-integrity-worker.js";
 import * as admission from "../infra/sqlite-worker-operation-admission.js";

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { executeWithCachedStatement } from "./kysely-sync-cache-state.js";
-import type { SqliteDatabaseAdmissionKey } from "./sqlite-database-admission.js";
+import type { SqliteDatabaseAdmissionKey } from "./sqlite-database-admission-record.js";
 import { runSqliteSchemaReadSnapshotSync } from "./sqlite-pinned-read-snapshot.js";
 
 export type SqliteSchemaFacts = {

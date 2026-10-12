@@ -131,7 +131,7 @@ export async function withOpenClawStateDatabaseReadSnapshot<T>(
   const run = async () => {
     let admission: ReturnType<typeof captureOpenClawStateDatabaseReadAdmission>;
     let prepared: AsyncPreparedSqliteReadOnlyLocation;
-    let cleanClose = false;
+    let cleanClose: boolean;
     try {
       // Wait only before capturing private bytes; callbacks and cleanup must never replay.
       admission = await acquireWithWait({

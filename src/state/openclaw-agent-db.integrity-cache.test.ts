@@ -347,7 +347,9 @@ it.each(["invalid seal", "foreign lease"] as const)(
       reopened.db.exec("UPDATE auth_profile_state SET updated_at=2 WHERE state_key='preserved'");
       expect(readSqliteDatabaseCleanClose(original.path)).toBe(false);
     } finally {
-      if (lease) releaseOpenClawAgentDatabaseLease(lease, { env }, "read-only");
+      if (lease) {
+        releaseOpenClawAgentDatabaseLease(lease, { env }, "read-only");
+      }
     }
   },
 );
@@ -407,7 +409,9 @@ it("refuses the first write when its clean-close seal cannot be removed", () => 
   const unlink = fs.unlinkSync;
   const failure = Object.assign(new Error("synthetic seal unlink failed"), { code: "EACCES" });
   const intercepted = vi.spyOn(fs, "unlinkSync").mockImplementation((pathname) => {
-    if (String(pathname) === `${agent.path}.seal`) throw failure;
+    if (String(pathname) === `${agent.path}.seal`) {
+      throw failure;
+    }
     return unlink(pathname);
   });
   try {

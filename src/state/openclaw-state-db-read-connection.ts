@@ -4,6 +4,7 @@ import { isPromiseLike } from "@openclaw/normalization-core/promise-like";
 import { getSqliteRuntimeCapabilities } from "../infra/bun-sqlite-library.js";
 import { enableNodeSqliteKyselyStatementCache } from "../infra/kysely-sync-cache-state.js";
 import { openNodeSqliteDatabase } from "../infra/node-sqlite.js";
+import { resolveSqliteDatabaseFilePath } from "../infra/sqlite-database-admission.js";
 import { isSqliteCorruptionError } from "../infra/sqlite-error-diagnostics.js";
 import { SQLITE_IDLE_HANDLE_TTL_MS } from "../infra/sqlite-handle-lifecycle.js";
 import {
@@ -558,6 +559,7 @@ function openStateReadConnectionResult(
 ): OpenClawStateSettledRead<OpenClawStateReadConnection> {
   const snapshot = typeof source === "string" ? undefined : source;
   const location = typeof source === "string" ? source : source.location;
+  const physicalLocation = resolveSqliteDatabaseFilePath(location);
   // The first catalog read needs the busy handler; installing a later PRAGMA is too late.
   const options = { readOnly: true, timeout: OPENCLAW_SQLITE_BUSY_TIMEOUT_MS };
   let releaseToken: (() => void) | undefined;
@@ -588,7 +590,7 @@ function openStateReadConnectionResult(
   let native: ReturnType<typeof openTrackedStateDatabaseResult>;
   try {
     if (expectedIdentity !== undefined) {
-      assertExistingDatabaseIdentity(location, expectedIdentity);
+      assertExistingDatabaseIdentity(physicalLocation, expectedIdentity);
     }
     releaseToken = snapshotRoot ? acquireSqliteSnapshotReadToken(snapshotRoot) : undefined;
     if (checkSchemaPolicy) {
@@ -665,7 +667,7 @@ function openStateReadConnectionResult(
   try {
     enableNodeSqliteKyselyStatementCache(db);
     if (expectedIdentity !== undefined) {
-      assertExistingDatabaseIdentity(location, expectedIdentity);
+      assertExistingDatabaseIdentity(physicalLocation, expectedIdentity);
     }
   } catch (error) {
     try {
