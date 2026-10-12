@@ -78,8 +78,8 @@ not query refresh-lock state. These changes preserve schema versions, retention,
 stored data, and update compatibility.
 
 Remaining synchronous compatibility debt includes released conversation-binding
-and proxy-capture SDK callbacks, opaque native Web Push guards, and the public
-prepared-workspace acquisition guard. Unbound incognito usage/outcome storage
+and proxy-capture SDK callbacks and the public prepared-workspace acquisition
+guard. Unbound incognito usage/outcome storage
 still belongs to its native process-held database until the incognito actor
 cutover. Hidden GitHub credentials retain their synchronous credential-lifecycle
 owner and current effect checks. Moving these calls requires their owning
@@ -989,6 +989,8 @@ predicates, prepared message bytes, and live authority checks. Committed and
 unknown outcomes never replay. Durable commands retain the physical writer FIFO
 across snapshot selection, command settlement, and the single rebase, so another
 queued writer cannot invalidate the refused postimage before its retry enters.
+Pending-input staging selects its initial lifecycle facts after entering that
+FIFO, so an earlier terminal write cannot make a new input stale before admission.
 Transcript appends and terminal accounting use the same command owner. Message
 preparation and external hooks remain outside this reservation; each native
 transaction still settles before another command starts.
@@ -1532,13 +1534,16 @@ The built-in synchronous `resolveBinding`, `retain`, and `validate` methods now
 throw migration-directed errors; use their awaited replacements. Custom released
 service objects retain their explicitly selected compatibility contract.
 
-Web Push reads, approval delivery operations, and current-subscription cleanup
-have exact worker-only entries; native preferences, subscription upsert/deletion,
-and their shared schema helper remain T1. Prepared-workspace list and mutation
-operations are worker-only, while the synchronous `find` compatibility query
-remains T1. Approval history, insert, pending-list, expiry, and allow-once
-consumption have worker-only entries, including deprecated callback callers.
-Offline full-store reset inventory and
+All Web Push reads and mutations execute through the shared-state worker. The
+Gateway checks current requester and profile authority at the existing worker
+transaction grant, including opaque in-process request callbacks. The profile
+binding is resolved once inside that transaction; subscription-presence facts
+are published directly from synchronous reads and invalidated by write receipts.
+Only the shared additive-column helper also runs in offline legacy migration.
+Prepared-workspace list and mutation operations are worker-only, while the
+synchronous `find` compatibility query remains T1. Approval history, insert,
+pending-list, expiry, and allow-once consumption have worker-only entries,
+including deprecated callback callers. Offline full-store reset inventory and
 archive-reset operations are T3 CLI one-shots, including dev bootstrap; Gateway
 session reset and other archive lifecycle operations are classified separately.
 
