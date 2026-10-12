@@ -38,7 +38,7 @@ export async function readCodexRolloutSnapshot(params: {
     }
   };
   check();
-  const rootStat = await lstat(params.sessionsRoot);
+  const rootStat = await lstat(params.sessionsRoot, { bigint: true });
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
     throw new Error("Codex rollout root is not a verified local directory");
   }
@@ -63,14 +63,14 @@ export async function readCodexRolloutSnapshot(params: {
   }
   try {
     check();
-    const snapshot = opened.stat;
+    const snapshot = await opened.handle.stat({ bigint: true });
     const unchanged = (stat: typeof snapshot) =>
       stat.dev === snapshot.dev &&
       stat.ino === snapshot.ino &&
       stat.size === snapshot.size &&
-      stat.mtimeMs === snapshot.mtimeMs &&
-      stat.ctimeMs === snapshot.ctimeMs &&
-      stat.nlink === 1;
+      stat.mtimeNs === snapshot.mtimeNs &&
+      stat.ctimeNs === snapshot.ctimeNs &&
+      stat.nlink === 1n;
     if (!snapshot.size) {
       throw new Error("Codex rollout metadata is incomplete");
     }
@@ -81,7 +81,7 @@ export async function readCodexRolloutSnapshot(params: {
     const input = opened.handle.createReadStream({
       autoClose: false,
       highWaterMark: CHUNK_BYTES,
-      end: snapshot.size - 1,
+      end: Number(snapshot.size) - 1,
     });
     // Only the first line is decoded; its cap bounds output independently of the
     // compressed input cap and the decoder's 32 MiB window.
@@ -118,7 +118,7 @@ export async function readCodexRolloutSnapshot(params: {
         chunks.push(prefix);
         if (newline >= 0) {
           metadata = parseMetadata(Buffer.concat(chunks), params.threadId);
-          if (!unchanged(await opened.handle.stat())) {
+          if (!unchanged(await opened.handle.stat({ bigint: true }))) {
             throw new Error("Codex rollout changed during metadata observation");
           }
           break;
@@ -150,10 +150,10 @@ export async function readCodexRolloutSnapshot(params: {
     };
     const verifySelected = async () => {
       params.assertCurrent();
-      const currentRoot = await lstat(params.sessionsRoot);
+      const currentRoot = await lstat(params.sessionsRoot, { bigint: true });
       const fresh = await safeRoot.open(path.relative(params.sessionsRoot, selected));
       try {
-        const stat = fresh.stat;
+        const stat = await fresh.handle.stat({ bigint: true });
         if (
           !unchanged(stat) ||
           currentRoot.isSymbolicLink() ||

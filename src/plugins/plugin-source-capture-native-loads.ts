@@ -44,37 +44,39 @@ export function createPluginNativeCaptureCustody(ownedRoots: Set<string>) {
   /** Reclamation owns an existing native token until its captured payload is gone. */
   async function reclaimInstance(
     directory: string,
-    originalDirectory: fs.Stats,
+    originalDirectory: fs.BigIntStats,
     nativeMaintenance?: NativeCaptureMaintenance,
   ): Promise<void> {
     const ownerPath = path.join(directory, SQLITE_STAGING_TOKEN_FILES[0]);
     const family = SQLITE_STAGING_TOKEN_FILES.map((file) =>
-      fs.lstatSync(path.join(directory, file), { throwIfNoEntry: false }),
+      fs.lstatSync(path.join(directory, file), { bigint: true, throwIfNoEntry: false }),
     );
     const originalOwner = family[0];
     const captures = path.join(directory, "captures");
     const captured = fs.lstatSync(captures, { throwIfNoEntry: false });
     if (
-      (process.getuid && originalDirectory.uid !== process.getuid()) ||
+      (process.getuid && originalDirectory.uid !== BigInt(process.getuid())) ||
       !originalOwner ||
       family.some(
         (file) =>
           file &&
-          (!file.isFile() || file.nlink !== 1 || (process.getuid && file.uid !== process.getuid())),
+          (!file.isFile() ||
+            file.nlink !== 1n ||
+            (process.getuid && file.uid !== BigInt(process.getuid()))),
       ) ||
       (captured && !captured.isDirectory())
     ) {
       return;
     }
     const unchanged = () => {
-      const currentDirectory = fs.lstatSync(directory);
-      const currentOwner = fs.lstatSync(ownerPath);
+      const currentDirectory = fs.lstatSync(directory, { bigint: true });
+      const currentOwner = fs.lstatSync(ownerPath, { bigint: true });
       return (
         currentDirectory.dev === originalDirectory.dev &&
         currentDirectory.ino === originalDirectory.ino &&
         currentDirectory.isDirectory() &&
         currentOwner.isFile() &&
-        currentOwner.nlink === 1 &&
+        currentOwner.nlink === 1n &&
         currentOwner.dev === originalOwner.dev &&
         currentOwner.ino === originalOwner.ino
       );

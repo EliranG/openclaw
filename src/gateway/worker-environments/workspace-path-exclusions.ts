@@ -85,15 +85,15 @@ function isStagedInput(relativePath) {
       if (!stats.isDirectory() || stats.isSymbolicLink()) return false;
     }
     const marker = path.join(parent, ".gitignore");
-    const before = fs.lstatSync(marker);
-    if (!before.isFile() || before.nlink !== 1 || before.size !== STAGED_INPUT_GITIGNORE.length) return false;
+    const before = fs.lstatSync(marker, { bigint: true });
+    if (!before.isFile() || before.nlink !== 1n || before.size !== BigInt(STAGED_INPUT_GITIGNORE.length)) return false;
     descriptor = fs.openSync(marker, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
-    const opened = fs.fstatSync(descriptor);
-    if (!opened.isFile() || opened.nlink !== 1 || opened.dev !== before.dev || opened.ino !== before.ino) return false;
+    const opened = fs.fstatSync(descriptor, { bigint: true });
+    if (!opened.isFile() || opened.nlink !== 1n || opened.dev !== before.dev || opened.ino !== before.ino) return false;
     const bytes = Buffer.alloc(STAGED_INPUT_GITIGNORE.length + 1);
     const length = fs.readSync(descriptor, bytes, 0, bytes.length, 0);
-    const after = fs.lstatSync(marker);
-    owned = after.isFile() && after.nlink === 1 && after.dev === opened.dev && after.ino === opened.ino &&
+    const after = fs.lstatSync(marker, { bigint: true });
+    owned = after.isFile() && after.nlink === 1n && after.dev === opened.dev && after.ino === opened.ino &&
       after.mtimeMs === opened.mtimeMs && after.ctimeMs === opened.ctimeMs &&
       fs.realpathSync(marker) === marker && length === STAGED_INPUT_GITIGNORE.length &&
       bytes.subarray(0, length).toString("utf8") === STAGED_INPUT_GITIGNORE;

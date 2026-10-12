@@ -16,7 +16,7 @@ export function createConfigRecoveryStatEffect(
   deps: Pick<NormalizedConfigIoDeps, "fs">,
   configPath: string,
   requireIdentity = false,
-): ConfigRecoveryEffect<fs.Stats | null> {
+): ConfigRecoveryEffect<fs.BigIntStats | null> {
   const unavailable = (error: unknown): null => {
     if (requireIdentity && !hasErrnoCode(error, "ENOENT")) {
       throw error;
@@ -26,12 +26,12 @@ export function createConfigRecoveryStatEffect(
   return {
     sync: () => {
       try {
-        return deps.fs.statSync(configPath, { throwIfNoEntry: false }) ?? null;
+        return deps.fs.statSync(configPath, { bigint: true, throwIfNoEntry: false }) ?? null;
       } catch (error) {
         return unavailable(error);
       }
     },
-    async: () => deps.fs.promises.stat(configPath).catch(unavailable),
+    async: () => deps.fs.promises.stat(configPath, { bigint: true }).catch(unavailable),
   };
 }
 

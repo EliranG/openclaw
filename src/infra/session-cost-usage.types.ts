@@ -15,8 +15,8 @@ export type UsageCostTranscriptFile = {
   size: number;
   mtimeMs: number;
   sessionId?: string;
-  device?: number;
-  inode?: number;
+  device?: string;
+  inode?: string;
   eventCount?: number;
   maxSeq?: number;
 };

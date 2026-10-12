@@ -47,10 +47,13 @@ async function syncDirectory(directory: string): Promise<void> {
 
 async function sameFile(left: string, right: string): Promise<boolean> {
   try {
-    const [leftStat, rightStat] = await Promise.all([fs.stat(left), fs.stat(right)]);
+    const [leftStat, rightStat] = await Promise.all([
+      fs.stat(left, { bigint: true }),
+      fs.stat(right, { bigint: true }),
+    ]);
     return (
-      leftStat.nlink >= 2 &&
-      rightStat.nlink >= 2 &&
+      leftStat.nlink >= 2n &&
+      rightStat.nlink >= 2n &&
       leftStat.dev === rightStat.dev &&
       leftStat.ino === rightStat.ino
     );

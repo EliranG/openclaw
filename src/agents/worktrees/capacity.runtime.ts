@@ -128,8 +128,13 @@ async function commitObjectBytes(
   let cached: { bytes: number; preparationKey?: string } | undefined;
   if (replacements === "") {
     const canonicalRoot = await fs.realpath(repoRoot);
-    const identity = await fs.stat(canonicalRoot);
-    cacheKey = JSON.stringify([canonicalRoot, identity.dev, identity.ino, commit]);
+    const identity = await fs.stat(canonicalRoot, { bigint: true });
+    cacheKey = JSON.stringify([
+      canonicalRoot,
+      identity.dev.toString(),
+      identity.ino.toString(),
+      commit,
+    ]);
     cached = checkoutSizeFacts.get(cacheKey);
     if (cached && preparationKey && cached.preparationKey === preparationKey) {
       return cached.bytes;

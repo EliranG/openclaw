@@ -46,11 +46,12 @@ export function readExtensionRelayToken(env: NodeJS.ProcessEnv = process.env): s
     );
   }
   const uid = process.getuid?.();
+  const expectedUid = uid === undefined ? undefined : BigInt(uid);
   let fd: number | undefined;
   let raw: string;
   try {
-    const before = fs.lstatSync(secretPath);
-    if (!before.isFile() || before.uid !== uid || before.nlink !== 1) {
+    const before = fs.lstatSync(secretPath, { bigint: true });
+    if (!before.isFile() || before.uid !== expectedUid || before.nlink !== 1n) {
       return null;
     }
     // Permission checks, tightening, and reading must concern the same inode.
@@ -59,17 +60,17 @@ export function readExtensionRelayToken(env: NodeJS.ProcessEnv = process.env): s
       secretPath,
       fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
     );
-    const sameFile = (stat: fs.Stats) =>
+    const sameFile = (stat: fs.BigIntStats) =>
       stat.isFile() &&
-      stat.uid === uid &&
-      stat.nlink === 1 &&
+      stat.uid === expectedUid &&
+      stat.nlink === 1n &&
       stat.dev === before.dev &&
       stat.ino === before.ino;
-    const opened = fs.fstatSync(fd);
-    if (!sameFile(opened) || !sameFile(fs.lstatSync(secretPath))) {
+    const opened = fs.fstatSync(fd, { bigint: true });
+    if (!sameFile(opened) || !sameFile(fs.lstatSync(secretPath, { bigint: true }))) {
       return null;
     }
-    if ((opened.mode & 0o077) !== 0) {
+    if ((opened.mode & 0o077n) !== 0n) {
       fs.fchmodSync(fd, PRIVATE_SECRET_FILE_MODE);
       log.warn("tightened extension relay secret permissions to 0600");
     }
@@ -82,12 +83,12 @@ export function readExtensionRelayToken(env: NodeJS.ProcessEnv = process.env): s
       }
       length += count;
     }
-    const after = fs.fstatSync(fd);
+    const after = fs.fstatSync(fd, { bigint: true });
     if (
       length > MAX_RELAY_SECRET_BYTES ||
       !sameFile(after) ||
-      (after.mode & 0o077) !== 0 ||
-      !sameFile(fs.lstatSync(secretPath))
+      (after.mode & 0o077n) !== 0n ||
+      !sameFile(fs.lstatSync(secretPath, { bigint: true }))
     ) {
       return null;
     }

@@ -415,7 +415,7 @@ export async function addManagedWorktree(input: CheckoutOptions): Promise<Checko
     throw new Error("Worktree registration changed during creation; preserve it for recovery.");
   }
   const options = { ...input, base: commit };
-  const destinationIdentity = await fs.lstat(options.destination);
+  const destinationIdentity = await fs.lstat(options.destination, { bigint: true });
   // Native PR owns its seed and partial checkout, including cancellation failures.
   let preserve = Boolean(existingBranch);
   let materializationStarted = false;
@@ -676,7 +676,7 @@ export async function addManagedWorktree(input: CheckoutOptions): Promise<Checko
         failures.push(error);
       } else {
         options.deferUnpreparedCleanup(async (assertCurrent) => {
-          const current = await fs.lstat(options.destination);
+          const current = await fs.lstat(options.destination, { bigint: true });
           if (
             !current.isDirectory() ||
             current.dev !== destinationIdentity.dev ||

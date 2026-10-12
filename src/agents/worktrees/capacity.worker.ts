@@ -55,7 +55,7 @@ function readReservations(payload: Record<string, unknown>): WorktreeVolumeReser
 }
 
 function measureVolumes(demands: readonly { path: string; bytes: number }[]) {
-  const volumes = new Map<number, { path: string; available: number; bytes: number }>();
+  const volumes = new Map<bigint, { path: string; available: number; bytes: number }>();
   for (const demand of demands) {
     const space = tryReadDiskSpace(demand.path);
     if (!space || space.totalBytes === null) {
@@ -63,7 +63,7 @@ function measureVolumes(demands: readonly { path: string; bytes: number }[]) {
         `Cannot determine disk space near ${demand.path}; check the volume and retry worktree allocation.`,
       );
     }
-    const device = statSync(space.checkedPath).dev;
+    const device = statSync(space.checkedPath, { bigint: true }).dev;
     const existing = volumes.get(device);
     if (existing) {
       existing.available = Math.min(existing.available, space.availableBytes);

@@ -8,6 +8,8 @@ import {
 import type { ImmutableInstallRecord } from "./update-immutable-install-schema.js";
 import {
   assertImmutableDescriptorCurrent,
+  assertImmutableDescriptorIdentityEncoding,
+  assertImmutableIdentityEncoding,
   directoryIdentity,
   readImmutableLayout,
 } from "./update-immutable-layout.js";
@@ -18,12 +20,17 @@ export function reconcileImmutablePointer(
   assertCurrent: () => void,
 ): ImmutableInstallRecord {
   assertCurrent();
+  assertImmutableDescriptorIdentityEncoding(record.descriptor);
   const operation = record.activation?.operation;
   const intent = operation?.pointerIntent;
   if (!operation || !intent) {
     assertImmutableDescriptorCurrent(record.descriptor);
     return record;
   }
+  assertImmutableIdentityEncoding(intent.identityEncoding, [
+    intent.fromIdentity,
+    intent.temporaryIdentity,
+  ]);
   const layout = readImmutableLayout(record.descriptor.root);
   if (layout.current.pointerIdentity === intent.fromIdentity) {
     assertImmutableDescriptorCurrent(record.descriptor);
@@ -91,12 +98,12 @@ export function publishImmutablePointer(
   if (!intent) {
     // A crash can leave this operation's link before its intent commits.
     // Reuse only its exact target; an unrelated object remains untouched.
-    const existing = fs.lstatSync(temporary, { throwIfNoEntry: false });
+    const existing = fs.lstatSync(temporary, { bigint: true, throwIfNoEntry: false });
     if (!existing) {
       fs.symlinkSync(`releases/${generation.sha}`, temporary);
     } else if (
       !existing.isSymbolicLink() ||
-      existing.uid !== 0 ||
+      existing.uid !== 0n ||
       fs.readlinkSync(temporary) !== `releases/${generation.sha}`
     ) {
       throw new Error(
@@ -104,8 +111,9 @@ export function publishImmutablePointer(
       );
     }
     requireDirectorySync(syncDirectorySync(root), "Immutable pointer preparation");
-    const stat = fs.lstatSync(temporary);
+    const stat = fs.lstatSync(temporary, { bigint: true });
     intent = {
+      identityEncoding: "exact",
       fromIdentity: current.descriptor.current.pointerIdentity,
       targetSha: generation.sha,
       temporaryIdentity: `${stat.dev}:${stat.ino}`,
@@ -119,10 +127,10 @@ export function publishImmutablePointer(
       assertCurrent,
     );
   }
-  const stat = fs.lstatSync(temporary);
+  const stat = fs.lstatSync(temporary, { bigint: true });
   if (
     !stat.isSymbolicLink() ||
-    stat.uid !== 0 ||
+    stat.uid !== 0n ||
     `${stat.dev}:${stat.ino}` !== intent.temporaryIdentity ||
     intent.targetSha !== generation.sha ||
     fs.readlinkSync(temporary) !== `releases/${generation.sha}`

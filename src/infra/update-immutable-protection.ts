@@ -14,6 +14,7 @@ import {
 import { resolveOpenClawStateSqlitePath } from "../state/openclaw-state-db.paths.js";
 import { sha256Hex } from "./crypto-digest.js";
 import { readDatabasePathIdentitySync } from "./sqlite-worker-identity.js";
+import { assertImmutableIdentityEncoding } from "./update-immutable-layout.js";
 import {
   immutableConfigFingerprintSchema,
   immutableProtectedFileIdentitySchema,
@@ -31,11 +32,19 @@ export type ImmutableProtectionCandidate = {
 };
 
 function fileIdentity(file: string) {
-  const stat = fs.lstatSync(file);
-  if (!stat.isFile() || stat.nlink !== 1) {
+  const stat = fs.lstatSync(file, { bigint: true });
+  if (!stat.isFile() || stat.nlink !== 1n) {
     throw new Error(`Immutable update requires an unshared regular protected file: ${file}`);
   }
-  return immutableProtectedFileIdentitySchema.parse(resolveConfigStatMetadata(stat));
+  const metadata = resolveConfigStatMetadata(stat);
+  return immutableProtectedFileIdentitySchema.parse({
+    dev: metadata?.dev,
+    ino: metadata?.ino,
+    mode: metadata?.mode,
+    nlink: metadata?.nlink,
+    uid: metadata?.uid,
+    gid: metadata?.gid,
+  });
 }
 
 function fingerprint(raw: string, env: NodeJS.ProcessEnv): ConfigFingerprint {
@@ -148,6 +157,10 @@ function readFile(file: ImmutableProtectionSnapshot["config"][number], env: Node
 }
 
 function assertState(snapshot: ImmutableProtectionSnapshot): void {
+  assertImmutableIdentityEncoding(
+    snapshot.identityEncoding,
+    [snapshot.state, ...snapshot.config].map((file) => `${file.identity.dev}:${file.identity.ino}`),
+  );
   const state = snapshot.state;
   assertConfigFileWritePathSnapshot(state.pathProof, fs);
   const current = readDatabasePathIdentitySync(state.path);
@@ -204,6 +217,7 @@ export async function captureImmutableProtection(
   });
   const newest = auditRecords(env)[0];
   const snapshot: ImmutableProtectionSnapshot = {
+    identityEncoding: "exact",
     capturedAtMs: Date.now(),
     auditBoundary: newest ? auditKey(newest) : null,
     state: {
@@ -298,6 +312,10 @@ export function verifyImmutableProtection(
       });
       const previous = identity("previous");
       const next = immutableProtectedFileIdentitySchema.safeParse(identity("next"));
+      assertImmutableIdentityEncoding(record.identityEncoding, [
+        `${previous.dev}:${previous.ino}`,
+        `${record.nextDev}:${record.nextIno}`,
+      ]);
       if (
         record.pid !== context.candidate.pid ||
         record.cwd !== context.candidate.generationPath ||

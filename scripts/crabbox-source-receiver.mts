@@ -15,7 +15,7 @@ const cwd = process.argv[2] ?? syncRoot;
 let temporary;
 function fail(message) { throw new Error(message); }
 function stat(file) {
-  try { return fs.lstatSync(file); } catch (error) {
+  try { return fs.lstatSync(file, { bigint: true }); } catch (error) {
     if (error.code === "ENOENT" || error.code === "ENOTDIR") return null;
     throw error;
   }
@@ -242,7 +242,7 @@ try {
       const target = fs.readlinkSync(file, { encoding: "buffer" });
       actual = createHash("sha1").update("blob " + target.length + "\0").update(target).digest("hex");
     } else {
-      if (!info?.isFile() || Boolean(info.mode & 0o100) !== (mode === "100755"))
+      if (!info?.isFile() || Boolean(info.mode & 0o100n) !== (mode === "100755"))
         fail("source mode mismatch: " + file);
       actual = hashFile(file, "sha1", true);
     }

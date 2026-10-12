@@ -336,7 +336,7 @@ export async function writeConfigFileFromContext(
   });
   const nextBytes = Buffer.byteLength(json, "utf-8");
   const previousStat = snapshot.exists
-    ? await deps.fs.promises.stat(configPath).catch(() => null)
+    ? await deps.fs.promises.stat(configPath, { bigint: true }).catch(() => null)
     : null;
   const hasMetaBefore = hasConfigMeta(snapshot.parsed);
   const gatewayModeBefore = resolveGatewayMode(snapshot.resolved);
@@ -423,7 +423,7 @@ export async function writeConfigFileFromContext(
   const appendWriteAudit = async (
     result: ConfigWriteAuditResult,
     error?: unknown,
-    nextStat?: fs.Stats | null,
+    nextStat?: fs.BigIntStats | null,
   ) => {
     options.assertConfigPathForWrite?.();
     await appendConfigAuditRecord({
@@ -566,7 +566,7 @@ export async function writeConfigFileFromContext(
     await appendWriteAudit(
       result.method,
       undefined,
-      await deps.fs.promises.stat(configPath).catch(() => null),
+      await deps.fs.promises.stat(configPath, { bigint: true }).catch(() => null),
     );
     options.assertConfigPathForWrite?.();
     if (

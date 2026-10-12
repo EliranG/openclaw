@@ -572,7 +572,7 @@ export async function rebuildDeferredPluginSessionSourceIndex(
             return { path: source.path, identity };
           } catch (error) {
             if (
-              statMigrationPath(candidate)?.size === 0 &&
+              statMigrationPath(candidate)?.size === 0n &&
               isPrimarySessionTranscriptFileName(path.basename(source.path))
             ) {
               throw error;

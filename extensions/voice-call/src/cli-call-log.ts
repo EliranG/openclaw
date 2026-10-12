@@ -33,7 +33,7 @@ async function* readLogLines(file: string, last: number, pollMs?: number): Async
   let initial = true;
   let offset = 0;
   let lineStart = 0;
-  let previous: fs.Stats | undefined;
+  let previous: fs.BigIntStats | undefined;
   const buffer = Buffer.alloc(READ_BYTES);
   for (;;) {
     let fd: number;
@@ -48,7 +48,8 @@ async function* readLogLines(file: string, last: number, pollMs?: number): Async
       continue;
     }
     try {
-      const stat = fs.fstatSync(fd);
+      const stat = fs.fstatSync(fd, { bigint: true });
+      const size = Number(stat.size);
       if (
         previous &&
         (stat.ino !== previous.ino || stat.dev !== previous.dev || stat.size < previous.size)
@@ -59,8 +60,8 @@ async function* readLogLines(file: string, last: number, pollMs?: number): Async
       // Retain positions, not record contents. A partial record can span any number of polls.
       const selected: LogLine[] = [];
       let count = 0;
-      while (offset < stat.size) {
-        const length = Math.min(buffer.length, stat.size - offset);
+      while (offset < size) {
+        const length = Math.min(buffer.length, size - offset);
         const bytesRead = fs.readSync(fd, buffer, 0, length, offset);
         if (!bytesRead) {
           break;

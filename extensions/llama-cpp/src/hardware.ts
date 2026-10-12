@@ -90,7 +90,10 @@ async function readAvailableDisk(
   let directory = path.resolve(cacheDir);
   while (true) {
     try {
-      const [capacity, stat] = await Promise.all([fs.statfs(directory), fs.stat(directory)]);
+      const [capacity, stat] = await Promise.all([
+        fs.statfs(directory),
+        fs.stat(directory, { bigint: true }),
+      ]);
       let capacityGroup: string | undefined = `device:${stat.dev}`;
       // Linux magic.h identifies ext2/3/4, XFS, and F2FS device filesystems.
       // Pooled/layered filesystems (including Btrfs subvolumes) can share capacity

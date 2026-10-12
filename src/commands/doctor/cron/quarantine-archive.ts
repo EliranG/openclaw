@@ -86,14 +86,14 @@ async function copyLegacyCronFileAcrossDevices(
   let archiveCreated = false;
   let sourceRemoved = false;
   try {
-    const sourceStat = await fs.stat(filePath);
+    const sourceStat = await fs.stat(filePath, { bigint: true });
     if (!sourceStat.isFile()) {
       throw new Error("legacy cron source is not a regular file");
     }
     if (expectedSha256 && (await sha256File(filePath)) !== expectedSha256) {
       throw new Error("legacy cron source changed after it was imported; refusing to archive it");
     }
-    const sourceMode = sourceStat.mode & 0o777;
+    const sourceMode = Number(sourceStat.mode & 0o777n);
     for (let index = 2; ; index += 1) {
       try {
         const archiveHandle = await fs.open(archivePath, "wx", sourceMode | 0o600);
@@ -124,7 +124,7 @@ async function copyLegacyCronFileAcrossDevices(
       await archiveHandle.close();
     }
     await syncDirectoryIfSupported(path.dirname(archivePath));
-    const currentSourceStat = await fs.stat(filePath);
+    const currentSourceStat = await fs.stat(filePath, { bigint: true });
     if (
       currentSourceStat.dev !== sourceStat.dev ||
       currentSourceStat.ino !== sourceStat.ino ||

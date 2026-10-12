@@ -65,6 +65,27 @@ function admitActivation(root, generation) {
     ) {
       throw new Error("immutable activation control belongs to another installation");
     }
+    if (descriptor.identityEncoding !== undefined && descriptor.identityEncoding !== "exact") {
+      throw new Error("immutable activation descriptor has an unsupported identity encoding");
+    }
+    if (descriptor.identityEncoding === undefined) {
+      const identities = [descriptor.rootIdentity, descriptor.releasesIdentity];
+      if (recordObject(descriptor.current)) {
+        identities.push(descriptor.current.identity, descriptor.current.pointerIdentity);
+      }
+      if (
+        identities.some(
+          (value) =>
+            typeof value !== "string" ||
+            !/^\d+:\d+$/u.test(value) ||
+            value.split(":").some((part) => BigInt(part) > 9007199254740991n),
+        )
+      ) {
+        throw new Error(
+          "legacy immutable activation descriptor contains an imprecise file identity",
+        );
+      }
+    }
     if (descriptor.version === 1 && descriptor.activationEnabled === undefined) {
       return;
     }

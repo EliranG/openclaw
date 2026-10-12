@@ -11,18 +11,18 @@ try {
   if (fs.lstatSync(file).isSymbolicLink()) throw Error("symbolic links are not allowed");
   const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
   try {
-    const before = fs.fstatSync(fd);
+    const before = fs.fstatSync(fd, { bigint: true });
     if (!before.isFile()) throw Error("not a regular file");
     if (workspace) {
       const descriptor = process.platform === "linux" ? fs.realpathSync("/proc/self/fd/" + fd) : fs.realpathSync(file);
       const relative = path.relative(fs.realpathSync(workspace), descriptor);
       if (!relative || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) throw Error("file escapes remote workspace");
-      const verified = fs.statSync(descriptor);
+      const verified = fs.statSync(descriptor, { bigint: true });
       if (verified.dev !== before.dev || verified.ino !== before.ino) throw Error("file changed while being opened");
     }
     if (before.size > max) throw Error("file exceeds limit of " + max + " bytes");
     if (offset > before.size) throw Error("file changed while being read");
-    const expected = Math.min(chunk, before.size - offset), buffer = Buffer.allocUnsafe(expected);
+    const expected = Math.min(chunk, Number(before.size) - offset), buffer = Buffer.allocUnsafe(expected);
     let total = 0;
     while (total < buffer.length) {
       const count = fs.readSync(fd, buffer, total, buffer.length - total, offset + total);
@@ -30,10 +30,10 @@ try {
       total += count;
     }
     if (total !== expected) throw Error("file changed while being read");
-    const after = fs.fstatSync(fd);
-    const revision = stat => [stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs].join(":");
+    const after = fs.fstatSync(fd, { bigint: true });
+    const revision = stat => [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
     if (!after.isFile() || revision(after) !== revision(before)) throw Error("file changed while being read");
-    process.stdout.write(JSON.stringify({ dataBase64: buffer.toString("base64"), size: before.size, revision: revision(before) }));
+    process.stdout.write(JSON.stringify({ dataBase64: buffer.toString("base64"), size: Number(before.size), revision: revision(before) }));
   } finally { fs.closeSync(fd); }
 } catch (error) { process.stderr.write(error instanceof Error ? error.message : String(error)); process.exitCode = 1; }
 `;

@@ -28,9 +28,9 @@ function pathCaseInsensitive(value: string): boolean {
     const swapped = swapAsciiCase(candidate);
     if (swapped !== candidate) {
       try {
-        const original = fs.statSync(candidate);
+        const original = fs.statSync(candidate, { bigint: true });
         try {
-          const alternate = fs.statSync(swapped);
+          const alternate = fs.statSync(swapped, { bigint: true });
           return sameFsObject(original, alternate);
         } catch {
           return false;

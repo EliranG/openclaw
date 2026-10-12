@@ -20,15 +20,16 @@ function readBufferSlice(filePath, start, length) {
 }
 
 function resolveFileIdentity(stats) {
-  if (Number.isSafeInteger(stats.dev) && Number.isSafeInteger(stats.ino) && stats.ino !== 0) {
+  if (stats.ino !== 0n) {
     return `${stats.dev}:${stats.ino}`;
   }
-  return Number.isFinite(stats.birthtimeMs) ? `birth:${stats.birthtimeMs}` : undefined;
+  return `birth:${stats.birthtimeNs}`;
 }
 
 function readTailFingerprint(filePath, stats, maxReadBytes) {
-  const length = Math.min(stats.size, maxReadBytes);
-  const start = Math.max(0, stats.size - length);
+  const size = Number(stats.size);
+  const length = Math.min(size, maxReadBytes);
+  const start = Math.max(0, size - length);
   const buffer = readBufferSlice(filePath, start, length);
   const hash = createHash("sha256").update(buffer).digest("base64url");
   return `${start}:${buffer.byteLength}:${hash}`;
@@ -51,10 +52,11 @@ export function createIncrementalLineReader(filePath, options = {}) {
         return { lines: [], reset: false };
       }
 
-      const stats = fs.statSync(filePath);
+      const stats = fs.statSync(filePath, { bigint: true });
       if (!stats.isFile()) {
         return { lines: [], reset: false };
       }
+      const size = Number(stats.size);
 
       let reset = false;
       const nextFileIdentity = resolveFileIdentity(stats);
@@ -69,7 +71,7 @@ export function createIncrementalLineReader(filePath, options = {}) {
       }
       fileIdentity = nextFileIdentity;
 
-      if (!reset && stats.size === offset && contentFingerprint !== undefined) {
+      if (!reset && size === offset && contentFingerprint !== undefined) {
         const nextContentFingerprint = readTailFingerprint(filePath, stats, maxReadBytes);
         if (contentFingerprint !== nextContentFingerprint) {
           offset = 0;
@@ -80,27 +82,27 @@ export function createIncrementalLineReader(filePath, options = {}) {
         }
       }
 
-      if (stats.size < offset) {
+      if (size < offset) {
         offset = 0;
         pending = "";
         reset = true;
       }
-      if (stats.size === offset) {
+      if (size === offset) {
         return { lines: [], reset };
       }
 
       let start = offset;
       let discardFirstLine = false;
-      if (stats.size - start > maxReadBytes) {
-        start = stats.size - maxReadBytes;
+      if (size - start > maxReadBytes) {
+        start = size - maxReadBytes;
         pending = "";
         if (start > 0) {
           discardFirstLine = readSlice(filePath, start - 1, 1) !== "\n";
         }
       }
 
-      const text = readSlice(filePath, start, stats.size - start);
-      offset = stats.size;
+      const text = readSlice(filePath, start, size - start);
+      offset = size;
       contentFingerprint = readTailFingerprint(filePath, stats, maxReadBytes);
       if (!text) {
         return { lines: [], reset };

@@ -13,7 +13,7 @@ afterEach(() => {
 type FsObjectIdentity = Parameters<typeof sameFsObject>[0];
 
 function identity(dev: number, ino: number): FsObjectIdentity {
-  return { dev, ino };
+  return { dev: BigInt(dev), ino: BigInt(ino) };
 }
 
 describe("sameFsObject", () => {

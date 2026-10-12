@@ -169,10 +169,10 @@ async function reclaimInstances(
     }
     const directory = path.join(root, entry.name);
     try {
-      const stat = await fsPromises.lstat(directory);
+      const stat = await fsPromises.lstat(directory, { bigint: true });
       const changed = legacy
-        ? Math.max(stat.mtimeMs, stat.ctimeMs, stat.birthtimeMs)
-        : stat.mtimeMs;
+        ? Math.max(Number(stat.mtimeNs), Number(stat.ctimeNs), Number(stat.birthtimeNs)) / 1e6
+        : Number(stat.mtimeNs) / 1e6;
       if (!stat.isDirectory() || (changed > cutoff && !nativeMaintenance?.startup)) {
         continue;
       }
@@ -197,13 +197,13 @@ async function reclaimInstances(
           continue;
         }
         await nativeMaintenance?.assertCurrent();
-        const current = fs.lstatSync(canonical);
+        const current = fs.lstatSync(canonical, { bigint: true });
         if (
           current.isDirectory() &&
           current.dev === stat.dev &&
           current.ino === stat.ino &&
           current.uid === stat.uid &&
-          (!process.getuid || current.uid === process.getuid())
+          (!process.getuid || current.uid === BigInt(process.getuid()))
         ) {
           // Legacy producers surviving the grace period are best effort; managed captures retain tokens.
           await fsPromises.rm(canonical, { recursive: true, force: true });

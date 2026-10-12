@@ -90,30 +90,23 @@ function createCurrentProcessLockPayload(): Record<string, unknown> {
   return payload;
 }
 
-function sameStatValue(left: number | bigint, right: number | bigint): boolean {
-  return typeof left === typeof right ? left === right : BigInt(left) === BigInt(right);
-}
-
 function sameFileIdentity(
-  left: { dev: number | bigint; ino: number | bigint },
-  right: { dev: number | bigint; ino: number | bigint },
+  left: { dev: bigint; ino: bigint },
+  right: { dev: bigint; ino: bigint },
 ): boolean {
-  if (!sameStatValue(left.ino, right.ino)) {
+  if (left.ino !== right.ino) {
     return false;
   }
-  if (sameStatValue(left.dev, right.dev)) {
+  if (left.dev === right.dev) {
     return true;
   }
   // Windows path stats may report dev=0 while fd stats know the volume id.
-  return (
-    process.platform === "win32" &&
-    (left.dev === 0 || left.dev === 0n || right.dev === 0 || right.dev === 0n)
-  );
+  return process.platform === "win32" && (left.dev === 0n || right.dev === 0n);
 }
 
 async function isSameRegularFile(
   filePath: string,
-  observed: { dev: number | bigint; ino: number | bigint },
+  observed: { dev: bigint; ino: bigint },
 ): Promise<boolean> {
   try {
     const current = await fs.lstat(filePath, { bigint: true });
@@ -229,7 +222,7 @@ export type StaleFileLockReclaimResult = "missing" | "removed" | "retained";
 export async function reclaimDefinitelyStaleFileLock(
   lockPath: string,
 ): Promise<StaleFileLockReclaimResult> {
-  let observed: { dev: number | bigint; ino: number | bigint; isFile: () => boolean };
+  let observed: { dev: bigint; ino: bigint; isFile: () => boolean };
   try {
     observed = await fs.lstat(lockPath, { bigint: true });
   } catch (err) {

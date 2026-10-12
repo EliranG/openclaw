@@ -9,7 +9,7 @@ export const GITHUB_EXEC_CREDENTIAL_UNAVAILABLE =
   "GitHub Identity credential is unavailable or insecure. Reconnect or change GitHub Identity, then retry.";
 
 async function privateProfileStat(profileDir: string) {
-  const stat = await fs.lstat(profileDir);
+  const stat = await fs.lstat(profileDir, { bigint: true });
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new Error(GITHUB_EXEC_CREDENTIAL_UNAVAILABLE);
   }
@@ -27,7 +27,7 @@ async function privateProfileStat(profileDir: string) {
     ) {
       throw new Error(GITHUB_EXEC_CREDENTIAL_UNAVAILABLE);
     }
-  } else if ((stat.mode & 0o077) !== 0 || stat.uid !== process.getuid?.()) {
+  } else if ((stat.mode & 0o077n) !== 0n || stat.uid !== BigInt(process.getuid?.() ?? -1)) {
     throw new Error(GITHUB_EXEC_CREDENTIAL_UNAVAILABLE);
   }
   return stat;

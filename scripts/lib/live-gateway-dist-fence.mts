@@ -1,3 +1,4 @@
+import type { BigIntStats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { LoadedLaunchAgentState } from "../../src/daemon/launchd-runtime.ts";
@@ -73,7 +74,7 @@ async function loadFenceRuntime() {
 async function samePathIdentity(
   left: string,
   right: string,
-  statCache: Map<string, Promise<Awaited<ReturnType<typeof fs.stat>> | null>>,
+  statCache: Map<string, Promise<BigIntStats | null>>,
 ): Promise<boolean> {
   if (left === right) {
     return true;
@@ -81,7 +82,7 @@ async function samePathIdentity(
   const stat = (file: string) => {
     let pending = statCache.get(file);
     if (!pending) {
-      pending = fs.stat(file).catch((error: unknown) => {
+      pending = fs.stat(file, { bigint: true }).catch((error: unknown) => {
         if (!hasErrnoCode(error, "ENOENT")) {
           throw error;
         }
@@ -126,7 +127,7 @@ export async function gatewayServiceCommandOverlapsPhysicalCheckout(
   const servingOutputs = await Promise.all(
     outputPaths.map((output) => tryRealpath(path.join(servingRoot, output))),
   );
-  const statCache = new Map<string, Promise<Awaited<ReturnType<typeof fs.stat>> | null>>();
+  const statCache = new Map<string, Promise<BigIntStats | null>>();
   // A source entry outside generated outputs does not hold their imports open.
   // The packaged launcher imports generated outputs from its package root.
   if (

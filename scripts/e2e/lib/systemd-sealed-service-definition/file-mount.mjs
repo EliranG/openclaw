@@ -57,13 +57,13 @@ async function snapshot() {
     artifacts: await Promise.all(
       files.map(async (file) => {
         try {
-          const stat = await fs.stat(file);
+          const stat = await fs.stat(file, { bigint: true });
           return [
             file,
-            stat.uid,
-            stat.gid,
-            stat.mode,
-            stat.ino,
+            Number(stat.uid),
+            Number(stat.gid),
+            Number(stat.mode),
+            String(stat.ino),
             createHash("sha256")
               .update(await fs.readFile(file))
               .digest("hex"),

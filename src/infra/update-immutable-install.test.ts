@@ -58,7 +58,7 @@ let root: string;
 let record: ImmutableInstallRecord;
 const pointer = () => fs.readlink(path.join(root, "current"));
 const identity = (file: string) => {
-  const stat = fsSync.lstatSync(file);
+  const stat = fsSync.lstatSync(file, { bigint: true });
   return `${stat.dev}:${stat.ino}`;
 };
 
@@ -153,6 +153,14 @@ it("recognizes only an explicitly adopted release layout", async () => {
     currentPath: record.descriptor.current.path,
   });
   expect(await inspectImmutableInstall(path.dirname(root))).toBeNull();
+  expect(await pointer()).toBe(`releases/${currentSha}`);
+});
+
+it("retains but refuses a legacy descriptor with a rounded large identity", async () => {
+  record.descriptor.current.pointerIdentity = "1:9007199254740992";
+  await expect(inspectImmutableInstall(root)).rejects.toThrow(
+    "Legacy immutable receipt contains an imprecise file identity",
+  );
   expect(await pointer()).toBe(`releases/${currentSha}`);
 });
 

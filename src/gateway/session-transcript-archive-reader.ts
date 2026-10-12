@@ -96,13 +96,13 @@ async function readRecentSessionSnapshotFromPathAsync(
   const handle = await fs.promises.open(filePath, "r");
   let lines: string[];
   try {
-    const stat = await handle.stat();
+    const stat = await handle.stat({ bigint: true });
     assertArchiveTranscriptSource(filePath, stat, index.displaySource, sessionId);
-    const readLen = Math.min(stat.size, maxBytes);
-    const readStart = Math.max(0, stat.size - readLen);
+    const readLen = Math.min(Number(stat.size), maxBytes);
+    const readStart = Math.max(0, Number(stat.size) - readLen);
     const buffer = Buffer.alloc(readLen);
     const bytesRead = await readFileWindowFully(handle, buffer, readStart);
-    const finalStat = await handle.stat();
+    const finalStat = await handle.stat({ bigint: true });
     assertArchiveTranscriptSource(filePath, finalStat, index.displaySource, sessionId);
     if (bytesRead <= 0) {
       return { messages: [], transcriptEvents: [] };

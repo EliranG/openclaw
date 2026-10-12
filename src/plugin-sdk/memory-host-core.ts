@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { sameFileIdentity, type FileIdentityStat } from "@openclaw/fs-safe/advanced";
+import { sameFileIdentity, type ExactFileIdentity } from "@openclaw/fs-safe/advanced";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
@@ -98,7 +98,7 @@ async function readMemoryHostEventExportOwnership(
   | {
       kind: "owned";
       content: string | undefined;
-      identity: FileIdentityStat;
+      identity: ExactFileIdentity;
       ownerContent: string;
       needsFinalize: boolean;
     }
@@ -121,7 +121,7 @@ async function readMemoryHostEventExportOwnership(
   }
   if (
     !isRecord(parsed) ||
-    parsed.schemaVersion !== 3 ||
+    (parsed.schemaVersion !== 3 && parsed.schemaVersion !== 4) ||
     parsed.kind !== "openclaw-memory-host-events-export" ||
     parsed.stateHash !== owner.stateHash ||
     parsed.workspaceHash !== owner.workspaceHash ||
@@ -132,9 +132,9 @@ async function readMemoryHostEventExportOwnership(
     (parsed.fileDev === undefined) !== (parsed.fileIno === undefined) ||
     (parsed.fileDev !== undefined &&
       (typeof parsed.fileDev !== "string" ||
-        !/^\d+$/u.test(parsed.fileDev) ||
+        !/^-?\d+$/u.test(parsed.fileDev) ||
         typeof parsed.fileIno !== "string" ||
-        !/^\d+$/u.test(parsed.fileIno)))
+        !/^-?\d+$/u.test(parsed.fileIno)))
   ) {
     return { kind: "foreign" };
   }
@@ -142,6 +142,19 @@ async function readMemoryHostEventExportOwnership(
     typeof parsed.fileDev === "string" && typeof parsed.fileIno === "string"
       ? { dev: BigInt(parsed.fileDev), ino: BigInt(parsed.fileIno) }
       : undefined;
+  // Version 3 wrote numeric stats as strings. Large values may already have lost
+  // identity bits, even when the rounded value happens to match the current file.
+  const safeIntegerLimit = BigInt(Number.MAX_SAFE_INTEGER);
+  if (
+    parsed.schemaVersion === 3 &&
+    storedIdentity &&
+    (storedIdentity.dev < -safeIntegerLimit ||
+      storedIdentity.dev > safeIntegerLimit ||
+      storedIdentity.ino < -safeIntegerLimit ||
+      storedIdentity.ino > safeIntegerLimit)
+  ) {
+    return { kind: "foreign" };
+  }
   let openedExport: Awaited<ReturnType<typeof workspaceRoot.open>> | undefined;
   try {
     openedExport = await workspaceRoot.open(owner.relativePath);
@@ -158,10 +171,7 @@ async function readMemoryHostEventExportOwnership(
     return { kind: "orphan", ownerContent: content };
   }
   let exportContent: string | undefined;
-  const exportIdentity: FileIdentityStat = {
-    dev: openedExport.stat.dev,
-    ino: openedExport.stat.ino,
-  };
+  const exportIdentity = openedExport.exactIdentity;
   const identityOwned =
     storedIdentity !== undefined && sameFileIdentity(storedIdentity, exportIdentity);
   {
@@ -248,7 +258,7 @@ async function materializeMemoryHostEventExport(params: {
       }
       const content = storedEvents.length > 0 ? serializeMemoryHostEventExport(storedEvents) : "";
       const contentSha256 = sha256Hex(content);
-      let publishedIdentity: FileIdentityStat | undefined;
+      let publishedIdentity: ExactFileIdentity | undefined;
       if (ownership.kind === "missing") {
         const existing = await readMemoryHostEventArtifactText(workspaceRoot, owner.relativePath);
         if (existing !== undefined) {

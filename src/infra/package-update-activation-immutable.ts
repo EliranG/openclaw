@@ -28,6 +28,7 @@ import {
   type ImmutableInstallRecord,
   type ImmutablePreparedGeneration,
 } from "./update-immutable-install-schema.js";
+import { assertImmutableDescriptorIdentityEncoding } from "./update-immutable-layout.js";
 
 const MAX_RECORD_BYTES = 1024 * 1024;
 const MAX_RELEASE_ROWS = 4096;
@@ -379,6 +380,7 @@ export function createImmutableInstallRecord(
     descriptor: ImmutableInstallDescriptorSchema.parse(descriptor),
     prepared: null,
   });
+  assertImmutableDescriptorIdentityEncoding(record.descriptor);
   const root = record.descriptor.root;
   const anchor = resolvePackageActivationAnchor(root);
   const control = resolvePackageActivationControl(anchor);
@@ -507,6 +509,8 @@ export function updateImmutableInstallRecord(
   changes: Pick<ImmutableInstallRecord, "descriptor" | "prepared" | "activation">,
   assertCurrent: () => void,
 ): ImmutableInstallRecord {
+  assertImmutableDescriptorIdentityEncoding(expected.descriptor);
+  assertImmutableDescriptorIdentityEncoding(changes.descriptor);
   const next = validateRecord({
     descriptor: changes.descriptor,
     prepared: changes.prepared,

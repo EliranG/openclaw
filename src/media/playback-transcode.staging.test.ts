@@ -73,7 +73,13 @@ async function createSource(fileName: string, contents: string | Buffer) {
   const fixturePath = path.join(tempHome.home, fileName);
   await fs.writeFile(fixturePath, contents);
   const sourcePath = await fs.realpath(fixturePath);
-  return { sourcePath, sourceStat: await fs.stat(sourcePath) };
+  return {
+    sourcePath,
+    sourceStat: {
+      ...(await fs.stat(sourcePath)),
+      exactIdentity: await fs.stat(sourcePath, { bigint: true }),
+    },
+  };
 }
 
 describe("playback input staging", () => {

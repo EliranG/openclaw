@@ -324,7 +324,7 @@ function* planSuspiciousConfigRead(
     deps,
     configPath,
     requireIdentity,
-  )) as fs.Stats | null;
+  )) as fs.BigIntStats | null;
   const now = new Date().toISOString();
   const current = createConfigHealthFingerprint({
     raw,
@@ -386,7 +386,7 @@ function* planSuspiciousConfigRead(
     deps,
     backupPath,
     requireIdentity,
-  )) as fs.Stats | null;
+  )) as fs.BigIntStats | null;
   const backup = createConfigHealthFingerprint({
     raw: backupRaw,
     parsed: backupParse.parsed,
@@ -548,7 +548,7 @@ export async function promoteConfigSnapshotToLastKnownGoodCore(params: {
   if (!healthSnapshot) {
     return false;
   }
-  const stat = await deps.fs.promises.stat(snapshot.path).catch(() => null);
+  const stat = await deps.fs.promises.stat(snapshot.path, { bigint: true }).catch(() => null);
   const now = new Date().toISOString();
   const current = createConfigHealthFingerprint({
     raw: snapshot.raw,
@@ -657,7 +657,7 @@ export async function recoverConfigFromLastKnownGoodCore(params: {
     return false;
   }
   const now = new Date().toISOString();
-  const stat = await deps.fs.promises.stat(snapshot.path).catch(() => null);
+  const stat = await deps.fs.promises.stat(snapshot.path, { bigint: true }).catch(() => null);
   const current = createConfigHealthFingerprint({
     raw: snapshot.raw,
     parsed: snapshot.parsed,

@@ -148,14 +148,14 @@ async function scanPiFileCandidates(env: NodeJS.ProcessEnv): Promise<PiFileCandi
   const { results: candidates } = await runTasksWithConcurrency({
     tasks: files.map((file) => async () => {
       try {
-        const stats = await fs.stat(file);
+        const stats = await fs.stat(file, { bigint: true });
         return stats.isFile()
           ? {
               file,
               storeRoot: root,
-              identity: `${String(stats.dev)}:${String(stats.ino)}:${String(stats.birthtimeMs)}`,
-              mtimeMs: stats.mtimeMs,
-              size: stats.size,
+              identity: `${String(stats.dev)}:${String(stats.ino)}:${String(Number(stats.birthtimeNs) / 1e6)}`,
+              mtimeMs: Number(stats.mtimeNs) / 1e6,
+              size: Number(stats.size),
               resumable: acpRoot ? isPathStrictlyInside(acpRoot, file) : false,
             }
           : undefined;

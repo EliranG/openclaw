@@ -31,7 +31,7 @@ vi.mock("./update-immutable-generation.js", async (importOriginal) => ({
 const dirs = useAutoCleanupTempDirTracker(afterEach);
 const sha = "a".repeat(40);
 const identity = (file: string) => {
-  const stat = fs.lstatSync(file);
+  const stat = fs.lstatSync(file, { bigint: true });
   return `${stat.dev}:${stat.ino}`;
 };
 let record: ImmutableInstallRecord;

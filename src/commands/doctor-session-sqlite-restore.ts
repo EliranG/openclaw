@@ -129,8 +129,8 @@ async function reconcileRestorePublications(
           !archive.isFile() ||
           source.dev !== archive.dev ||
           source.ino !== archive.ino ||
-          source.nlink !== 2 ||
-          archive.nlink !== 2
+          source.nlink !== 2n ||
+          archive.nlink !== 2n
         ) {
           continue;
         }
@@ -217,7 +217,7 @@ function loadRestoreManifestContexts(
     const stat = statMigrationPath(manifestPath);
     const manifest =
       stat?.isFile() &&
-      stat.nlink === 1 &&
+      stat.nlink === 1n &&
       !hasSymbolicLinkInDirectoryPath(path.dirname(manifestPath))
         ? readSessionSqliteMigrationManifest(manifestPath)
         : undefined;
@@ -405,9 +405,9 @@ function inspectRestoreArchive(move: SessionSqliteMigrationMove): RestoreArchive
   if (hasSymbolicLinkInDirectoryPath(path.dirname(move.archivePath))) {
     return { state: "invalid", reason: "archive parent is a symbolic link; refusing restore" };
   }
-  let pathStat: fs.Stats;
+  let pathStat: fs.BigIntStats;
   try {
-    pathStat = fs.lstatSync(move.archivePath);
+    pathStat = fs.lstatSync(move.archivePath, { bigint: true });
   } catch (error) {
     const code = isRecord(error) ? error.code : undefined;
     return code === "ENOENT" || code === "ENOTDIR"
@@ -429,7 +429,7 @@ function inspectRestoreArchive(move: SessionSqliteMigrationMove): RestoreArchive
         ? "r"
         : fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
     fd = fs.openSync(move.archivePath, flags);
-    const descriptorStat = fs.fstatSync(fd);
+    const descriptorStat = fs.fstatSync(fd, { bigint: true });
     if (
       !descriptorStat.isFile() ||
       descriptorStat.dev !== pathStat.dev ||
@@ -440,7 +440,7 @@ function inspectRestoreArchive(move: SessionSqliteMigrationMove): RestoreArchive
     let digest: string;
     let legacyEntryCount: number | undefined;
     if (move.kind === "legacy-store") {
-      const content = readFileDescriptorBoundedSync(fd, descriptorStat.size);
+      const content = readFileDescriptorBoundedSync(fd, Number(descriptorStat.size));
       digest = createHash("sha256").update(content).digest("hex");
       let parsed: unknown;
       try {
@@ -461,13 +461,13 @@ function inspectRestoreArchive(move: SessionSqliteMigrationMove): RestoreArchive
     } else {
       // Transcript-like archives can be arbitrarily large. Hash them incrementally so duplicate
       // planning cannot turn a Doctor restore into a synchronous whole-file allocation.
-      const hashed = hashFileDescriptorSync(fd, descriptorStat.size);
-      if (hashed.sizeBytes !== descriptorStat.size) {
+      const hashed = hashFileDescriptorSync(fd, Number(descriptorStat.size));
+      if (BigInt(hashed.sizeBytes) !== descriptorStat.size) {
         throw new Error("archive changed while it was inspected");
       }
       digest = hashed.sha256;
     }
-    const finalPathStat = fs.lstatSync(move.archivePath);
+    const finalPathStat = fs.lstatSync(move.archivePath, { bigint: true });
     if (
       finalPathStat.dev !== descriptorStat.dev ||
       finalPathStat.ino !== descriptorStat.ino ||
@@ -480,7 +480,7 @@ function inspectRestoreArchive(move: SessionSqliteMigrationMove): RestoreArchive
       snapshot: {
         digest,
         ...(legacyEntryCount === undefined ? {} : { legacyEntryCount }),
-        size: descriptorStat.size,
+        size: Number(descriptorStat.size),
       },
     };
   } catch (error) {

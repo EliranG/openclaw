@@ -1,5 +1,5 @@
 // Physical runtime publication remains part of the managed-service maintenance boundary.
-import type { Stats } from "node:fs";
+import type { BigIntStats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { resolveTaskName } from "../../daemon/schtasks-layout.js";
@@ -86,11 +86,11 @@ export async function withGatewayRuntimeArtifactPublication<T>(
       return refuse(error);
     };
     const service = resolveGatewayService();
-    type PathIdentity = { real: string; stat?: Stats };
+    type PathIdentity = { real: string; stat?: BigIntStats };
     const identity = async (file: string) => {
       const real = await fs.realpath(file);
       assertCurrent();
-      const stat = await fs.stat(file);
+      const stat = await fs.stat(file, { bigint: true });
       assertCurrent();
       return { real, stat };
     };

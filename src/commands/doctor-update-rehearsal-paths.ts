@@ -1,4 +1,4 @@
-import { lstatSync, type Stats } from "node:fs";
+import { lstatSync, type BigIntStats } from "node:fs";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
@@ -35,12 +35,12 @@ export function createRehearsalPathInspector(
     codeLinks.set(fact.path, fact);
   }
   const uid = process.getuid?.();
-  const identities = new Map<string, Stats>();
+  const identities = new Map<string, BigIntStats>();
   function inspectPath(
     filename: string,
     privateMode = false,
     allowCodeLink = false,
-  ): Stats | undefined {
+  ): BigIntStats | undefined {
     if (path.normalize(filename) !== filename) {
       refuseRehearsal(`migration data path is not fully resolved: ${filename}`);
     }
@@ -48,11 +48,11 @@ export function createRehearsalPathInspector(
       refuseRehearsal(`migration data escapes the copied state: ${filename}`);
     }
     let current = stateDir;
-    let last: Stats | undefined;
+    let last: BigIntStats | undefined;
     for (const part of ["", ...path.relative(stateDir, filename).split(path.sep).filter(Boolean)]) {
       current = path.join(current, part);
       try {
-        last = lstatSync(current);
+        last = lstatSync(current, { bigint: true });
       } catch (error) {
         if (isRecord(error) && error.code === "ENOENT") {
           return undefined;
@@ -66,11 +66,11 @@ export function createRehearsalPathInspector(
       if (
         (last.isSymbolicLink() && !codeLink) ||
         (!last.isDirectory() && !last.isFile() && !codeLink) ||
-        (last.isFile() && last.nlink !== 1) ||
-        (uid !== undefined && last.uid !== uid) ||
+        (last.isFile() && last.nlink !== 1n) ||
+        (uid !== undefined && last.uid !== BigInt(uid)) ||
         (process.platform !== "win32" &&
           (current === stateDir || (privateMode && current === filename)) &&
-          (last.mode & 0o077) !== 0)
+          (last.mode & 0o077n) !== 0n)
       ) {
         refuseRehearsal(`copied data has unsafe ownership or links: ${current}`);
       }

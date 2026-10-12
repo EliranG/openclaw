@@ -89,8 +89,8 @@ export function resolveMeetingTranscriptExportOwnership(params: {
   const manifestMatches = folded.filter((ownership) => {
     try {
       const canonicalDir = path.join(params.sourceRoot, ownership.selector);
-      const canonicalStat = fs.statSync(canonicalDir);
-      const observedStat = fs.statSync(params.sessionDir);
+      const canonicalStat = fs.statSync(canonicalDir, { bigint: true });
+      const observedStat = fs.statSync(params.sessionDir, { bigint: true });
       if (canonicalStat.dev !== observedStat.dev || canonicalStat.ino !== observedStat.ino) {
         return false;
       }

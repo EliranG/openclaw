@@ -50,6 +50,7 @@ export const ImmutableInstallDescriptorSchema = z
     activationEnabled: z.literal(true).optional(),
     releaseRetention: releaseRetention.optional(),
     kind: z.literal("immutable"),
+    identityEncoding: z.literal("exact").optional(),
     root: absolutePath,
     rootIdentity: packageActivationIdentitySchema,
     releasesIdentity: packageActivationIdentitySchema,
@@ -124,6 +125,7 @@ const ImmutableActivationOperationSchema = z.strictObject({
     .optional(),
   pointerIntent: z
     .strictObject({
+      identityEncoding: z.literal("exact").optional(),
       fromIdentity: packageActivationIdentitySchema,
       targetSha: z.string().regex(/^[a-f0-9]{40}$/u),
       temporaryIdentity: packageActivationIdentitySchema,

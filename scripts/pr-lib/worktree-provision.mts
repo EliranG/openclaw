@@ -278,7 +278,7 @@ async function provisionPrWorktree(params: ProvisionParams): Promise<void> {
         await requireSpace();
         assertCurrent();
         await fs.mkdir(destination);
-        const reserved = await fs.lstat(destination);
+        const reserved = await fs.lstat(destination, { bigint: true });
         const removeReservation = async (recursive: boolean) => {
           // Git removes registration before the directory. Its forced termination
           // can interrupt that walk, even after .git itself has been removed.
@@ -306,7 +306,7 @@ async function provisionPrWorktree(params: ProvisionParams): Promise<void> {
             if ((await fs.realpath(worktreeRoot)) !== resolvedWorktreeRoot) {
               throw new Error("PR worktree parent changed; retain interrupted checkout.");
             }
-            const retained = await fs.lstat(destination);
+            const retained = await fs.lstat(destination, { bigint: true });
             if (
               retained.dev !== reserved.dev ||
               retained.ino !== reserved.ino ||

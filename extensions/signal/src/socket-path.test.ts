@@ -143,26 +143,27 @@ describe.skipIf(process.platform === "win32")("Signal socket filesystem boundary
   });
 
   it.each([false, true])(
-    "recovers only an unchanged stale owned socket (replaced=%s)",
+    "recovers only an unchanged stale owned socket with an inode above 2^53 (replaced=%s)",
     async (replaced) => {
       const socketPath = path.join(root, "rpc");
       await withStaleSocket(socketPath, async () => {
         expect((await lstat(socketPath)).isSocket()).toBe(true);
         let endpointStats = 0;
-        if (replaced) {
-          fsMocks.lstat.mockImplementation(async (entryPath, ...args) => {
-            const stat = await fsMocks.actualLstat(entryPath, ...args);
-            if (entryPath !== socketPath || ++endpointStats !== 2) {
-              return stat;
-            }
-            return new Proxy(stat, {
-              get: (target, property, receiver) =>
-                property === "ino"
-                  ? Number(target.ino) + 1
-                  : Reflect.get(target, property, receiver),
-            });
+        fsMocks.lstat.mockImplementation(async (entryPath, ...args) => {
+          const stat = await fsMocks.actualLstat(entryPath, ...args);
+          if (entryPath !== socketPath) {
+            return stat;
+          }
+          const inode = 9_007_199_254_740_992n + (replaced && ++endpointStats === 2 ? 1n : 0n);
+          return new Proxy(stat, {
+            get: (target, property, receiver) =>
+              property === "ino"
+                ? typeof target.ino === "bigint"
+                  ? inode
+                  : Number(inode)
+                : Reflect.get(target, property, receiver),
           });
-        }
+        });
         const preparation = prepareSignalSocketPath(socketPath);
         if (replaced) {
           await expect(preparation).rejects.toThrow("changed during its ownership check");

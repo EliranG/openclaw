@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { statRegularFileSync } from "@openclaw/fs-safe/advanced";
 import { sha256FileSync } from "@openclaw/fs-safe/durability";
 import { createSqliteAuditRecordStore } from "./sqlite-audit-record-store.js";
 import type {
@@ -9,8 +10,9 @@ import type {
 } from "./state-migrations.audit-logs.types.js";
 
 export type LegacyAuditFileCheckpoint = {
-  dev: number;
-  ino: number;
+  // Older receipts stored safe integer IDs; new receipts preserve every bit as decimal text.
+  dev: number | string;
+  ino: number | string;
   mtimeMs: number;
   size: number;
 };
@@ -59,14 +61,40 @@ export function hasLegacyAuditRawCheckpointCapacity(
 
 function statLegacyAuditRawCheckpoint(sourcePath: string): LegacyAuditFileCheckpoint | undefined {
   try {
-    const stat = fs.lstatSync(sourcePath);
-    if (!stat.isFile() || stat.isSymbolicLink()) {
+    const observed = statRegularFileSync(sourcePath);
+    if (observed.missing) {
       return undefined;
     }
-    return { dev: stat.dev, ino: stat.ino, mtimeMs: stat.mtimeMs, size: stat.size };
+    return {
+      dev: String(observed.exactIdentity.dev),
+      ino: String(observed.exactIdentity.ino),
+      mtimeMs: observed.stat.mtimeMs,
+      size: observed.stat.size,
+    };
   } catch {
     return undefined;
   }
+}
+
+function exactAuditIdentity(value: number | string): string | undefined {
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) ? String(value) : undefined;
+  }
+  return /^(0|-?[1-9][0-9]*)$/u.test(value) ? value : undefined;
+}
+
+export function legacyAuditFileIdentitiesMatch(
+  left: Pick<LegacyAuditFileCheckpoint, "dev" | "ino">,
+  right: Pick<LegacyAuditFileCheckpoint, "dev" | "ino">,
+): boolean {
+  const dev = exactAuditIdentity(left.dev);
+  const ino = exactAuditIdentity(left.ino);
+  return (
+    dev !== undefined &&
+    ino !== undefined &&
+    dev === exactAuditIdentity(right.dev) &&
+    ino === exactAuditIdentity(right.ino)
+  );
 }
 
 export function legacyAuditRawCheckpointsMatch(
@@ -76,8 +104,7 @@ export function legacyAuditRawCheckpointsMatch(
   return (
     left !== undefined &&
     right !== undefined &&
-    left.dev === right.dev &&
-    left.ino === right.ino &&
+    legacyAuditFileIdentitiesMatch(left, right) &&
     left.mtimeMs === right.mtimeMs &&
     left.size === right.size
   );
@@ -90,12 +117,16 @@ function legacyAuditRawCheckpointIsCurrent(
   let fd: number | undefined;
   try {
     fd = fs.openSync(sourcePath, "r");
-    const before = fs.fstatSync(fd);
-    if (!before.isFile() || !legacyAuditRawCheckpointsMatch(checkpoint, before)) {
+    const beforeStat = fs.fstatSync(fd);
+    const beforeExact = fs.fstatSync(fd, { bigint: true });
+    const before = { ...beforeStat, dev: String(beforeExact.dev), ino: String(beforeExact.ino) };
+    if (!beforeStat.isFile() || !legacyAuditRawCheckpointsMatch(checkpoint, before)) {
       return false;
     }
     const hash = sha256FileSync(fd, { maxBytes: checkpoint.size });
-    const after = fs.fstatSync(fd);
+    const afterStat = fs.fstatSync(fd);
+    const afterExact = fs.fstatSync(fd, { bigint: true });
+    const after = { ...afterStat, dev: String(afterExact.dev), ino: String(afterExact.ino) };
     return (
       legacyAuditRawCheckpointsMatch(before, after) &&
       hash.bytes === checkpoint.size &&

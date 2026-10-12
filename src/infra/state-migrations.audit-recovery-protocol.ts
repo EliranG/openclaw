@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { LegacyAuditFileCheckpoint } from "./state-migrations.audit-checkpoints.js";
 
 type AuditRecoveryRestoreJournal = {
-  schemaVersion: 6;
+  schemaVersion: 6 | 7;
   rawBase64: string;
   scrubPatternBase64: string;
   target: Pick<LegacyAuditFileCheckpoint, "dev" | "ino" | "size">;
@@ -31,24 +31,33 @@ export function serializeAuditRecoveryRestoreJournal(params: {
   scrubPattern: Buffer;
   target: AuditRecoveryRestoreJournal["target"];
 }): string {
+  if (!isExactJournalIdentity(params.target.dev) || !isExactJournalIdentity(params.target.ino)) {
+    throw new Error("invalid legacy audit recovery restore identity");
+  }
   const journal: AuditRecoveryRestoreJournal = {
-    schemaVersion: 6,
+    schemaVersion: 7,
     rawBase64: params.rawBytes.toString("base64"),
     scrubPatternBase64: params.scrubPattern.toString("base64"),
-    target: params.target,
+    target: { ...params.target, dev: String(params.target.dev), ino: String(params.target.ino) },
   };
   return `${JSON.stringify(journal)}\n`;
+}
+
+function isExactJournalIdentity(value: unknown): value is string | number {
+  return typeof value === "number"
+    ? Number.isSafeInteger(value)
+    : typeof value === "string" && /^(0|-?[1-9][0-9]*)$/u.test(value);
 }
 
 export function parseAuditRecoveryRestoreJournal(raw: string): ParsedAuditRecoveryRestoreJournal {
   const parsed = JSON.parse(raw) as Partial<AuditRecoveryRestoreJournal>;
   if (
-    parsed.schemaVersion !== 6 ||
+    (parsed.schemaVersion !== 6 && parsed.schemaVersion !== 7) ||
     typeof parsed.rawBase64 !== "string" ||
     typeof parsed.scrubPatternBase64 !== "string" ||
     !parsed.target ||
-    typeof parsed.target.dev !== "number" ||
-    typeof parsed.target.ino !== "number" ||
+    !isExactJournalIdentity(parsed.target.dev) ||
+    !isExactJournalIdentity(parsed.target.ino) ||
     typeof parsed.target.size !== "number"
   ) {
     throw new Error("invalid legacy audit recovery restore journal");
@@ -67,7 +76,7 @@ export function parseAuditRecoveryRestoreJournal(raw: string): ParsedAuditRecove
   return {
     sourceRaw,
     scrubPattern,
-    target: parsed.target,
+    target: { ...parsed.target, dev: String(parsed.target.dev), ino: String(parsed.target.ino) },
     journalHash: createHash("sha256").update(raw).digest("hex"),
   };
 }

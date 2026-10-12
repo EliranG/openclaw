@@ -213,7 +213,8 @@ async function executePreparation(rootDir, workload) {
   const storePath = capture(["store", "path"]);
   if (
     !path.isAbsolute(storePath) ||
-    fs.statSync(existingAncestor(storePath)).dev !== fs.statSync(rootDir).dev
+    fs.statSync(existingAncestor(storePath), { bigint: true }).dev !==
+      fs.statSync(rootDir, { bigint: true }).dev
   ) {
     throw new Error("Preparation requires a pnpm store on the same volume as the worktree.");
   }

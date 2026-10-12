@@ -17,6 +17,8 @@ import type {
 } from "./update-immutable-install-schema.js";
 import {
   assertImmutableDescriptorCurrent,
+  assertImmutableDescriptorIdentityEncoding,
+  assertImmutableIdentityEncoding,
   readImmutableLayout,
   directoryIdentity,
 } from "./update-immutable-layout.js";
@@ -149,8 +151,13 @@ export async function inspectImmutableInstall(
       "Immutable release layout is not adopted. Use openclaw update adopt-immutable after its previous updater has stopped.",
     );
   }
+  assertImmutableDescriptorIdentityEncoding(record.descriptor);
   const operation = record.activation?.operation;
   if (operation?.pointerIntent) {
+    assertImmutableIdentityEncoding(operation.pointerIntent.identityEncoding, [
+      operation.pointerIntent.fromIdentity,
+      operation.pointerIntent.temporaryIdentity,
+    ]);
     const layout = readImmutableLayout(record.descriptor.root);
     const intent = operation.pointerIntent;
     const selected =

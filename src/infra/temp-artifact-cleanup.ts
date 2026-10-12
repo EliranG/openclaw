@@ -109,8 +109,11 @@ export async function maintainRetainedUpdateRuntimes(params: {
         }
         const directory = path.join(parent, entry.name);
         try {
-          const before = await fs.lstat(directory);
-          if (!before.isDirectory() || (process.getuid && before.uid !== process.getuid())) {
+          const before = await fs.lstat(directory, { bigint: true });
+          if (
+            !before.isDirectory() ||
+            (process.getuid && before.uid !== BigInt(process.getuid()))
+          ) {
             throw new Error("directory ownership is unknown; inspect it before manual cleanup");
           }
           if (retainedRuntimes.has(directory)) {
@@ -133,11 +136,11 @@ export async function maintainRetainedUpdateRuntimes(params: {
             continue;
           }
           const { inspectOtherOpenClawProcesses } = await import("./openclaw-process-census.js");
-          const current = await fs.lstat(directory);
+          const current = await fs.lstat(directory, { bigint: true });
           if (
             current.dev !== before.dev ||
             current.ino !== before.ino ||
-            current.ctimeMs !== before.ctimeMs ||
+            current.ctimeNs !== before.ctimeNs ||
             retainedRuntimes.has(directory)
           ) {
             throw new Error("directory identity or custody changed");

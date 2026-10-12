@@ -1,4 +1,4 @@
-import fsSync, { type Stats } from "node:fs";
+import fsSync, { type BigIntStats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { readOwnerAndDaclBatch, type OwnerAndDaclResult } from "@openclaw/fs-safe/permissions";
@@ -32,10 +32,10 @@ async function assertTrustedPathChain(
   targetType: "directory" | "file",
   options: { allowWindowsTargetTrustedInstaller?: boolean } = {},
 ): Promise<void> {
-  const entries: Array<{ path: string; before: Stats }> = [];
+  const entries: Array<{ path: string; before: BigIntStats }> = [];
   let cursor = resolvedPath;
   for (;;) {
-    entries.push({ path: cursor, before: await fs.lstat(cursor) });
+    entries.push({ path: cursor, before: await fs.lstat(cursor, { bigint: true }) });
     const parentPath = path.dirname(cursor);
     if (parentPath === cursor) {
       break;
@@ -54,7 +54,7 @@ async function assertTrustedPathChain(
   }
   for (const [index, entry] of entries.entries()) {
     const { before, path: currentPath } = entry;
-    const after = await fs.lstat(currentPath);
+    const after = await fs.lstat(currentPath, { bigint: true });
     if (
       before.isSymbolicLink() ||
       after.isSymbolicLink() ||
@@ -76,9 +76,9 @@ async function assertTrustedPathChain(
       });
     } else {
       const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
-      if (uid === undefined || (after.uid !== uid && after.uid !== 0)) {
+      if (uid === undefined || (after.uid !== BigInt(uid) && after.uid !== 0n)) {
         failure = "path is not owned by the current user or root";
-      } else if ((after.mode & 0o022) !== 0 && !(directory && (after.mode & 0o1000) !== 0)) {
+      } else if ((after.mode & 0o022n) !== 0n && !(directory && (after.mode & 0o1000n) !== 0n)) {
         failure = "path is writable by another user";
       }
     }
@@ -88,7 +88,7 @@ async function assertTrustedPathChain(
   }
   // Recheck from the trusted root toward the target after the full chain is known.
   for (const entry of entries.toReversed()) {
-    const current = await fs.lstat(entry.path);
+    const current = await fs.lstat(entry.path, { bigint: true });
     if (
       current.isSymbolicLink() ||
       current.dev !== entry.before.dev ||

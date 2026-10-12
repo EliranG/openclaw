@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstatSync, readdirSync } from "node:fs";
+import { lstatSync, readdirSync, type BigIntStats } from "node:fs";
 import fs from "node:fs/promises";
 import { endianness } from "node:os";
 import path from "node:path";
@@ -25,7 +25,7 @@ const SNAPSHOT_HASH_BUFFER_BYTES = 1024 * 1024;
 type SqliteChecksumByteOrder = "BE" | "LE";
 type SnapshotEntry = {
   path: string;
-  stat: Awaited<ReturnType<typeof fs.lstat>>;
+  stat: BigIntStats;
   children?: string[];
 };
 export type ConfigInputHashes = {
@@ -55,11 +55,11 @@ async function digestFile(
   observedEntries: SnapshotEntry[],
   hashPrefix = "",
 ): Promise<string> {
-  const before = await fs.lstat(filePath);
+  const before = await fs.lstat(filePath, { bigint: true });
   if (!before.isFile()) {
     throw new Error(`Snapshot path is not a regular file: ${filePath}`);
   }
-  if (before.nlink !== 1) {
+  if (before.nlink !== 1n) {
     throw new Error(`Snapshot path has unbound hard links: ${filePath}`);
   }
   observedEntries.push({ path: filePath, stat: before });
@@ -116,9 +116,9 @@ async function openSqliteSharedMemoryEntry(
     await databaseHandle?.close();
   }
 
-  let sharedMemoryStat: Awaited<ReturnType<typeof fs.lstat>>;
+  let sharedMemoryStat: BigIntStats;
   try {
-    sharedMemoryStat = await fs.lstat(sharedMemoryPath);
+    sharedMemoryStat = await fs.lstat(sharedMemoryPath, { bigint: true });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return undefined;
@@ -127,8 +127,8 @@ async function openSqliteSharedMemoryEntry(
   }
   if (
     !sharedMemoryStat.isFile() ||
-    sharedMemoryStat.size === 0 ||
-    sharedMemoryStat.size % SQLITE_SHM_REGION_BYTES !== 0
+    sharedMemoryStat.size === 0n ||
+    sharedMemoryStat.size % BigInt(SQLITE_SHM_REGION_BYTES) !== 0n
   ) {
     return undefined;
   }
@@ -208,7 +208,7 @@ async function openSqliteSharedMemoryEntry(
 async function digestSnapshotFileHandle(
   filePath: string,
   handle: fs.FileHandle,
-  expectedStat: Awaited<ReturnType<typeof fs.lstat>>,
+  expectedStat: BigIntStats,
   volatileRanges: readonly (readonly [number, number])[] = [],
   hashPrefix = "",
 ): Promise<string> {
@@ -217,7 +217,7 @@ async function digestSnapshotFileHandle(
   let position = 0;
   const assertUnchanged = (current: SnapshotEntry["stat"], phase: "before" | "while") => {
     if (
-      (["dev", "ino", "size", "mtimeMs"] as const).some(
+      (["dev", "ino", "size", "mtimeNs"] as const).some(
         (field) => expectedStat[field] !== current[field],
       )
     ) {
@@ -225,7 +225,7 @@ async function digestSnapshotFileHandle(
     }
   };
   try {
-    assertUnchanged(await handle.stat(), "before");
+    assertUnchanged(await handle.stat({ bigint: true }), "before");
     for (;;) {
       const { bytesRead } = await handle.read(buffer, 0, buffer.length, position);
       if (bytesRead === 0) {
@@ -242,7 +242,7 @@ async function digestSnapshotFileHandle(
       hash.update(chunk);
       position += bytesRead;
     }
-    assertUnchanged(await handle.stat(), "while");
+    assertUnchanged(await handle.stat({ bigint: true }), "while");
   } finally {
     await handle.close();
   }
@@ -253,17 +253,17 @@ async function digestDirectory(
   directory: string,
   observedEntries: SnapshotEntry[],
 ): Promise<string> {
-  const rootStat = await fs.lstat(directory);
+  const rootStat = await fs.lstat(directory, { bigint: true });
   if (!rootStat.isDirectory()) {
     throw new Error(`Snapshot state path is not a directory: ${directory}`);
   }
   const hash = createHash("sha256");
   const hardLinks = new Map<
     string,
-    { firstPath: string; firstRelative: string; observed: number; expected: number }
+    { firstPath: string; firstRelative: string; observed: number; expected: bigint }
   >();
   const visit = async (current: string, relative: string): Promise<void> => {
-    const stat = await fs.lstat(current);
+    const stat = await fs.lstat(current, { bigint: true });
     // A symlink can escape the copied tree after identity capture. Plans bind only
     // regular entries owned by the supplied snapshot.
     if (stat.isSymbolicLink()) {
@@ -325,7 +325,7 @@ async function digestDirectory(
   };
   await visit(directory, "");
   for (const hardLink of hardLinks.values()) {
-    if (hardLink.observed !== hardLink.expected) {
+    if (BigInt(hardLink.observed) !== hardLink.expected) {
       throw new Error(`Snapshot file has links outside copied state: ${hardLink.firstPath}`);
     }
   }
@@ -336,7 +336,7 @@ function verifySnapshotEntries(observedEntries: readonly SnapshotEntry[]): void 
   // Earlier entries can change while later files are hashed. Validate the whole
   // observed set without yielding before returning its identity, not per subtree.
   for (const entry of observedEntries) {
-    const after = lstatSync(entry.path);
+    const after = lstatSync(entry.path, { bigint: true });
     const before = entry.stat;
     if (
       before.isFile() !== after.isFile() ||
@@ -345,8 +345,8 @@ function verifySnapshotEntries(observedEntries: readonly SnapshotEntry[]): void 
       before.ino !== after.ino ||
       before.nlink !== after.nlink ||
       before.size !== after.size ||
-      before.mtimeMs !== after.mtimeMs ||
-      before.ctimeMs !== after.ctimeMs
+      before.mtimeNs !== after.mtimeNs ||
+      before.ctimeNs !== after.ctimeNs
     ) {
       throw new Error(`Snapshot entry changed while hashing: ${entry.path}`);
     }

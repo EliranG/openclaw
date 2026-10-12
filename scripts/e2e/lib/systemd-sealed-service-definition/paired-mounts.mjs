@@ -9,8 +9,8 @@ try {
   assert.notEqual(process.geteuid(), 0, "proof must run unprivileged");
   assert.equal((await fs.lstat(current)).isSymbolicLink(), false);
   assert.equal(await fs.realpath(current), current);
-  const selectedStat = await fs.stat(release);
-  const currentStat = await fs.stat(current);
+  const selectedStat = await fs.stat(release, { bigint: true });
+  const currentStat = await fs.stat(current, { bigint: true });
   assert.equal(
     currentStat.dev === selectedStat.dev && currentStat.ino === selectedStat.ino,
     shouldMatch,

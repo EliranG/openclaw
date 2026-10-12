@@ -47,6 +47,10 @@ import type { UsageCostTranscriptFile } from "./session-cost-usage.types.js";
 
 const USAGE_COST_TRANSCRIPT_STAT_CONCURRENCY = 32;
 
+function statMtimeMs(stats: fs.BigIntStats): number {
+  return Number(stats.mtimeNs / 1_000_000n) + Number(stats.mtimeNs % 1_000_000n) / 1_000_000;
+}
+
 export type UsageCostCollectionAccess = {
   env?: NodeJS.ProcessEnv;
   materializeArchive: (sourcePath: string) => Promise<string>;
@@ -65,7 +69,7 @@ type UsageCostJsonlSource = {
   sourcePath: string;
   sessionId?: string;
   mtimeMs: number;
-  stats: fs.Stats;
+  stats: fs.BigIntStats;
 };
 
 type UsageCostSqliteFile = UsageCostTranscriptFile & { kind: "sqlite" };
@@ -82,16 +86,17 @@ async function materializeUsageCostTranscriptSource(
   // Identity and freshness belong to the source; incremental offsets and
   // byte signatures must describe the decompressed file used by readers.
   const filePath = await access.materializeArchive(sourcePath);
-  const stats = filePath === sourcePath ? sourceStats : await fs.promises.stat(filePath);
+  const stats =
+    filePath === sourcePath ? sourceStats : await fs.promises.stat(filePath, { bigint: true });
   return {
     filePath,
     sourcePath,
     kind: "jsonl",
     sessionId: source.sessionId,
-    size: stats.size,
-    mtimeMs: sourceStats.mtimeMs,
-    device: stats.dev,
-    inode: stats.ino,
+    size: Number(stats.size),
+    mtimeMs: statMtimeMs(sourceStats),
+    device: stats.dev.toString(),
+    inode: stats.ino.toString(),
   };
 }
 
@@ -143,8 +148,8 @@ async function listUsageCountedTranscriptFileSources(
     .map((entry) => async (): Promise<UsageCostJsonlSource | undefined> => {
       const filePath = path.join(sessionsDir, entry.name);
       try {
-        const stats = await fs.promises.stat(filePath);
-        if (params.minMtimeMs !== undefined && stats.mtimeMs < params.minMtimeMs) {
+        const stats = await fs.promises.stat(filePath, { bigint: true });
+        if (params.minMtimeMs !== undefined && statMtimeMs(stats) < params.minMtimeMs) {
           return undefined;
         }
         return {
@@ -154,7 +159,7 @@ async function listUsageCountedTranscriptFileSources(
             archives.get(entry.name)?.sessionId ??
             parseUsageCountedSessionIdFromFileName(entry.name) ??
             undefined,
-          mtimeMs: stats.mtimeMs,
+          mtimeMs: statMtimeMs(stats),
           stats,
         };
       } catch (error) {
@@ -282,12 +287,12 @@ async function resolveUsageCostTranscriptSource(
     return (await readUsageCostSqliteFiles([marker], access))[0];
   }
   try {
-    const stats = await fs.promises.stat(sessionFile);
+    const stats = await fs.promises.stat(sessionFile, { bigint: true });
     return {
       kind: "jsonl",
       sourcePath: sessionFile,
       sessionId: parseUsageCountedSessionIdFromFileName(path.basename(sessionFile)) ?? undefined,
-      mtimeMs: stats.mtimeMs,
+      mtimeMs: statMtimeMs(stats),
       stats,
     };
   } catch {

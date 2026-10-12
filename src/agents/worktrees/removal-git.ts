@@ -178,7 +178,7 @@ export async function withExactStateGitLocks<T>(
   if (storage.code !== 1 && (storage.code !== 0 || storage.stdout.trim() !== "files")) {
     throw new Error("Exact-state retirement requires Git file refs; source preserved");
   }
-  const held: { path: string; handle: FileHandle; dev: number; ino: number }[] = [];
+  const held: { path: string; handle: FileHandle; dev: bigint; ino: bigint }[] = [];
   try {
     for (const name of ["index", "HEAD", `refs/heads/${record.branch}`, ...additionalRefs]) {
       const target = (await resolveGitMetadataPath(record.path, name, options)) + ".lock";
@@ -188,7 +188,7 @@ export async function withExactStateGitLocks<T>(
       await fs.mkdir(path.dirname(target), { recursive: true });
       assertCurrent();
       const handle = await fs.open(target, "wx", 0o600);
-      const stat = await handle.stat();
+      const stat = await handle.stat({ bigint: true });
       held.push({ path: target, handle, dev: stat.dev, ino: stat.ino });
     }
     assertCurrent();
@@ -196,7 +196,7 @@ export async function withExactStateGitLocks<T>(
   } finally {
     for (const lock of held.toReversed()) {
       await lock.handle.close();
-      const current = await fs.lstat(lock.path).catch(missingPathOrThrow);
+      const current = await fs.lstat(lock.path, { bigint: true }).catch(missingPathOrThrow);
       // Native checkout deletion may have removed its own administrative files.
       // Never unlink a lock whose incarnation has been replaced by another writer.
       if (current?.dev === lock.dev && current.ino === lock.ino) {
@@ -220,7 +220,7 @@ export async function retireExactWorktree<T>(params: {
 }): Promise<T> {
   const { record, git } = params;
   const destination = path.join(path.dirname(record.path), params.retirementName);
-  const source = await fs.lstat(record.path);
+  const source = await fs.lstat(record.path, { bigint: true });
   if (!source.isDirectory()) {
     throw new Error("Exact-state source is no longer a directory; source preserved");
   }
@@ -233,7 +233,7 @@ export async function retireExactWorktree<T>(params: {
     beforeRun: params.assertCurrent,
     killProcessTree: true,
   });
-  const moved = await fs.lstat(destination);
+  const moved = await fs.lstat(destination, { bigint: true });
   if (moved.dev !== source.dev || moved.ino !== source.ino) {
     throw new Error(
       "Exact-state source identity changed; quarantined source and recovery snapshot preserved",

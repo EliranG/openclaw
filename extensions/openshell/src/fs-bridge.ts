@@ -1,3 +1,4 @@
+import type { BigIntStats } from "node:fs";
 import fsPromises from "node:fs/promises";
 import path from "node:path";
 import {
@@ -437,7 +438,7 @@ async function assertSameDeviceRenameSupported(params: {
   root: string;
   toHostPath: string;
 }): Promise<void> {
-  const sourceStats = await fsPromises.lstat(params.fromHostPath);
+  const sourceStats = await fsPromises.lstat(params.fromHostPath, { bigint: true });
   const destinationParentStats = await nearestExistingDirectoryStats({
     root: params.root,
     targetPath: path.dirname(params.toHostPath),
@@ -450,11 +451,11 @@ async function assertSameDeviceRenameSupported(params: {
 async function nearestExistingDirectoryStats(params: {
   root: string;
   targetPath: string;
-}): Promise<Awaited<ReturnType<typeof fsPromises.lstat>>> {
+}): Promise<BigIntStats> {
   const rootPath = path.resolve(params.root);
   let cursor = path.resolve(params.targetPath);
   while (isPathInside(rootPath, cursor)) {
-    const stats = await fsPromises.lstat(cursor).catch((err: unknown) => {
+    const stats = await fsPromises.lstat(cursor, { bigint: true }).catch((err: unknown) => {
       if (isNotFoundError(err)) {
         return null;
       }
@@ -472,7 +473,7 @@ async function nearestExistingDirectoryStats(params: {
     }
     cursor = next;
   }
-  return await fsPromises.lstat(rootPath);
+  return await fsPromises.lstat(rootPath, { bigint: true });
 }
 
 function isNotFoundError(err: unknown): boolean {

@@ -158,7 +158,7 @@ export async function prepareSignalSocketPath(
     await validateSignalSocketPath(socketPath);
     let existing;
     try {
-      existing = await lstat(socketPath);
+      existing = await lstat(socketPath, { bigint: true });
     } catch (error) {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") {
         return;
@@ -167,17 +167,17 @@ export async function prepareSignalSocketPath(
     }
     if (
       existing.isSocket() &&
-      existing.uid === uid &&
+      existing.uid === BigInt(uid) &&
       (await isStaleSocket(socketPath, abortSignal))
     ) {
       // The private directory excludes other OS users. Revalidate after the awaited probe
       // so a concurrent same-owner daemon replacement is never deliberately removed.
       await validateSignalSocketPath(socketPath);
-      const current = await lstat(socketPath);
+      const current = await lstat(socketPath, { bigint: true });
       abortSignal?.throwIfAborted();
       if (
         current.isSocket() &&
-        current.uid === uid &&
+        current.uid === BigInt(uid) &&
         current.dev === existing.dev &&
         current.ino === existing.ino
       ) {

@@ -79,11 +79,12 @@ export async function readClaudeCatalogMetadata(
 type CatalogJsonCacheEntry<T> = {
   mtimeMs: number;
   size: number;
-  ino?: number;
+  ino: string;
+  dev: string;
   value: T;
 };
 
-type FileSignature = { mtimeMs: number; size: number; ino: number };
+type FileSignature = { mtimeMs: number; size: number; ino: string; dev: string };
 type SafeSessionFile = ({ filePath: string } & FileSignature) | undefined;
 
 type ClaudeProjectDirectorySnapshot = {
@@ -151,9 +152,15 @@ async function safeSessionFile(
     if (!isPathInside(resolvedRoot, resolvedCandidate)) {
       return undefined;
     }
-    const stat = await fs.stat(resolvedCandidate);
+    const stat = await fs.stat(resolvedCandidate, { bigint: true });
     return stat.isFile()
-      ? { filePath: resolvedCandidate, mtimeMs: stat.mtimeMs, size: stat.size, ino: stat.ino }
+      ? {
+          filePath: resolvedCandidate,
+          mtimeMs: Number(stat.mtimeNs) / 1e6,
+          size: Number(stat.size),
+          ino: String(stat.ino),
+          dev: String(stat.dev),
+        }
       : undefined;
   } catch (error) {
     const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
@@ -207,13 +214,21 @@ export function createCatalogJsonReader<T>(project: (value: unknown) => T) {
     filePath: string,
     options: {
       onIoFailure?: () => void;
-      signature?: { mtimeMs: number; size: number; ino?: number };
+      signature?: FileSignature;
     } = {},
   ): Promise<T | undefined> => {
     const stat =
       options.signature ??
-      (await fs.stat(filePath).then(
-        (value) => (value.isFile() ? value : undefined),
+      (await fs.stat(filePath, { bigint: true }).then(
+        (value) =>
+          value.isFile()
+            ? {
+                mtimeMs: Number(value.mtimeNs) / 1e6,
+                size: Number(value.size),
+                ino: String(value.ino),
+                dev: String(value.dev),
+              }
+            : undefined,
         () => {
           options.onIoFailure?.();
           return undefined;
@@ -228,7 +243,8 @@ export function createCatalogJsonReader<T>(project: (value: unknown) => T) {
       cached &&
       cached.mtimeMs === stat.mtimeMs &&
       cached.size === stat.size &&
-      cached.ino === stat.ino
+      cached.ino === stat.ino &&
+      cached.dev === stat.dev
     ) {
       setBoundedCache(cache, filePath, cached, MAX_CATALOG_JSON_CACHE_ENTRIES);
       return cached.value;
@@ -245,7 +261,7 @@ export function createCatalogJsonReader<T>(project: (value: unknown) => T) {
       setBoundedCache(
         cache,
         filePath,
-        { mtimeMs: stat.mtimeMs, size: stat.size, ino: stat.ino, value },
+        { mtimeMs: stat.mtimeMs, size: stat.size, ino: stat.ino, dev: stat.dev, value },
         MAX_CATALOG_JSON_CACHE_ENTRIES,
       );
       return value;
@@ -358,9 +374,16 @@ export async function readProjectsTreeSnapshot(
       tasks: results.flatMap((dir) =>
         dir
           ? dir.childNames.map((name) => async () => {
-              const stat = await fs.lstat(path.join(dir.directory, name)).catch(onReadFailure);
+              const stat = await fs
+                .lstat(path.join(dir.directory, name), { bigint: true })
+                .catch(onReadFailure);
               if (stat?.isFile()) {
-                dir.files.set(name, { mtimeMs: stat.mtimeMs, size: stat.size, ino: stat.ino });
+                dir.files.set(name, {
+                  mtimeMs: Number(stat.mtimeNs) / 1e6,
+                  size: Number(stat.size),
+                  ino: String(stat.ino),
+                  dev: String(stat.dev),
+                });
               }
             })
           : [],

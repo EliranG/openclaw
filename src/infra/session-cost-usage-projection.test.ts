@@ -28,8 +28,8 @@ function createFile(name: string): UsageCostTranscriptFile {
     kind: "jsonl",
     size: 100,
     mtimeMs: 1_000,
-    device: 1,
-    inode: 2,
+    device: "1",
+    inode: "2",
   };
 }
 

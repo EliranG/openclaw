@@ -52,7 +52,7 @@ beforeEach(async () => {
   vi.spyOn(process, "availableMemory").mockReturnValue(4 * GIB);
   vi.spyOn(fs, "readFile").mockResolvedValue("MemAvailable:   16777216 kB\n");
   vi.spyOn(fs, "statfs").mockResolvedValue(disk);
-  vi.spyOn(fs, "stat").mockResolvedValue(await fs.stat(os.tmpdir()));
+  vi.spyOn(fs, "stat").mockResolvedValue(await fs.stat(os.tmpdir(), { bigint: true }));
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -113,8 +113,8 @@ describe("Gateway hardware detection", () => {
   });
 
   it("reports separate capacities when the model cache is on another volume", async () => {
-    const cacheStat = await readStat(os.tmpdir());
-    cacheStat.dev += 1;
+    const cacheStat = await readStat(os.tmpdir(), { bigint: true });
+    cacheStat.dev += 1n;
     vi.mocked(fs.stat).mockResolvedValueOnce(cacheStat);
     vi.mocked(fs.statfs)
       .mockResolvedValueOnce(disk)
@@ -128,8 +128,8 @@ describe("Gateway hardware detection", () => {
   });
 
   it("reserves combined capacity for a pooled Linux filesystem", async () => {
-    const cacheStat = await readStat(os.tmpdir());
-    cacheStat.dev += 1;
+    const cacheStat = await readStat(os.tmpdir(), { bigint: true });
+    cacheStat.dev += 1n;
     vi.mocked(fs.stat).mockResolvedValueOnce(cacheStat);
     vi.mocked(fs.statfs).mockResolvedValue({ ...disk, type: 0x9123683e });
 
@@ -144,8 +144,8 @@ describe("Gateway hardware detection", () => {
     "accounts for APFS shared capacity: $runtimeContainer",
     async ({ runtimeContainer, sharedDisk }) => {
       vi.mocked(os.platform).mockReturnValue("darwin");
-      const cacheStat = await readStat(os.tmpdir());
-      cacheStat.dev += 1;
+      const cacheStat = await readStat(os.tmpdir(), { bigint: true });
+      cacheStat.dev += 1n;
       vi.mocked(fs.stat).mockResolvedValueOnce(cacheStat);
       probes.diskContainers = {
         disk4s1: "<key>APFSContainerReference</key><string>disk4</string>",

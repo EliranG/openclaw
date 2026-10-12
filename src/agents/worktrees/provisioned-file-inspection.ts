@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { lstatIfExists } from "./git.js";
 
-type DirectoryIdentity = { path: string; dev: number; ino: number };
+type DirectoryIdentity = { path: string; dev: bigint; ino: bigint };
 
 export async function captureParentDirectoryIdentities(
   root: string,
@@ -16,7 +16,7 @@ export async function captureParentDirectoryIdentities(
   }
   const identities: DirectoryIdentity[] = [];
   for (const directory of directories) {
-    const stat = await fs.lstat(directory);
+    const stat = await fs.lstat(directory, { bigint: true });
     if (!stat.isDirectory() || stat.isSymbolicLink()) {
       throw new Error(`unsafe provisioned parent directory: ${directory}`);
     }
@@ -27,7 +27,7 @@ export async function captureParentDirectoryIdentities(
 
 export async function validateDirectoryIdentities(identities: readonly DirectoryIdentity[]) {
   for (const identity of identities) {
-    const stat = await fs.lstat(identity.path);
+    const stat = await fs.lstat(identity.path, { bigint: true });
     if (
       !stat.isDirectory() ||
       stat.isSymbolicLink() ||

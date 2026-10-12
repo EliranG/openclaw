@@ -74,7 +74,9 @@ export function resolveManagedServiceNodeRunner(
 
 async function haveSameDirectoryIdentity(leftPath: string, rightPath: string): Promise<boolean> {
   const [left, right] = await Promise.all(
-    [leftPath, rightPath].map((directory) => fs.stat(directory).catch(() => null)),
+    [leftPath, rightPath].map((directory) =>
+      fs.stat(directory, { bigint: true }).catch(() => null),
+    ),
   );
   return Boolean(left && right && left.dev === right.dev && left.ino === right.ino);
 }
@@ -313,7 +315,9 @@ export async function gatewayServiceCommandMatchesRoot(
   // Paired read-only release mounts have different paths but the same directory
   // identity. Copies of another release must remain foreign.
   const [expected, actual] = await Promise.all(
-    [expectedRootReal, serviceRootReal].map((directory) => fs.stat(directory).catch(() => null)),
+    [expectedRootReal, serviceRootReal].map((directory) =>
+      fs.stat(directory, { bigint: true }).catch(() => null),
+    ),
   );
   if (expected && actual && expected.dev === actual.dev && expected.ino === actual.ino) {
     return true;
@@ -341,7 +345,7 @@ export async function gatewayServiceCommandMatchesRoot(
   }
   try {
     for await (const entry of await fs.opendir(releases)) {
-      const candidate = await fs.lstat(path.join(releases, entry.name));
+      const candidate = await fs.lstat(path.join(releases, entry.name), { bigint: true });
       if (actual && candidate.dev === actual.dev && candidate.ino === actual.ino) {
         return true;
       }

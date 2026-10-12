@@ -2,7 +2,10 @@
 import syncFs from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { readRegularFile } from "@openclaw/fs-safe/advanced";
+import {
+  readRegularFile,
+  sameFileIdentity as sameExactFileIdentity,
+} from "@openclaw/fs-safe/advanced";
 import { sha256Hex } from "@openclaw/normalization-core/node-crypto";
 import { note } from "../../packages/terminal-core/src/note.js";
 import { DEFAULT_AGENTS_FILENAME, DEFAULT_TOOLS_FILENAME } from "../agents/workspace.js";
@@ -36,25 +39,25 @@ type ToolsMdSource = {
   path: string;
   content: string;
   sha256: string;
-  stat: syncFs.Stats;
+  stat: syncFs.BigIntStats;
 };
 
 type MigrationFileSnapshot = {
   content: string;
-  stat?: syncFs.Stats;
+  stat?: syncFs.BigIntStats;
 };
 
-type PosixFilePermissions = Pick<syncFs.Stats, "uid" | "gid" | "mode">;
+type PosixFilePermissions = Pick<syncFs.BigIntStats, "uid" | "gid" | "mode">;
 
-function sameFileIdentity(left?: syncFs.Stats, right?: syncFs.Stats): boolean {
-  return left?.dev === right?.dev && left?.ino === right?.ino;
+function sameFileIdentity(left?: syncFs.BigIntStats, right?: syncFs.BigIntStats): boolean {
+  return left && right ? sameExactFileIdentity(left, right) : left === right;
 }
 
 function samePosixPermissions(left: PosixFilePermissions, right: PosixFilePermissions): boolean {
   return (
     left.uid === right.uid &&
     left.gid === right.gid &&
-    (left.mode & 0o7777) === (right.mode & 0o7777)
+    (left.mode & 0o7777n) === (right.mode & 0o7777n)
   );
 }
 
@@ -69,9 +72,10 @@ function addsPosixReaders(
         if (source.gid === destination.gid && sourceGroup !== destinationGroup) {
           continue;
         }
-        const sourceBit = uid === source.uid ? 0o400 : sourceGroup ? 0o040 : 0o004;
-        const destinationBit = uid === destination.uid ? 0o400 : destinationGroup ? 0o040 : 0o004;
-        if ((destination.mode & destinationBit) !== 0 && (source.mode & sourceBit) === 0) {
+        const sourceBit = uid === source.uid ? 0o400n : sourceGroup ? 0o040n : 0o004n;
+        const destinationBit =
+          uid === destination.uid ? 0o400n : destinationGroup ? 0o040n : 0o004n;
+        if ((destination.mode & destinationBit) !== 0n && (source.mode & sourceBit) === 0n) {
           return true;
         }
       }
@@ -104,26 +108,26 @@ async function readMigrationFileSnapshot(
   filePath: string,
   allowMissing = false,
 ): Promise<MigrationFileSnapshot> {
-  let stat: syncFs.Stats;
+  let stat: syncFs.BigIntStats;
   try {
-    stat = await fs.lstat(filePath);
+    stat = await fs.lstat(filePath, { bigint: true });
   } catch (error) {
     if (allowMissing && (error as NodeJS.ErrnoException).code === "ENOENT") {
       return { content: "" };
     }
     throw error;
   }
-  if (!stat.isFile() || stat.nlink > 1) {
+  if (!stat.isFile() || stat.nlink > 1n) {
     throw new Error(
       `${path.basename(filePath)} must be an unlinked regular file for automatic migration`,
     );
   }
   const file = await readRegularFile({ filePath });
-  const currentStat = await fs.lstat(filePath);
+  const currentStat = await fs.lstat(filePath, { bigint: true });
   if (
     file.stat.nlink !== 1 ||
-    !sameFileIdentity(file.stat, stat) ||
-    !sameFileIdentity(currentStat, file.stat)
+    !sameExactFileIdentity(file.exactIdentity, stat) ||
+    !sameExactFileIdentity(currentStat, file.exactIdentity)
   ) {
     throw new Error(`${path.basename(filePath)} changed while opening it for migration`);
   }
@@ -251,25 +255,28 @@ async function writeAgentsAtomically(params: {
     throw new Error("AGENTS.md changed during TOOLS.md migration");
   }
   const stat = snapshot.stat;
-  const mode = stat?.mode ?? 0o600;
+  const mode = Number(stat?.mode ?? 0o600n);
   const tempPath = `${params.agentsPath}.doctor-writing-${process.pid}-${Date.now()}`;
   try {
-    let prepared: syncFs.Stats;
+    let prepared: syncFs.BigIntStats;
     {
       await using handle = await fs.open(tempPath, "wx", 0o600);
       await handle.writeFile(params.content, "utf8");
       if (process.platform !== "win32" && stat) {
         // Changing the owner must not grant the new UID the staging file's owner-read bit.
         await handle.chmod(0o000);
-        await handle.chown(stat.uid, stat.gid);
+        await handle.chown(Number(stat.uid), Number(stat.gid));
       }
       if (process.platform !== "win32" && params.importedSource) {
-        await assertSourceReadersPreserved(params.importedSource, stat ?? (await handle.stat()));
+        await assertSourceReadersPreserved(
+          params.importedSource,
+          stat ?? (await handle.stat({ bigint: true })),
+        );
       }
       if (stat) {
         await handle.chmod(mode);
       }
-      prepared = await handle.stat();
+      prepared = await handle.stat({ bigint: true });
       if (process.platform !== "win32" && stat && !samePosixPermissions(prepared, stat)) {
         throw new Error("AGENTS.md ownership or permissions could not be preserved");
       }
@@ -325,7 +332,7 @@ async function removeToolsSource(source: ToolsMdSource, workspaceDir: string): P
   }
   // The original bytes are durable in both the archive and merged AGENTS.md;
   // the single-operator migration deliberately has no concurrent-writer claim.
-  const currentStat = syncFs.lstatSync(source.path);
+  const currentStat = syncFs.lstatSync(source.path, { bigint: true });
   if (
     !current.stat ||
     !sameFileIdentity(currentStat, current.stat) ||

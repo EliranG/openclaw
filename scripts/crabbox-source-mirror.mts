@@ -1,4 +1,4 @@
-import { lstatSync, readdirSync, type Stats } from "node:fs";
+import { lstatSync, readdirSync, type BigIntStats } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
@@ -25,15 +25,17 @@ type MirrorDatabase = {
   metadata: { id: number; value: string };
 };
 
-export function mirrorStatStamp(stat: Stats) {
+export function mirrorStatStamp(stat: BigIntStats) {
   return [
     stat.isSymbolicLink() ? "link" : stat.isFile() ? "file" : stat.isDirectory() ? "dir" : "other",
     stat.dev,
     stat.ino,
     stat.mode,
     stat.size,
-    stat.mtimeMs,
-    stat.ctimeMs,
+    Number(stat.mtimeNs / 1_000_000_000n) * 1000 +
+      Number(stat.mtimeNs % 1_000_000_000n) / 1_000_000,
+    Number(stat.ctimeNs / 1_000_000_000n) * 1000 +
+      Number(stat.ctimeNs % 1_000_000_000n) / 1_000_000,
   ].join(":");
 }
 
@@ -43,13 +45,13 @@ function mirrorArtifact(path: string) {
   );
 }
 
-export function recordMirrorEntry(entries: Map<string, string>, path: string, stat: Stats) {
+export function recordMirrorEntry(entries: Map<string, string>, path: string, stat: BigIntStats) {
   if (mirrorArtifact(path)) {
     return;
   }
   // Native sync may refresh its index; selection/candidate indexes stay sealed.
   if (path === ".git/index") {
-    if (!stat.isFile() || stat.nlink !== 1) {
+    if (!stat.isFile() || stat.nlink !== 1n) {
       throw new Error("source mirror index is not a private regular file");
     }
     entries.set(path, "mutable-index");
@@ -74,12 +76,12 @@ function payloadInventory(directory: string) {
       if (mirrorArtifact(path)) {
         continue;
       }
-      const stat = lstatSync(join(directory, path));
+      const stat = lstatSync(join(directory, path), { bigint: true });
       recordMirrorEntry(entries, path, stat);
       if (stat.isDirectory()) {
         walk(path);
       } else if (path.startsWith(".git/objects/")) {
-        objectBytes += stat.size;
+        objectBytes += Number(stat.size);
       }
     }
   }

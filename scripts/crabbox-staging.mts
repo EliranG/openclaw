@@ -16,7 +16,6 @@ import {
   rmdirSync,
   writeFileSync,
   type BigIntStats,
-  type Stats,
 } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -302,7 +301,7 @@ function inventory(
   payload: string,
   known = new Map<string, Entry>(),
   preservedArtifacts = false,
-  observeEntry?: (path: string, stat: Stats) => void,
+  observeEntry?: (path: string, stat: BigIntStats) => void,
 ): Entry[] {
   const entries: Entry[] = [];
   const walk = (directory: string, parent: string) => {
@@ -315,7 +314,7 @@ function inventory(
         throw new Error("staging contains an unsupported path");
       }
       const absolute = join(payload, path);
-      const stat = lstatSync(absolute);
+      const stat = lstatSync(absolute, { bigint: true });
       observeEntry?.(path, stat);
       if (stat.isDirectory()) {
         if (!preservedArtifacts || path !== "source/.crabbox") {
@@ -324,7 +323,7 @@ function inventory(
         walk(absolute, path);
       } else if (stat.isFile() || stat.isSymbolicLink()) {
         const symbolic = stat.isSymbolicLink();
-        const mode = symbolic ? "120000" : stat.mode & 0o100 ? "100755" : "100644";
+        const mode = symbolic ? "120000" : stat.mode & 0o100n ? "100755" : "100644";
         const frozen = known.get(path);
         if (frozen && frozen.mode !== mode) {
           throw new Error("source mode changed before sealing: " + path);
@@ -599,7 +598,7 @@ export type StagingHandle = {
   prepared: (
     source: FrozenSource,
     witness?: SourceWitness,
-    observeEntry?: (path: string, stat: Stats) => void,
+    observeEntry?: (path: string, stat: BigIntStats) => void,
   ) => void;
   admitted: (claims?: ClaimNamespace, leases?: string[]) => void;
   settled: (leases?: string[]) => void;

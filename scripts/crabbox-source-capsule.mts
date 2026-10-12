@@ -109,7 +109,7 @@ function sourceStat(root: string, path: string) {
       return { kind: "replaced" } as const;
     }
   }
-  const stat = lstatSync(join(root, path), { throwIfNoEntry: false });
+  const stat = lstatSync(join(root, path), { bigint: true, throwIfNoEntry: false });
   return stat ? { kind: "present" as const, stat } : { kind: "missing" as const };
 }
 
@@ -548,7 +548,7 @@ export function prepareCrabboxSourceCapsule(options: {
       frozen.set(path, {
         mode,
         blobPath,
-        stamp: cache ? mirrorStatStamp(lstatSync(destination)) : undefined,
+        stamp: cache ? mirrorStatStamp(lstatSync(destination, { bigint: true })) : undefined,
       });
       copiedFiles += 1;
     }
@@ -582,10 +582,10 @@ export function prepareCrabboxSourceCapsule(options: {
         throw new Error(`source capsule has an unsupported file kind at ${JSON.stringify(path)}`);
       }
       const destination = join(directory, path);
-      const mode = (info.mode & 0o100) !== 0 ? "100755" : "100644";
+      const mode = (info.mode & 0o100n) !== 0n ? "100755" : "100644";
       const fd = openSync(sourcePath, constants.O_RDONLY | constants.O_NOFOLLOW);
       try {
-        const opened = fstatSync(fd);
+        const opened = fstatSync(fd, { bigint: true });
         // Bind the descriptor to the admitted file before copying any bytes.
         if (!opened.isFile() || opened.dev !== info.dev || opened.ino !== info.ino) {
           throw new Error(`source capsule file identity changed: ${JSON.stringify(path)}`);
@@ -602,7 +602,7 @@ export function prepareCrabboxSourceCapsule(options: {
         try {
           let copied: number;
           try {
-            copied = copyFileDescriptorSync(fd, output, { maxBytes: opened.size });
+            copied = copyFileDescriptorSync(fd, output, { maxBytes: Number(opened.size) });
           } catch (error) {
             if (error instanceof FsSafeError && error.code === "too-large") {
               throw new Error(
@@ -619,7 +619,7 @@ export function prepareCrabboxSourceCapsule(options: {
             }
             throw error;
           }
-          if (copied !== opened.size) {
+          if (BigInt(copied) !== opened.size) {
             throw new Error(
               `source changed while freezing ${JSON.stringify(path)}; retry after edits finish`,
             );
@@ -638,7 +638,7 @@ export function prepareCrabboxSourceCapsule(options: {
       frozen.set(path, {
         mode,
         blobPath: destination,
-        stamp: cache ? mirrorStatStamp(lstatSync(destination)) : undefined,
+        stamp: cache ? mirrorStatStamp(lstatSync(destination, { bigint: true })) : undefined,
       });
       copiedFiles += 1;
       return "present";

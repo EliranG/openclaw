@@ -456,16 +456,16 @@ export async function repairDoctorSqliteNoCow(params: {
           "source store changed during the NOCOW rewrite; original retained for retry",
         );
       }
-      const original = fs.statSync(directory);
-      const replacement = fs.statSync(backup);
+      const original = fs.statSync(directory, { bigint: true });
+      const replacement = fs.statSync(backup, { bigint: true });
       params.assertCurrent();
       exchangeAttempted = true;
       const exchange = spawnSync("mv", ["--exchange", "--no-copy", "-T", "--", backup, directory], {
         encoding: "utf8",
         timeout: TOOL_TIMEOUT_MS,
       });
-      const installed = fs.statSync(directory);
-      const retained = fs.statSync(backup);
+      const installed = fs.statSync(directory, { bigint: true });
+      const retained = fs.statSync(backup, { bigint: true });
       // A timed-out helper may already have committed. Physical identities settle that outcome.
       if (
         installed.dev === original.dev &&

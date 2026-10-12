@@ -21,7 +21,7 @@ for (const file of files) {
       file,
       fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
     );
-    const original = fs.fstatSync(fd);
+    const original = fs.fstatSync(fd, { bigint: true });
     if (!original.isFile() || original.mtimeMs >= olderThan) {
       continue;
     }
@@ -31,13 +31,13 @@ for (const file of files) {
       continue;
     }
     try {
-      const current = fs.lstatSync(file);
+      const current = fs.lstatSync(file, { bigint: true });
       if (
         current.dev !== original.dev ||
         current.ino !== original.ino ||
         current.size !== original.size ||
-        current.mtimeMs !== original.mtimeMs ||
-        current.ctimeMs !== original.ctimeMs ||
+        current.mtimeNs !== original.mtimeNs ||
+        current.ctimeNs !== original.ctimeNs ||
         !lease.isHeld()
       ) {
         retained++;

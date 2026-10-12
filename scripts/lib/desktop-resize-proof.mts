@@ -135,14 +135,14 @@ function desktopNodeStreamCloses(value: unknown) {
 /** Read at most 1 MiB, including when a live fixture log grows after admission. */
 async function readDesktopProofLog<T>(file: string, project: (records: unknown[]) => T) {
   try {
-    const stat = await lstat(file);
+    const stat = await lstat(file, { bigint: true });
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024) {
       return null;
     }
     const handle = await open(file, "r");
     let text: string;
     try {
-      const opened = await handle.stat();
+      const opened = await handle.stat({ bigint: true });
       if (!opened.isFile() || opened.ino !== stat.ino || opened.dev !== stat.dev) {
         return null;
       }

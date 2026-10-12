@@ -193,8 +193,8 @@ function openOwned(root, relative) {
     file,
     fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
   );
-  const stat = fs.fstatSync(fd);
-  if (!stat.isFile() || stat.nlink !== 1) {
+  const stat = fs.fstatSync(fd, { bigint: true });
+  if (!stat.isFile() || stat.nlink !== 1n) {
     fs.closeSync(fd);
     throw new Error();
   }
@@ -208,8 +208,8 @@ function sameFileIdentity(before, after) {
 function unchangedFile(before, after) {
   return (
     sameFileIdentity(before, after) &&
-    before.mtimeMs === after.mtimeMs &&
-    before.ctimeMs === after.ctimeMs
+    before.mtimeNs === after.mtimeNs &&
+    before.ctimeNs === after.ctimeNs
   );
 }
 
@@ -224,7 +224,10 @@ function readOwned(root, relative, label, limit = inputLimit, binary = false) {
         omissions[label] = reasons[1];
         return null;
       }
-      if (length !== stat.size || !unchangedFile(stat, fs.fstatSync(fd))) {
+      if (
+        BigInt(length) !== stat.size ||
+        !unchangedFile(stat, fs.fstatSync(fd, { bigint: true }))
+      ) {
         omissions[label] = reasons[2];
         return null;
       }
@@ -675,7 +678,7 @@ function assertNativeSqliteObservationSafe(handles, label) {
   if (
     fs.readSync(database.fd, header, 0, header.length, 0) !== header.length ||
     header.subarray(0, 16).toString("utf8") !== "SQLite format 3\0" ||
-    !unchangedFile(database.stat, fs.fstatSync(database.fd))
+    !unchangedFile(database.stat, fs.fstatSync(database.fd, { bigint: true }))
   ) {
     throw new Error();
   }
@@ -716,7 +719,10 @@ function assertObservationSourcesUnchanged(handles) {
     // SQLite readers update SHM read marks. Preserve identity checks without
     // mistaking those cache timestamps for durable index mutations.
     const matches = file.endsWith("-shm") ? sameFileIdentity : unchangedFile;
-    if (!matches(stat, fs.fstatSync(fd)) || !matches(stat, fs.lstatSync(file))) {
+    if (
+      !matches(stat, fs.fstatSync(fd, { bigint: true })) ||
+      !matches(stat, fs.lstatSync(file, { bigint: true }))
+    ) {
       throw new Error();
     }
   }

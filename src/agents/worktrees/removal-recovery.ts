@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isMissingPathError } from "../../infra/errors.js";
 import { normalizeGitPathForFilesystem } from "../../infra/git-exec.js";
 import { withGitProcessOperation } from "../../process/spawn-diagnostics.js";
 import { withWorktreeAllocationLease, type WorktreeAllocationGuard } from "./allocation.js";
@@ -253,7 +254,12 @@ async function recoverRemovalWithAllocation(params: {
     // Match the exact backlink, never infer administrative ownership from its basename.
     const registrations = await listGitWorktrees(record.repoRoot, options);
     const registered = registrations.some((entry) => path.resolve(entry.path) === record.path);
-    const originalRoot = await rawPathStat(record.path);
+    const originalRoot = await fs.lstat(record.path, { bigint: true }).catch((error: unknown) => {
+      if (!isMissingPathError(error)) {
+        throw error;
+      }
+      return undefined;
+    });
     if (retiredRegistration && originalRoot) {
       throw preserved("Retired checkout path reappeared");
     }
@@ -289,7 +295,7 @@ async function recoverRemovalWithAllocation(params: {
     let assertAdmin = () => {};
     if (admin) {
       const gitdir = admin;
-      const adminIdentity = await fs.lstat(gitdir);
+      const adminIdentity = await fs.lstat(gitdir, { bigint: true });
       const indexOptions = {
         ...options,
         env: { ...options.env, GIT_DIR: gitdir, GIT_INDEX_FILE: path.join(gitdir, "index") },
@@ -318,8 +324,8 @@ async function recoverRemovalWithAllocation(params: {
       const metadata = await Promise.all(
         metadataNames.map(async (name) => {
           const filename = path.join(gitdir, name);
-          const identity = await fs.lstat(filename);
-          if (!identity.isFile() || identity.nlink !== 1) {
+          const identity = await fs.lstat(filename, { bigint: true });
+          if (!identity.isFile() || identity.nlink !== 1n) {
             throw preserved("Original Git metadata is aliased");
           }
           return { filename, identity, bytes: await fs.readFile(filename) };
@@ -330,12 +336,12 @@ async function recoverRemovalWithAllocation(params: {
         if (!hadWorktreeConfig && fsSync.lstatSync(worktreeConfig, { throwIfNoEntry: false })) {
           throw preserved("Original Git configuration changed");
         }
-        const currentAdmin = fsSync.lstatSync(gitdir);
+        const currentAdmin = fsSync.lstatSync(gitdir, { bigint: true });
         if (currentAdmin.dev !== adminIdentity.dev || currentAdmin.ino !== adminIdentity.ino) {
           throw preserved("Worktree administration identity changed");
         }
         for (const saved of metadata) {
-          const current = fsSync.lstatSync(saved.filename);
+          const current = fsSync.lstatSync(saved.filename, { bigint: true });
           if (
             current.dev !== saved.identity.dev ||
             current.ino !== saved.identity.ino ||
@@ -384,7 +390,7 @@ async function recoverRemovalWithAllocation(params: {
       const assertIdentity = () => {
         assertCurrent();
         assertAdmin();
-        const current = fsSync.lstatSync(record.path, { throwIfNoEntry: false });
+        const current = fsSync.lstatSync(record.path, { bigint: true, throwIfNoEntry: false });
         if (current?.dev !== originalRoot.dev || current.ino !== originalRoot.ino) {
           throw preserved("Checkout or original index changed");
         }
@@ -498,7 +504,7 @@ async function recoverRemovalWithAllocation(params: {
             () => {
               assertCurrent();
               assertAdmin();
-              if (fsSync.lstatSync(record.path, { throwIfNoEntry: false })) {
+              if (fsSync.lstatSync(record.path, { bigint: true, throwIfNoEntry: false })) {
                 throw preserved("Missing checkout reappeared before destructive admission");
               }
             },

@@ -1,18 +1,23 @@
 /** Native writer facts are evidence, never serialized lifecycle authority. */
 import fs from "node:fs/promises";
 import path from "node:path";
-import { readRegularFile } from "@openclaw/fs-safe/advanced";
+import { readRegularFile, sameFileIdentity } from "@openclaw/fs-safe/advanced";
 import { replaceFileAtomic } from "@openclaw/fs-safe/atomic";
 import { sha256Hex } from "@openclaw/normalization-core/node-crypto";
 import { z } from "zod";
 import { hasErrnoCode } from "../infra/errno.js";
 import { assertGatewayServiceUpdateCurrent } from "./service-update-authority.js";
 
+// Released receipts used numeric identities; normalize them when reading old backups.
+const identityField = z
+  .union([z.string().regex(/^(0|-?[1-9][0-9]*)$/), z.number().int().nonnegative().safe()])
+  .transform(String);
+
 const fileState = z.strictObject({
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
   mode: z.number().int().nonnegative(),
-  dev: z.number().nonnegative(),
-  ino: z.number().nonnegative(),
+  dev: identityField,
+  ino: identityField,
   size: z.number().int().nonnegative(),
   mtimeMs: z.number().finite(),
   ctimeMs: z.number().finite(),
@@ -105,7 +110,7 @@ export async function publishServiceFile(params: {
 
 /** Read one regular file; publication owners compare it to retained write facts. */
 export async function readServiceFileState(file: string): Promise<GatewayServiceFileState | null> {
-  const before = await fs.lstat(file).catch((error: unknown) => {
+  const before = await fs.lstat(file, { bigint: true }).catch((error: unknown) => {
     if (hasErrnoCode(error, "ENOENT")) {
       return null;
     }
@@ -117,20 +122,23 @@ export async function readServiceFileState(file: string): Promise<GatewayService
   if (!before.isFile()) {
     throw new Error("Managed service artifact is not a regular file.");
   }
-  const { buffer: contents, stat: opened } = await readRegularFile({ filePath: file });
-  const keys = ["dev", "ino", "mode"] as const;
-  if (keys.some((key) => before[key] !== opened[key])) {
+  const {
+    buffer: contents,
+    stat: opened,
+    exactIdentity,
+  } = await readRegularFile({ filePath: file });
+  if (!sameFileIdentity(before, exactIdentity) || before.mode !== BigInt(opened.mode)) {
     throw new Error("Managed service artifact changed before inspection.");
   }
-  const current = await fs.lstat(file);
-  if (keys.some((key) => opened[key] !== current[key])) {
+  const current = await fs.lstat(file, { bigint: true });
+  if (!sameFileIdentity(exactIdentity, current) || BigInt(opened.mode) !== current.mode) {
     throw new Error("Managed service artifact changed during inspection.");
   }
   return {
     sha256: sha256Hex(contents),
     mode: opened.mode & 0o7777,
-    dev: opened.dev,
-    ino: opened.ino,
+    dev: exactIdentity.dev.toString(),
+    ino: exactIdentity.ino.toString(),
     size: contents.byteLength,
     mtimeMs: opened.mtimeMs,
     ctimeMs: opened.ctimeMs,

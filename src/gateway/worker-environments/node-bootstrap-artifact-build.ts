@@ -309,15 +309,15 @@ export async function prepareNodeBootstrapArtifact(
     }
     const handle = await fs.open(source, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
     try {
-      const before = await handle.stat();
+      const before = await handle.stat({ bigint: true });
       if (!before.isFile()) {
         throw new Error(`Invalid node distribution file: ${relative}`);
       }
-      reserveFile(before.size);
-      const contents = await readFileHandleBounded(handle, before.size);
-      const current = await fs.lstat(source);
+      reserveFile(Number(before.size));
+      const contents = await readFileHandleBounded(handle, Number(before.size));
+      const current = await fs.lstat(source, { bigint: true });
       if (
-        contents.byteLength !== before.size ||
+        BigInt(contents.byteLength) !== before.size ||
         current.isSymbolicLink() ||
         current.dev !== before.dev ||
         current.ino !== before.ino ||
@@ -325,7 +325,7 @@ export async function prepareNodeBootstrapArtifact(
       ) {
         throw new Error(`Node distribution changed while packaging: ${relative}`);
       }
-      return { contents, mode: modes[(before.mode & 0o111) !== 0 ? 1 : 0]! };
+      return { contents, mode: modes[(before.mode & 0o111n) !== 0n ? 1 : 0]! };
     } finally {
       await handle.close();
     }

@@ -1,11 +1,12 @@
-import type { Stats } from "node:fs";
+import type { BigIntStats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { readFileHandleBounded } from "@openclaw/fs-safe/advanced";
 import { walkDirectory, type WalkDirectoryEntry } from "@openclaw/fs-safe/walk";
 import { expectDefined } from "@openclaw/normalization-core";
 import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import { hasErrnoCode } from "../../infra/errors.js";
-import { FsSafeError, readLocalFileSafely } from "../../infra/fs-safe.js";
+import { FsSafeError, openLocalFileSafely } from "../../infra/fs-safe.js";
 import { pruneMapToMaxSize } from "../../infra/map-size.js";
 import { isPathInside } from "../../security/scan-paths.js";
 import { escapeRegExp } from "../../shared/regexp.js";
@@ -54,7 +55,7 @@ const MAX_LINE_RULE_FINDINGS_PER_RULE = 32;
 const FILE_SCAN_CACHE_MAX = 5000;
 const MAX_SCAN_DIRECTORY_ENTRIES = 100_000;
 
-type FileScanIdentity = Pick<Stats, "dev" | "ino" | "size" | "mtimeMs" | "ctimeMs">;
+type FileScanIdentity = Pick<BigIntStats, "dev" | "ino" | "size" | "mtimeNs" | "ctimeNs">;
 
 type FileScanCacheEntry = {
   identity: FileScanIdentity;
@@ -73,8 +74,8 @@ export function isScannable(filePath: string): boolean {
   return SCANNABLE_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 }
 
-function fileScanIdentity({ dev, ino, size, mtimeMs, ctimeMs }: Stats): FileScanIdentity {
-  return { dev, ino, size, mtimeMs, ctimeMs };
+function fileScanIdentity({ dev, ino, size, mtimeNs, ctimeNs }: BigIntStats): FileScanIdentity {
+  return { dev, ino, size, mtimeNs, ctimeNs };
 }
 
 function sameFileScanIdentity(left: FileScanIdentity, right: FileScanIdentity): boolean {
@@ -82,8 +83,8 @@ function sameFileScanIdentity(left: FileScanIdentity, right: FileScanIdentity): 
     left.dev === right.dev &&
     left.ino === right.ino &&
     left.size === right.size &&
-    left.mtimeMs === right.mtimeMs &&
-    left.ctimeMs === right.ctimeMs
+    left.mtimeNs === right.mtimeNs &&
+    left.ctimeNs === right.ctimeNs
   );
 }
 
@@ -510,9 +511,9 @@ function scanSourceRules(
   return findings;
 }
 
-async function statIfPresent(filePath: string): Promise<Stats | null> {
+async function statIfPresent(filePath: string): Promise<BigIntStats | null> {
   try {
-    return await fs.stat(filePath);
+    return await fs.stat(filePath, { bigint: true });
   } catch (err) {
     if (hasErrnoCode(err, "ENOENT")) {
       return null;
@@ -619,13 +620,18 @@ async function scanFileWithCache(
 
   try {
     // Explicitly included entrypoints may be symlinked outside the scan directory.
-    const { buffer, stat } = await readLocalFileSafely({
+    await using opened = await openLocalFileSafely({
       filePath: await fs.realpath(filePath),
-      maxBytes: maxFileBytes,
     });
+    const before = await opened.handle.stat({ bigint: true });
+    const buffer = await readFileHandleBounded(opened.handle, maxFileBytes);
     const findings = scanSource(buffer.toString("utf8"), filePath);
+    const current = await opened.handle.stat({ bigint: true });
+    if (!sameFileScanIdentity(before, current)) {
+      return { scanned: true, findings };
+    }
     return setCachedFileScanResult(filePath, {
-      identity: fileScanIdentity(stat),
+      identity: fileScanIdentity(current),
       maxFileBytes,
       scanned: true,
       findings,

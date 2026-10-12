@@ -126,7 +126,7 @@ async function runApprovalMigration(options: MigrationOptions): Promise<void> {
 
   const migrated = applyApprovalMigration(pluginConfig, decisions);
   const backupPath = resolveMigrationBackupPath(prepared);
-  const backupBefore = await fs.stat(backupPath).catch(() => null);
+  const backupBefore = await fs.stat(backupPath, { bigint: true }).catch(() => null);
   await mutateConfigFile({
     base: "source",
     baseHash: prepared.snapshot.hash,
@@ -139,10 +139,11 @@ async function runApprovalMigration(options: MigrationOptions): Promise<void> {
       entry.config = migrated;
     },
   });
-  const backupAfter = await fs.stat(backupPath).catch(() => null);
+  const backupAfter = await fs.stat(backupPath, { bigint: true }).catch(() => null);
   const backupVerified = Boolean(
     backupAfter &&
     (!backupBefore ||
+      backupAfter.dev !== backupBefore.dev ||
       backupAfter.ino !== backupBefore.ino ||
       backupAfter.mtimeMs !== backupBefore.mtimeMs ||
       backupAfter.size !== backupBefore.size),

@@ -1,4 +1,5 @@
 export type ConfigHealthFingerprint = {
+  identityEncoding?: "exact";
   hash: string;
   bytes: number;
   mtimeMs: number | null;

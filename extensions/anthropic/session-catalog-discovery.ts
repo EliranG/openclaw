@@ -45,7 +45,8 @@ type CatalogDiscoveryCacheEntry = {
   root: string;
   mtimeMs: number;
   size: number;
-  ino: number;
+  ino: string;
+  dev: string;
   sessionId: string;
   // Bytes this file charged against the scan budget when first scanned. Cache hits re-charge it so
   // byte-budget-limited discovery stops at the same frontier whether or not the cache is warm,
@@ -249,6 +250,7 @@ async function discoverCliRecords(
       cached.mtimeMs === fileStat.mtimeMs &&
       cached.size === fileStat.size &&
       cached.ino === fileStat.ino &&
+      cached.dev === fileStat.dev &&
       cached.sessionId === sessionId &&
       // Only replay the cached record if a cold scan would also reach its metadata under the
       // current remaining byte budget. Once earlier files grow, replaying a record whose original
@@ -380,6 +382,7 @@ async function discoverCliRecords(
           mtimeMs: fileStat.mtimeMs,
           size: fileStat.size,
           ino: fileStat.ino,
+          dev: fileStat.dev,
           sessionId,
           scannedBytes: fileScannedBytes,
           record,

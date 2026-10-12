@@ -17,7 +17,10 @@ import {
   resolveUsageCostTranscriptFile,
   type UsageCostCollectionAccess,
 } from "./session-cost-usage-collection.js";
-import type { UsageCostRollupEntry } from "./session-cost-usage-rollup-codec.js";
+import {
+  checkpointIdentity,
+  type UsageCostRollupEntry,
+} from "./session-cost-usage-rollup-codec.js";
 import { createUsageRollupScan } from "./session-cost-usage-rollup-scan.js";
 import type { UsageCostTranscriptFile } from "./session-cost-usage.types.js";
 
@@ -134,8 +137,8 @@ async function scanJsonlUsageRollup(params: RollupScanInput): Promise<UsageCostR
     params.previous?.checkpoint.kind === "jsonl" ? params.previous.checkpoint : undefined;
   const identityMatches =
     previousCheckpoint &&
-    previousCheckpoint.device === params.file.device &&
-    previousCheckpoint.inode === params.file.inode &&
+    checkpointIdentity(previousCheckpoint.device) === params.file.device &&
+    checkpointIdentity(previousCheckpoint.inode) === params.file.inode &&
     previousCheckpoint.parsedOffset <= params.file.size &&
     params.file.size > previousCheckpoint.observedSize;
   const previousAnchor = identityMatches
@@ -162,10 +165,10 @@ async function scanJsonlUsageRollup(params: RollupScanInput): Promise<UsageCostR
     },
   });
   await scan.addRecords(pendingRecords);
-  const postStats = await fs.promises.stat(params.file.filePath);
+  const postStats = await fs.promises.stat(params.file.filePath, { bigint: true });
   if (
-    postStats.dev !== params.file.device ||
-    postStats.ino !== params.file.inode ||
+    postStats.dev.toString() !== params.file.device ||
+    postStats.ino.toString() !== params.file.inode ||
     postStats.size < params.file.size
   ) {
     throw new Error(`transcript changed identity while scanning: ${params.file.filePath}`);
@@ -179,8 +182,8 @@ async function scanJsonlUsageRollup(params: RollupScanInput): Promise<UsageCostR
     parsedOffset: processedOffset,
     observedSize: params.file.size,
     observedMtimeMs: params.file.mtimeMs,
-    device: params.file.device ?? 0,
-    inode: params.file.inode ?? 0,
+    device: params.file.device ?? "0",
+    inode: params.file.inode ?? "0",
     anchorHash,
   });
 }

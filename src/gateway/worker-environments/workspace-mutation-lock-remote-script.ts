@@ -18,8 +18,8 @@ function sameInode(left, right) {
   return left.dev === right.dev && left.ino === right.ino;
 }
 function removeQuarantinedLock(quarantine, observed, message) {
-  const directory = fs.lstatSync(quarantine);
-  const entry = fs.lstatSync(path.join(quarantine, observed.name));
+  const directory = fs.lstatSync(quarantine, { bigint: true });
+  const entry = fs.lstatSync(path.join(quarantine, observed.name), { bigint: true });
   if (
     !sameInode(directory, observed.directoryStats) ||
     !sameInode(entry, observed.entryStats)
@@ -124,7 +124,7 @@ function readLock() {
   let directoryStats;
   let names;
   try {
-    directoryStats = fs.lstatSync(lockRoot);
+    directoryStats = fs.lstatSync(lockRoot, { bigint: true });
     names = fs.readdirSync(lockRoot);
   } catch (error) {
     if (error && error.code === "ENOENT") return null;
@@ -138,7 +138,7 @@ function readLock() {
   if (!entry) throw new Error("invalid workspace mutation lock owner");
   const entryPath = path.join(lockRoot, names[0]);
   try {
-    const entryStats = fs.lstatSync(entryPath);
+    const entryStats = fs.lstatSync(entryPath, { bigint: true });
     if (entryStats.isSymbolicLink() || !entryStats.isFile()) {
       throw new Error("unsafe workspace mutation lock owner");
     }

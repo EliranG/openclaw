@@ -1,6 +1,9 @@
+import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
 import { formatSqliteSessionFileMarker } from "../config/sessions/legacy-sqlite-marker.js";
+import { resolveUsageCostTranscriptFile } from "./session-cost-usage-collection.js";
 import { createNativeStorageUsageAccess } from "./session-cost-usage-collection.test-support.js";
 import type { UsageCostRollupEntry } from "./session-cost-usage-rollup-codec.js";
 import { scanUsageCostRollupInWorker } from "./session-cost-usage-worker-refresh.js";
@@ -154,4 +157,40 @@ describe("paged SQLite usage rollups", () => {
       Object.values(result.rollup.buckets).find((bucket) => bucket.latency.count > 0)?.latency,
     ).toMatchObject({ count: 1, min: 1000, max: 1000, sum: 1000 });
   });
+});
+
+const jsonlDirectories = useAutoCleanupTempDirTracker(afterEach);
+
+it("retains exact large file IDs through JSONL usage checkpoints and rejects replacement", async () => {
+  const filePath = path.join(jsonlDirectories.make("usage-exact-identity-"), "session.jsonl");
+  fs.writeFileSync(filePath, `${JSON.stringify(message("root", null, 7))}\n`);
+  const nativeStat = fs.promises.stat;
+  let inode = 9007199254740992n;
+  const stat = vi.spyOn(fs.promises, "stat").mockImplementation(async (...args) => {
+    const result = await nativeStat(...args);
+    if (result && args[0] === filePath) {
+      result.ino = typeof result.ino === "bigint" ? inode : Number(inode);
+    }
+    return result;
+  });
+  try {
+    const access = createNativeStorageUsageAccess();
+    const file = await resolveUsageCostTranscriptFile(filePath, access);
+    expect(file).toBeDefined();
+    const scanFile = () =>
+      scanUsageCostRollupInWorker({
+        file: file!,
+        pricingFingerprint: "synthetic-pricing",
+        resolveCosts: async (pairs) => pairs.map(() => undefined),
+        readRows: async () => [],
+        access,
+      });
+    const result = await scanFile();
+    expect(result.checkpoint).toMatchObject({ inode: "9007199254740992" });
+    expect(result.countedRecords).toBe(1);
+    inode += 1n;
+    await expect(scanFile()).rejects.toThrow("transcript changed identity while scanning");
+  } finally {
+    stat.mockRestore();
+  }
 });

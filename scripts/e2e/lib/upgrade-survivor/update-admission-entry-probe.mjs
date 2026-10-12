@@ -96,7 +96,7 @@ try {
   );
   assert.equal(fs.statSync(contextPath).mode & 0o777, 0o600);
   fs.writeFileSync(pendingPath, pendingBytes, { mode: 0o644, flag: "wx" });
-  markerIdentity = fs.lstatSync(pendingPath);
+  markerIdentity = fs.lstatSync(pendingPath, { bigint: true });
   const env = { ...process.env };
   const omitted = new Set([
     "LAUNCH_JOB_LABEL",
@@ -179,7 +179,7 @@ for (const cleanup of [
   },
   () => {
     if (markerIdentity && fs.existsSync(pendingPath)) {
-      const current = fs.lstatSync(pendingPath);
+      const current = fs.lstatSync(pendingPath, { bigint: true });
       if (current.dev === markerIdentity.dev && current.ino === markerIdentity.ino) {
         fs.unlinkSync(pendingPath);
       }

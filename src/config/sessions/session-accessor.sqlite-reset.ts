@@ -92,14 +92,14 @@ function listResetArtifacts(
   return paths
     .toSorted((a, b) => a.path.localeCompare(b.path))
     .flatMap(({ path: artifactPath, sha256 }) => {
-      const artifact = fs.lstatSync(artifactPath, { throwIfNoEntry: false });
+      const artifact = fs.lstatSync(artifactPath, { bigint: true, throwIfNoEntry: false });
       if (!artifact) {
         return [];
       }
       if (!artifact.isFile()) {
         throw new Error(`Session reset requires an ordinary archive file: ${artifactPath}`);
       }
-      const parent = fs.lstatSync(path.dirname(artifactPath));
+      const parent = fs.lstatSync(path.dirname(artifactPath), { bigint: true });
       if (!parent.isDirectory()) {
         throw new Error(`Session reset requires an ordinary archive directory: ${artifactPath}`);
       }
@@ -163,11 +163,11 @@ export async function resetSessionStore(scope: SessionStoreResetScope): Promise<
       for (const [index, artifact] of artifacts.entries()) {
         try {
           assertCurrent();
-          const current = fs.lstatSync(artifact.path, { throwIfNoEntry: false });
+          const current = fs.lstatSync(artifact.path, { bigint: true, throwIfNoEntry: false });
           if (!current) {
             continue;
           }
-          const parent = fs.lstatSync(path.dirname(artifact.path));
+          const parent = fs.lstatSync(path.dirname(artifact.path), { bigint: true });
           if (
             !current.isFile() ||
             !parent.isDirectory() ||

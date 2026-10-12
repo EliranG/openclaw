@@ -196,8 +196,12 @@ function readUnit(reload = false, requireLoaded = false) {
 
 function runtimePaths() {
   const file = path.join(path.dirname(import.meta.filename), "systemd-fixture-runtime.json");
-  const stat = fs.statSync(file);
-  return { ...JSON.parse(fs.readFileSync(file, "utf8")), uid: stat.uid, owner: `:1.${stat.ino}` };
+  const stat = fs.statSync(file, { bigint: true });
+  return {
+    ...JSON.parse(fs.readFileSync(file, "utf8")),
+    uid: Number(stat.uid),
+    owner: `:1.${stat.ino}`,
+  };
 }
 
 function livePid(value, processGroup = false) {

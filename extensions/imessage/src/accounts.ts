@@ -169,7 +169,7 @@ function resolveIMessageAccountSourceOwner(accounts: readonly ResolvedIMessageAc
 
 function resolveIMessageDatabaseFileIdentity(dbPath: string): string | undefined {
   try {
-    const stats = statSync(dbPath);
+    const stats = statSync(dbPath, { bigint: true });
     return stats.isFile() ? `${stats.dev}:${stats.ino}` : undefined;
   } catch {
     return undefined;

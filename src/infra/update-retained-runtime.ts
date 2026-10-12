@@ -145,10 +145,10 @@ async function runWithRetainedUpdateRuntime<T>(
             (installTarget || !sourceRoot.split(path.sep).includes("node_modules")) &&
             outsideMutation(parent)
           ) {
-            const sourceStat = await fs.stat(sourceRoot);
+            const sourceStat = await fs.stat(sourceRoot, { bigint: true });
             assertCurrent();
             try {
-              const parentStat = await fs.stat(parent);
+              const parentStat = await fs.stat(parent, { bigint: true });
               if (sourceStat.dev === parentStat.dev) {
                 directory = await fs.mkdtemp(path.join(parent, "openclaw-update-runtime-"));
                 unregister = registerRetainedUpdateRuntime(directory);

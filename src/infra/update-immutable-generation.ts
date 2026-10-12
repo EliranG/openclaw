@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import fsSync, { constants, type Stats } from "node:fs";
+import fsSync, { constants, type BigIntStats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -51,7 +51,7 @@ export async function readImmutableSchemaContracts(record: ImmutableInstallRecor
   return { current, candidate, reasons };
 }
 
-type GenerationEntry = { file: string; stat: Stats };
+type GenerationEntry = { file: string; stat: BigIntStats };
 
 /** Call only after the build cgroup is extinct; the private copy becomes root-owned. */
 export async function copyImmutableGeneration(source: string, destination: string): Promise<void> {
@@ -160,8 +160,8 @@ async function inspectGenerationTree(root: string, sealed: boolean): Promise<Gen
   }
   const entries: GenerationEntry[] = [];
   const visit = async (file: string): Promise<void> => {
-    const stat = await fs.lstat(file);
-    if (stat.uid !== 0) {
+    const stat = await fs.lstat(file, { bigint: true });
+    if (stat.uid !== 0n) {
       throw new Error(`Immutable generation is not root-owned: ${file}`);
     }
     if (stat.isSymbolicLink()) {
@@ -172,13 +172,13 @@ async function inspectGenerationTree(root: string, sealed: boolean): Promise<Gen
       if (!stat.isDirectory() && !stat.isFile()) {
         throw new Error(`Unsupported immutable generation entry: ${file}`);
       }
-      if (stat.isFile() && stat.nlink !== 1) {
+      if (stat.isFile() && stat.nlink !== 1n) {
         throw new Error(`Immutable generation must not share hardlinked files: ${file}`);
       }
-      if (sealed && ((stat.mode & 0o222) !== 0 || (stat.mode & 0o444) !== 0o444)) {
+      if (sealed && ((stat.mode & 0o222n) !== 0n || (stat.mode & 0o444n) !== 0o444n)) {
         throw new Error(`Immutable generation is not sealed and readable: ${file}`);
       }
-      if (sealed && stat.isDirectory() && (stat.mode & 0o111) !== 0o111) {
+      if (sealed && stat.isDirectory() && (stat.mode & 0o111n) !== 0o111n) {
         throw new Error(`Immutable generation directory is not traversable: ${file}`);
       }
       if (stat.isDirectory()) {
@@ -202,11 +202,11 @@ export async function sealImmutableGeneration(root: string): Promise<void> {
     }
     const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
-      const current = await handle.stat();
+      const current = await handle.stat({ bigint: true });
       if (current.dev !== stat.dev || current.ino !== stat.ino || current.nlink !== stat.nlink) {
         throw new Error(`Immutable generation changed while sealing: ${file}`);
       }
-      await handle.chmod(stat.isDirectory() ? 0o555 : 0o444 | (stat.mode & 0o111));
+      await handle.chmod(stat.isDirectory() ? 0o555 : 0o444 | Number(stat.mode & 0o111n));
       await handle.sync();
     } finally {
       await handle.close();
@@ -313,7 +313,7 @@ function upgradeImmutableLauncher(params: {
   runtime: string;
   content: string;
   previous: string;
-  previousStat: Stats;
+  previousStat: BigIntStats;
   version: 1 | 2;
   assertCurrent: () => void;
 }): void {
@@ -331,17 +331,17 @@ function upgradeImmutableLauncher(params: {
   const bin = path.dirname(params.launcher);
   const directories = [params.root, bin, control].map((file) => ({
     file,
-    stat: fsSync.lstatSync(file),
+    stat: fsSync.lstatSync(file, { bigint: true }),
   }));
   const runtimeIdentity = packageActivationRuntimeIdentity(params.runtime);
   const assertUpgrade = () => {
     params.assertCurrent();
     for (const { file, stat: previous } of directories) {
-      const stat = fsSync.lstatSync(file);
+      const stat = fsSync.lstatSync(file, { bigint: true });
       if (
         !stat.isDirectory() ||
-        stat.uid !== 0 ||
-        (stat.mode & 0o022) !== 0 ||
+        stat.uid !== 0n ||
+        (stat.mode & 0o022n) !== 0n ||
         stat.dev !== previous.dev ||
         stat.ino !== previous.ino ||
         fsSync.realpathSync(file) !== file
@@ -349,12 +349,12 @@ function upgradeImmutableLauncher(params: {
         throw new Error("Immutable launcher upgrade directory identity changed.");
       }
     }
-    const current = fsSync.lstatSync(params.launcher);
+    const current = fsSync.lstatSync(params.launcher, { bigint: true });
     if (
       !current.isFile() ||
-      current.uid !== 0 ||
-      current.nlink !== 1 ||
-      (current.mode & 0o022) !== 0 ||
+      current.uid !== 0n ||
+      current.nlink !== 1n ||
+      (current.mode & 0o022n) !== 0n ||
       current.dev !== params.previousStat.dev ||
       current.ino !== params.previousStat.ino ||
       fsSync.readFileSync(params.launcher, "utf8") !== params.previous ||
@@ -365,13 +365,13 @@ function upgradeImmutableLauncher(params: {
   };
   assertUpgrade();
   const stage = fsSync.mkdtempSync(path.join(bin, ".launcher-upgrade-"));
-  const stageIdentity = fsSync.lstatSync(stage);
+  const stageIdentity = fsSync.lstatSync(stage, { bigint: true });
   const backup = path.join(control, `openclaw-gateway.v${params.version}`);
-  const isExpectedBackup = (stat: Stats) =>
+  const isExpectedBackup = (stat: BigIntStats) =>
     stat.isFile() &&
-    stat.uid === 0 &&
-    stat.nlink === 1 &&
-    (stat.mode & 0o222) === 0 &&
+    stat.uid === 0n &&
+    stat.nlink === 1n &&
+    (stat.mode & 0o222n) === 0n &&
     fsSync.readFileSync(backup, "utf8") === params.previous;
   const writeDurable = (file: string, content: string, mode: number) => {
     const fd = fsSync.openSync(file, "wx", mode);
@@ -384,7 +384,7 @@ function upgradeImmutableLauncher(params: {
     }
   };
   try {
-    const previousBackup = fsSync.lstatSync(backup, { throwIfNoEntry: false });
+    const previousBackup = fsSync.lstatSync(backup, { bigint: true, throwIfNoEntry: false });
     if (previousBackup) {
       if (!isExpectedBackup(previousBackup)) {
         throw new Error("Existing immutable launcher backup differs; it was preserved.");
@@ -393,7 +393,7 @@ function upgradeImmutableLauncher(params: {
       const stagedBackup = path.join(stage, "previous");
       writeDurable(stagedBackup, params.previous, 0o444);
       assertUpgrade();
-      if (fsSync.lstatSync(backup, { throwIfNoEntry: false })) {
+      if (fsSync.lstatSync(backup, { bigint: true, throwIfNoEntry: false })) {
         throw new Error("Immutable launcher backup appeared during upgrade.");
       }
       fsSync.renameSync(stagedBackup, backup);
@@ -402,14 +402,14 @@ function upgradeImmutableLauncher(params: {
     const candidate = path.join(stage, "next");
     writeDurable(candidate, params.content, 0o755);
     assertUpgrade();
-    if (!isExpectedBackup(fsSync.lstatSync(backup))) {
+    if (!isExpectedBackup(fsSync.lstatSync(backup, { bigint: true }))) {
       throw new Error("Immutable launcher backup changed before publication.");
     }
     fsSync.renameSync(candidate, params.launcher);
     requireDirectorySync(syncDirectorySync(bin), "Immutable launcher upgrade");
     params.assertCurrent();
   } finally {
-    const remaining = fsSync.lstatSync(stage, { throwIfNoEntry: false });
+    const remaining = fsSync.lstatSync(stage, { bigint: true, throwIfNoEntry: false });
     if (remaining?.dev === stageIdentity.dev && remaining.ino === stageIdentity.ino) {
       fsSync.rmSync(stage, { recursive: true });
     }
@@ -465,8 +465,8 @@ export async function installImmutableLauncher(params: {
     if (!hasErrnoCode(error, "EEXIST")) {
       throw error;
     }
-    const existing = await fs.lstat(launcher);
-    if (!existing.isFile() || existing.uid !== 0 || (existing.mode & 0o022) !== 0) {
+    const existing = await fs.lstat(launcher, { bigint: true });
+    if (!existing.isFile() || existing.uid !== 0n || (existing.mode & 0o022n) !== 0n) {
       throw new Error(
         "An existing immutable Gateway launcher conflicts with this adoption; it was preserved.",
       );

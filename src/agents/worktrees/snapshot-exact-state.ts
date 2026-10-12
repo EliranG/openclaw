@@ -565,7 +565,7 @@ export async function restoreExactStateMetadata(params: {
     const relative = checkedPath(entry.path);
     const assertParents = await checkParents(cwd, relative);
     const target = checkoutPathFromGitBytes(cwd, relative);
-    const stat = await fs.lstat(target);
+    const stat = await fs.lstat(target, { bigint: true });
     const currentBytes =
       entry.kind === "symlink" && stat.isSymbolicLink()
         ? await fs.readlink(target, { encoding: "buffer" })
@@ -577,8 +577,8 @@ export async function restoreExactStateMetadata(params: {
     }
     assertCurrent();
     assertParents();
-    const current = fsSync.lstatSync(target);
-    if (entry.kind !== "directory" && current.nlink !== 1) {
+    const current = fsSync.lstatSync(target, { bigint: true });
+    if (entry.kind !== "directory" && current.nlink !== 1n) {
       throw new Error("Exact-state restore hard-linked metadata target; source preserved");
     }
     if (current.dev !== stat.dev || current.ino !== stat.ino) {

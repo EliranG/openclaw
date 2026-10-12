@@ -28,15 +28,15 @@ export function createConfigHealthFingerprint(params: {
   raw: string;
   parsed: unknown;
   resolved?: unknown;
-  stat: fs.Stats | null;
+  stat: fs.Stats | fs.BigIntStats | null;
   hash?: string;
   observedAt?: string;
 }): ConfigHealthFingerprint {
   return {
     hash: params.hash ?? hashConfigRaw(params.raw),
     bytes: Buffer.byteLength(params.raw, "utf-8"),
-    mtimeMs: params.stat?.mtimeMs ?? null,
-    ctimeMs: params.stat?.ctimeMs ?? null,
+    mtimeMs: params.stat ? Number(params.stat.mtimeMs) : null,
+    ctimeMs: params.stat ? Number(params.stat.ctimeMs) : null,
     ...resolveConfigStatMetadata(params.stat),
     hasMeta: hasConfigMeta(params.parsed),
     gatewayMode: resolveGatewayMode(params.resolved ?? params.parsed),
@@ -47,7 +47,7 @@ export function createConfigHealthFingerprint(params: {
 function createConfigFingerprintFromRead(params: {
   deps: ConfigFingerprintDeps;
   raw: string;
-  stat: fs.Stats | null;
+  stat: fs.Stats | fs.BigIntStats | null;
 }): ConfigHealthFingerprint {
   const parsed = parseConfigJson5(params.raw, params.deps.json5);
   return createConfigHealthFingerprint({
@@ -63,7 +63,7 @@ export async function readConfigFingerprintForPath(
 ): Promise<ConfigHealthFingerprint | null> {
   try {
     const raw = await deps.fs.promises.readFile(configPath, "utf-8");
-    const stat = await deps.fs.promises.stat(configPath).catch(() => null);
+    const stat = await deps.fs.promises.stat(configPath, { bigint: true }).catch(() => null);
     return createConfigFingerprintFromRead({ deps, raw, stat });
   } catch {
     return null;
@@ -76,9 +76,9 @@ export function readConfigFingerprintForPathSync(
 ): ConfigHealthFingerprint | null {
   try {
     const raw = deps.fs.readFileSync(configPath, "utf-8");
-    let stat: fs.Stats | null = null;
+    let stat: fs.Stats | fs.BigIntStats | null = null;
     try {
-      stat = deps.fs.statSync(configPath, { throwIfNoEntry: false }) ?? null;
+      stat = deps.fs.statSync(configPath, { bigint: true, throwIfNoEntry: false }) ?? null;
     } catch {
       // Metadata is diagnostic only; readable backup bytes remain authoritative.
     }

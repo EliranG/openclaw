@@ -16,8 +16,9 @@ export type UsageCostJsonlCheckpoint = {
   parsedOffset: number;
   observedSize: number;
   observedMtimeMs: number;
-  device: number;
-  inode: number;
+  // Numeric values remain readable for checkpoints written by older releases.
+  device: string | number;
+  inode: string | number;
   anchorHash: string;
 };
 
@@ -161,6 +162,14 @@ export function decodeUsageCostRollup(
   }
 }
 
+export function checkpointIdentity(value: string | number): string | undefined {
+  return typeof value === "string"
+    ? value
+    : Number.isSafeInteger(value)
+      ? String(value)
+      : undefined;
+}
+
 export function isUsageCostRollupFresh(params: {
   checkpoint: UsageCostFreshnessCheckpoint | undefined;
   file: UsageCostTranscriptFile;
@@ -173,8 +182,8 @@ export function isUsageCostRollupFresh(params: {
     return (
       checkpoint.observedSize === params.file.size &&
       checkpoint.observedMtimeMs === params.file.mtimeMs &&
-      checkpoint.device === params.file.device &&
-      checkpoint.inode === params.file.inode
+      checkpointIdentity(checkpoint.device) === params.file.device &&
+      checkpointIdentity(checkpoint.inode) === params.file.inode
     );
   }
   return (
@@ -196,8 +205,8 @@ export function canUseUsageCostRollupForPartial(params: {
   if (checkpoint.kind === "jsonl") {
     return (
       checkpoint.parsedOffset <= params.file.size &&
-      checkpoint.device === params.file.device &&
-      checkpoint.inode === params.file.inode
+      checkpointIdentity(checkpoint.device) === params.file.device &&
+      checkpointIdentity(checkpoint.inode) === params.file.inode
     );
   }
   return checkpoint.maxSeq <= (params.file.maxSeq ?? 0);

@@ -126,7 +126,7 @@ export async function readMatrixSessionLedger(stateDir: string): Promise<MatrixS
       ledger.issues.push(`Agent store escapes isolated state: ${entry.name}`);
       continue;
     }
-    const physical = await fs.stat(resolved);
+    const physical = await fs.stat(resolved, { bigint: true });
     ledger.stores[storeId] = `${physical.dev}:${physical.ino}`;
     const db = new DatabaseSync(resolved, { readOnly: true });
     try {
@@ -227,7 +227,7 @@ export async function readMatrixSessionLedger(stateDir: string): Promise<MatrixS
     } finally {
       db.close();
     }
-    const after = await fs.stat(resolved);
+    const after = await fs.stat(resolved, { bigint: true });
     if (physical.dev !== after.dev || physical.ino !== after.ino) {
       ledger.issues.push(`Agent store changed during observation: ${storeId}`);
     }

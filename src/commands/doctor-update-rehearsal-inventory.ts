@@ -426,13 +426,13 @@ export async function inspectPreparedDoctorRehearsal(params: {
   const assertCurrent = () => {
     assertEnv();
     assertOwner();
-    const current = lstatSync(stateDir);
+    const current = lstatSync(stateDir, { bigint: true });
     if (
       current.dev !== rootIdentity.dev ||
       current.ino !== rootIdentity.ino ||
       !current.isDirectory() ||
       current.isSymbolicLink() ||
-      (process.platform !== "win32" && (current.mode & 0o077) !== 0) ||
+      (process.platform !== "win32" && (current.mode & 0o077n) !== 0n) ||
       current.uid !== rootIdentity.uid ||
       realpathSync(stateDir) !== stateDir
     ) {

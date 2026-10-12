@@ -71,7 +71,7 @@ const MAX_TRANSCRIPT_INDEXES = 256;
 const ARCHIVE_READ_BYTES = 64 * 1024;
 const ARCHIVE_BATCH_BYTES = 1024 * 1024;
 
-function transcriptArtifactDisplaySource(filePath: string, stat: fs.Stats): string {
+function transcriptArtifactDisplaySource(filePath: string, stat: fs.BigIntStats): string {
   // Inode/ctime distinguish replacement or rewrite even when size and mtime are preserved.
   const identity = `${stat.dev}:${stat.ino}:${stat.ctimeMs}:${stat.mtimeMs}:${stat.size}`;
   return createTranscriptDisplaySource(["archive", filePath, identity]);
@@ -79,7 +79,7 @@ function transcriptArtifactDisplaySource(filePath: string, stat: fs.Stats): stri
 
 export function assertArchiveTranscriptSource(
   filePath: string,
-  stat: fs.Stats,
+  stat: fs.BigIntStats,
   displaySource: string,
   sessionId: string,
 ): void {
@@ -219,7 +219,12 @@ async function prepareTranscriptIndexStep(
   const state = cached.preparation!;
   const handle = await fs.promises.open(filePath, "r");
   try {
-    assertArchiveTranscriptSource(filePath, await handle.stat(), cached.identity, sessionId);
+    assertArchiveTranscriptSource(
+      filePath,
+      await handle.stat({ bigint: true }),
+      cached.identity,
+      sessionId,
+    );
     // Count retained bytes too: finishing a partial line must not decode a second page's payload.
     let bytes = bounded ? state.length : 0;
     let lines = 0;
@@ -288,7 +293,12 @@ async function prepareTranscriptIndexStep(
       cached.value = finishSessionTranscriptIndex(state, cached.identity);
       cached.preparation = undefined;
     }
-    assertArchiveTranscriptSource(filePath, await handle.stat(), cached.identity, sessionId);
+    assertArchiveTranscriptSource(
+      filePath,
+      await handle.stat({ bigint: true }),
+      cached.identity,
+      sessionId,
+    );
   } finally {
     await handle.close();
   }
@@ -321,7 +331,12 @@ export async function readIndexedTranscriptEntries(
 ): Promise<MaterializedTranscriptEntry[]> {
   const handle = await fs.promises.open(filePath, "r");
   try {
-    assertArchiveTranscriptSource(filePath, await handle.stat(), index.displaySource, sessionId);
+    assertArchiveTranscriptSource(
+      filePath,
+      await handle.stat({ bigint: true }),
+      index.displaySource,
+      sessionId,
+    );
     const physical = selected
       .map((entry, order) => ({ entry, order }))
       .toSorted((left, right) => left.entry.offset - right.entry.offset);
@@ -356,7 +371,12 @@ export async function readIndexedTranscriptEntries(
       }
       start = end;
     }
-    assertArchiveTranscriptSource(filePath, await handle.stat(), index.displaySource, sessionId);
+    assertArchiveTranscriptSource(
+      filePath,
+      await handle.stat({ bigint: true }),
+      index.displaySource,
+      sessionId,
+    );
     return result;
   } finally {
     await handle.close();
@@ -364,7 +384,7 @@ export async function readIndexedTranscriptEntries(
 }
 
 async function acquireTranscriptIndex(filePath: string): Promise<CachedTranscriptIndex | null> {
-  const stat = await fs.promises.stat(filePath).catch(() => null);
+  const stat = await fs.promises.stat(filePath, { bigint: true }).catch(() => null);
   if (!stat?.isFile()) {
     transcriptIndexes.delete(filePath);
     return null;
@@ -374,7 +394,7 @@ async function acquireTranscriptIndex(filePath: string): Promise<CachedTranscrip
   if (cached?.identity !== identity) {
     cached = {
       identity,
-      size: stat.size,
+      size: Number(stat.size),
       largestLine: 0,
       preparation: {
         offset: 0,

@@ -156,8 +156,8 @@ function isExcludedProjectSource(value: string): boolean {
 
 async function isCaseInsensitiveProjectRoot(root: string): Promise<boolean> {
   const [canonical, folded] = await Promise.all([
-    lstat(resolve(root, "CLAW.md")).catch(() => undefined),
-    lstat(resolve(root, "claw.md")).catch(() => undefined),
+    lstat(resolve(root, "CLAW.md"), { bigint: true }).catch(() => undefined),
+    lstat(resolve(root, "claw.md"), { bigint: true }).catch(() => undefined),
   ]);
   return Boolean(
     canonical && folded && canonical.dev === folded.dev && canonical.ino === folded.ino,

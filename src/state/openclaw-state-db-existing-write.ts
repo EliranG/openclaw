@@ -134,7 +134,7 @@ function prepareExistingOpenClawStateWriter(
   if (contract.recoverTaskDeliveryOrphans) {
     assertOpenClawStateSchemaRepairAllowed(pathname);
   }
-  const original = fs.lstatSync(pathname);
+  const original = fs.lstatSync(pathname, { bigint: true });
   if (!original.isFile()) {
     throw new Error("Existing-state write requires a regular database file.");
   }
@@ -146,7 +146,7 @@ function createExistingOpenClawStateWriter(
   contract: OneShotWriteContract,
 ) {
   const assertSameFile = () => {
-    const current = fs.lstatSync(pathname);
+    const current = fs.lstatSync(pathname, { bigint: true });
     if (!current.isFile() || current.dev !== original.dev || current.ino !== original.ino) {
       throw new Error("Existing-state database generation changed.");
     }

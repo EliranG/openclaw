@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { constants as fsConstants } from "node:fs";
-import fs, { type FileHandle } from "node:fs/promises";
+import { constants as fsConstants, type BigIntStats } from "node:fs";
+import fs from "node:fs/promises";
 import { requestGitWorkerEffect } from "../../infra/git-worker-context.js";
 import { gitPathspecBatches, splitNullBuffer } from "./git-path-inventory.js";
 import { requireGitBuffer } from "./git.js";
@@ -20,14 +20,14 @@ const resetChunks = () =>
     input: {},
   });
 
-function sameFileState(left: Awaited<ReturnType<FileHandle["stat"]>>, right: typeof left) {
+function sameFileState(left: BigIntStats, right: BigIntStats) {
   return (
     left.dev === right.dev &&
     left.ino === right.ino &&
     left.mode === right.mode &&
     left.size === right.size &&
-    left.mtimeMs === right.mtimeMs &&
-    left.ctimeMs === right.ctimeMs
+    left.mtimeNs === right.mtimeNs &&
+    left.ctimeNs === right.ctimeNs
   );
 }
 
@@ -108,12 +108,11 @@ export async function snapshotProvisionedFiles(
       );
       try {
         await validateDirectoryIdentities(parentIdentities);
-        const before = await handle.stat();
+        const before = await handle.stat({ bigint: true });
+        const size = Number(before.size);
+        const mode = Number(before.mode & 0o7777n);
         const captured = expected?.get(file.path);
-        if (
-          captured &&
-          (captured.size !== before.size || captured.mode !== (before.mode & 0o7777))
-        ) {
+        if (captured && (captured.size !== size || captured.mode !== mode)) {
           throw new Error(
             `provisioned exact-state size or mode changed after capture: ${file.path}`,
           );
@@ -124,11 +123,11 @@ export async function snapshotProvisionedFiles(
         const buffer = Buffer.allocUnsafe(SNAPSHOT_CHUNK_BYTES);
         let chunkIndex = 0;
         let offset = 0;
-        while (offset < before.size) {
+        while (offset < size) {
           const { bytesRead } = await handle.read(
             buffer,
             0,
-            Math.min(buffer.byteLength, before.size - offset),
+            Math.min(buffer.byteLength, size - offset),
             offset,
           );
           if (bytesRead === 0) {
@@ -142,7 +141,10 @@ export async function snapshotProvisionedFiles(
           offset += bytesRead;
           chunkIndex += 1;
         }
-        const [after, current] = await Promise.all([handle.stat(), fs.lstat(file.target)]);
+        const [after, current] = await Promise.all([
+          handle.stat({ bigint: true }),
+          fs.lstat(file.target, { bigint: true }),
+        ]);
         await validateDirectoryIdentities(parentIdentities);
         if (!sameFileState(before, after) || !sameFileState(before, current)) {
           throw new Error(`provisioned file changed while snapshotting: ${file.path}`);
@@ -150,7 +152,7 @@ export async function snapshotProvisionedFiles(
         if (digest && digest.digest("hex") !== captured?.blob) {
           throw new Error(`provisioned exact-state bytes changed after capture: ${file.path}`);
         }
-        states.push({ path: file.path, mode: before.mode & 0o7777, chunks: chunkIndex });
+        states.push({ path: file.path, mode, chunks: chunkIndex });
       } finally {
         await handle.close();
       }

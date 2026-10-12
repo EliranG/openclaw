@@ -104,7 +104,7 @@ export function resolveLegacyWorkspaceSourcePaths(
 /** Share presence-only sibling ownership checks between runtime and Doctor. */
 export function legacyWorkspaceSiblingAttestationMayExist(filePath: string): boolean {
   try {
-    const before = fs.lstatSync(filePath);
+    const before = fs.lstatSync(filePath, { bigint: true });
     if (!before.isFile()) {
       return false;
     }
@@ -117,7 +117,7 @@ export function legacyWorkspaceSiblingAttestationMayExist(filePath: string): boo
       return true;
     }
     try {
-      const opened = fs.fstatSync(fd);
+      const opened = fs.fstatSync(fd, { bigint: true });
       if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino) {
         return true;
       }

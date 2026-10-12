@@ -28,10 +28,10 @@ const crypto = require("node:crypto");
 const [workspace, directory, operation, directoryIdentity, name, offsetText, sizeText, hash, fileIdentity] = process.argv.slice(1);
 const identity = (stat) => String(stat.dev) + ":" + String(stat.ino);
 function enter(candidate, expected) {
-  const before = fs.lstatSync(candidate);
+  const before = fs.lstatSync(candidate, { bigint: true });
   if (!before.isDirectory() || before.isSymbolicLink() || (expected && identity(before) !== expected)) throw Error("attachment directory changed");
   process.chdir(candidate);
-  if (identity(fs.statSync(".")) !== identity(before)) throw Error("attachment directory changed");
+  if (identity(fs.statSync(".", { bigint: true })) !== identity(before)) throw Error("attachment directory changed");
 }
 try {
   if (/^${WORKER_ATTACHMENT_DIRECTORY_PATTERN}$/.exec(directory)?.[0] !== directory) throw Error("invalid attachment directory");
@@ -39,11 +39,11 @@ try {
   if (operation === "init") fs.mkdirSync(directory, {mode: 0o700});
   enter(directory, directoryIdentity);
   if (operation === "init") {
-    process.stdout.write(identity(fs.statSync(".")));
+    process.stdout.write(identity(fs.statSync(".", { bigint: true })));
   } else if (operation === "cleanup") {
     for (const entry of fs.readdirSync(".")) fs.unlinkSync(entry);
     enter(workspace);
-    if (identity(fs.lstatSync(directory)) !== directoryIdentity) throw Error("attachment directory changed");
+    if (identity(fs.lstatSync(directory, { bigint: true })) !== directoryIdentity) throw Error("attachment directory changed");
     fs.rmdirSync(directory);
   } else {
     if (operation !== "write" || !name || name === "." || name === ".." || /[\\/\x00]/.test(name)) throw Error("invalid attachment name");
@@ -58,8 +58,8 @@ try {
     const flags = fs.constants.O_RDWR | (fs.constants.O_NOFOLLOW || 0) | (offset === 0 ? fs.constants.O_CREAT | fs.constants.O_EXCL : 0);
     const fd = fs.openSync(partial, flags, 0o600);
     try {
-      const before = fs.fstatSync(fd);
-      if (!before.isFile() || before.nlink !== 1 || before.size !== offset || (offset > 0 && identity(before) !== fileIdentity)) throw Error("attachment file changed");
+      const before = fs.fstatSync(fd, { bigint: true });
+      if (!before.isFile() || before.nlink !== 1n || before.size !== BigInt(offset) || (offset > 0 && identity(before) !== fileIdentity)) throw Error("attachment file changed");
       let written = 0;
       while (written < bytes.length) {
         const count = fs.writeSync(fd, bytes, written, bytes.length - written, offset + written);
@@ -67,9 +67,9 @@ try {
         written += count;
       }
       if (offset + bytes.length === size) {
-        if (fs.fstatSync(fd).size !== size || crypto.createHash("sha256").update(fs.readFileSync(fd)).digest("hex") !== hash) throw Error("attachment checksum mismatch");
+        if (fs.fstatSync(fd, { bigint: true }).size !== BigInt(size) || crypto.createHash("sha256").update(fs.readFileSync(fd)).digest("hex") !== hash) throw Error("attachment checksum mismatch");
         fs.linkSync(partial, name);
-        const published = fs.lstatSync(name);
+        const published = fs.lstatSync(name, { bigint: true });
         if (!published.isFile() || published.isSymbolicLink() || identity(published) !== identity(before)) throw Error("attachment publication changed");
         fs.unlinkSync(partial);
       }

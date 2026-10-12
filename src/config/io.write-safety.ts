@@ -488,18 +488,19 @@ export async function rollbackConfigFileWriteIfUnchanged(params: {
   return true;
 }
 
-function normalizeStatNumber(value: number | null | undefined): number | null {
-  return asFiniteNumber(value) ?? null;
+function normalizeStatNumber(value: number | bigint | null | undefined): number | null {
+  return asFiniteNumber(typeof value === "bigint" ? Number(value) : value) ?? null;
 }
 
 function normalizeStatId(value: number | bigint | null | undefined): string | null {
   if (typeof value === "bigint") {
     return value.toString();
   }
-  return typeof value === "number" && Number.isFinite(value) ? String(value) : null;
+  return typeof value === "number" && Number.isSafeInteger(value) ? String(value) : null;
 }
 
-export function resolveConfigStatMetadata(stat: fs.Stats | null): {
+export function resolveConfigStatMetadata(stat: fs.Stats | fs.BigIntStats | null): {
+  identityEncoding?: "exact";
   dev: string | null;
   ino: string | null;
   mode: number | null;
@@ -508,9 +509,12 @@ export function resolveConfigStatMetadata(stat: fs.Stats | null): {
   gid: number | null;
 } {
   return {
+    ...(typeof stat?.dev === "bigint" && typeof stat.ino === "bigint"
+      ? { identityEncoding: "exact" as const }
+      : {}),
     dev: normalizeStatId(stat?.dev ?? null),
     ino: normalizeStatId(stat?.ino ?? null),
-    mode: normalizeStatNumber(stat ? stat.mode & 0o777 : null),
+    mode: normalizeStatNumber(stat ? Number(stat.mode) & 0o777 : null),
     nlink: normalizeStatNumber(stat?.nlink ?? null),
     uid: normalizeStatNumber(stat?.uid ?? null),
     gid: normalizeStatNumber(stat?.gid ?? null),

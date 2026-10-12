@@ -282,6 +282,7 @@ describe.skipIf(process.platform !== "linux")("explicit immutable adoption after
       const stored = read();
       expect(stored.descriptor).toMatchObject({
         ...original.descriptor,
+        identityEncoding: "exact",
         version: 2,
         activationEnabled: true,
         current: {

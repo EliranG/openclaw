@@ -3,6 +3,7 @@ import {
   decodeUsageCostRollup,
   decodeUsageCostRollupEnvelope,
   encodeUsageCostRollup,
+  isUsageCostRollupFresh,
   USAGE_COST_ROLLUP_VERSION,
   type UsageCostRollupEntry,
 } from "./session-cost-usage-rollup-codec.js";
@@ -102,4 +103,38 @@ describe("usage rollup storage codec", () => {
       decodeUsageCostRollup(encoded.valueJson, "different-pricing", encoded.blob),
     ).toBeUndefined();
   });
+});
+
+it.each([
+  { inode: "9007199254740992", current: "9007199254740992", fresh: true },
+  { inode: "9007199254740992", current: "9007199254740993", fresh: false },
+  { inode: 2, current: "2", fresh: true },
+  { inode: 9007199254740992, current: "9007199254740992", fresh: false },
+])("reads persisted checkpoint identity $inode against $current", ({ inode, current, fresh }) => {
+  const original = entry(0);
+  if (original.checkpoint.kind !== "jsonl") {
+    throw new Error("Expected JSONL checkpoint");
+  }
+  original.checkpoint.inode = inode;
+  const encoded = encodeUsageCostRollup(original);
+  const restored = decodeUsageCostRollup(
+    encoded.valueJson,
+    original.pricingFingerprint,
+    encoded.blob,
+  );
+  expect(restored).toBeDefined();
+  expect(
+    isUsageCostRollupFresh({
+      checkpoint: restored!.checkpoint,
+      file: {
+        filePath: "session.jsonl",
+        sourcePath: "session.jsonl",
+        kind: "jsonl",
+        size: 100,
+        mtimeMs: 1_000,
+        device: "1",
+        inode: current,
+      },
+    }),
+  ).toBe(fresh);
 });

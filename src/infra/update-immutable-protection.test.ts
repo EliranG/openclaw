@@ -65,7 +65,7 @@ async function fixture() {
     } = {},
   ) => {
     const previousRaw = fs.readFileSync(configPath, "utf8");
-    const previousMetadata = resolveConfigStatMetadata(fs.statSync(configPath));
+    const previousMetadata = resolveConfigStatMetadata(fs.statSync(configPath, { bigint: true }));
     const raw = JSON.stringify(next);
     const stage = `${configPath}.candidate`;
     fs.writeFileSync(stage, raw, { mode: 0o600 });
@@ -102,7 +102,7 @@ async function fixture() {
           },
         }),
         result: "rename",
-        nextMetadata: resolveConfigStatMetadata(fs.statSync(configPath)),
+        nextMetadata: resolveConfigStatMetadata(fs.statSync(configPath, { bigint: true })),
       }),
     });
   };
@@ -123,6 +123,7 @@ describe("immutable activation protected identities", () => {
   it("accepts candidate-authored additive startup migration across config inode replacement while preserving policy and state", async () => {
     const test = await fixture();
     const durable = structuredClone(test.snapshot);
+    expect(durable.identityEncoding).toBe("exact");
     expect(JSON.stringify(durable)).not.toContain("synthetic-protected-token");
     expect(ImmutableProtectionSnapshotSchema.parse(durable)).toEqual(test.snapshot);
     expect(() => verifyImmutableProtection(test.snapshot, test.context)).not.toThrow();
@@ -130,6 +131,17 @@ describe("immutable activation protected identities", () => {
     await test.migrate({ ...test.additive(), logging: { level: "info" } });
     expect(() => verifyImmutableProtection(durable, test.context)).not.toThrow();
     expect(fs.readFileSync(test.configPath, "utf8")).toContain("legacyWebhook");
+  });
+
+  it("preserves legacy receipts while refusing ambiguous large identities", async () => {
+    const test = await fixture();
+    const legacy = structuredClone(test.snapshot);
+    delete legacy.identityEncoding;
+    legacy.config[0]!.identity.ino = "9007199254740992";
+    expect(ImmutableProtectionSnapshotSchema.parse(legacy)).toEqual(legacy);
+    expect(() => assertImmutableProtectionUnchanged(legacy, test.context)).toThrow(
+      "Legacy immutable receipt contains an imprecise file identity",
+    );
   });
 
   it.each([

@@ -30,7 +30,10 @@ import type {
   ImmutableInstallDescriptor,
   ImmutableInstallRecord,
 } from "./update-immutable-install-schema.js";
-import { directoryIdentity } from "./update-immutable-layout.js";
+import {
+  assertImmutableDescriptorIdentityEncoding,
+  directoryIdentity,
+} from "./update-immutable-layout.js";
 
 /** Cold CLI recovery stays outside the control record's read-worker dependency graph. */
 export function readImmutableInstallRecordForRecovery(root: string) {
@@ -132,6 +135,7 @@ export async function prepareImmutableRecoveryRuntime(params: {
 }): Promise<ImmutableRecoveryRuntimeReference> {
   const { record, assertCurrent } = params;
   const descriptor = record.descriptor;
+  assertImmutableDescriptorIdentityEncoding(descriptor);
   if (!descriptor.activationEnabled || record.activation?.operation) {
     throw new Error(
       "Prepare immutable recovery only for enabled adoption without a pending operation.",
@@ -215,20 +219,20 @@ export async function prepareImmutableRecoveryRuntime(params: {
     resolvePackageActivationAnchor(descriptor.root),
   );
   const content = helperSource(descriptor.runtime.path, destination, descriptor.root);
-  const existing = fsSync.lstatSync(helperPath, { throwIfNoEntry: false });
+  const existing = fsSync.lstatSync(helperPath, { bigint: true, throwIfNoEntry: false });
   if (existing) {
     helperIdentity(helperPath);
   }
   if (!existing || fsSync.readFileSync(helperPath, "utf8") !== content) {
     const temporary = path.join(control, `.recovery-launcher-${randomUUID()}`);
     const fd = fsSync.openSync(temporary, "wx", 0o444);
-    const staged = fsSync.fstatSync(fd);
+    const staged = fsSync.fstatSync(fd, { bigint: true });
     try {
       fsSync.writeFileSync(fd, content);
       fsSync.fchmodSync(fd, 0o444);
       fsSync.fsyncSync(fd);
       assertOwner();
-      const current = fsSync.lstatSync(helperPath, { throwIfNoEntry: false });
+      const current = fsSync.lstatSync(helperPath, { bigint: true, throwIfNoEntry: false });
       if (current?.dev !== existing?.dev || current?.ino !== existing?.ino) {
         throw new Error("Immutable recovery launcher changed before publication.");
       }
@@ -236,7 +240,7 @@ export async function prepareImmutableRecoveryRuntime(params: {
       requireDirectorySync(syncDirectorySync(control), "Immutable recovery launcher publication");
     } finally {
       fsSync.closeSync(fd);
-      const remaining = fsSync.lstatSync(temporary, { throwIfNoEntry: false });
+      const remaining = fsSync.lstatSync(temporary, { bigint: true, throwIfNoEntry: false });
       if (remaining?.dev === staged.dev && remaining?.ino === staged.ino) {
         fsSync.unlinkSync(temporary);
       }
@@ -260,6 +264,7 @@ export async function verifyImmutableRecoveryRuntime(params: {
   assertCurrent: () => void;
 }): Promise<void> {
   const { descriptor, assertCurrent } = params;
+  assertImmutableDescriptorIdentityEncoding(descriptor);
   const reference = ImmutableRecoveryRuntimeReferenceSchema.parse(params.reference);
   const control = controlRoot(descriptor.root);
   if (

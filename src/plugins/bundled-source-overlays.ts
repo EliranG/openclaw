@@ -5,7 +5,7 @@ import { normalizeOptionalLowercaseString } from "@openclaw/normalization-core/s
 import { buildLegacyBundledRootPath } from "./bundled-load-path-aliases.js";
 import {
   pluginCacheExistsSync,
-  pluginCacheStatSync,
+  pluginCacheIdentitySync,
   readPluginCacheDirectory,
 } from "./plugin-cache-files.js";
 import { getPluginCache } from "./plugin-cache.js";
@@ -43,8 +43,8 @@ function readLinuxMountPoints(): ReadonlySet<string> {
 }
 
 function isFilesystemMountPoint(targetPath: string): boolean {
-  const target = pluginCacheStatSync(targetPath);
-  const parent = pluginCacheStatSync(path.dirname(targetPath));
+  const target = pluginCacheIdentitySync(targetPath);
+  const parent = pluginCacheIdentitySync(path.dirname(targetPath));
   return Boolean(target && parent && (target.dev !== parent.dev || target.ino === parent.ino));
 }
 

@@ -107,6 +107,40 @@ async function generation() {
 }
 
 describe("sealed immutable generation", () => {
+  it.each([false, true])("checks exact file IDs while sealing (replaced=%s)", async (replaced) => {
+    const file = path.join(temporary.make("immutable-exact-identity-"), "entry.js");
+    await fs.writeFile(file, "export {};\n", { mode: 0o644 });
+    const inode = 9007199254740993n;
+    const lstat = fs.lstat;
+    vi.spyOn(fs, "lstat").mockImplementation(async (...args) => {
+      const stat = await lstat(...args);
+      if (String(args[0]) === file) {
+        stat.ino = typeof stat.ino === "bigint" ? inode : Number(inode);
+      }
+      return stat;
+    });
+    const open = fs.open;
+    vi.spyOn(fs, "open").mockImplementation(async (...args) => {
+      const handle = await open(...args);
+      if (String(args[0]) === file) {
+        const stat = handle.stat.bind(handle);
+        vi.spyOn(handle, "stat").mockImplementation(async (...statArgs) => {
+          const current = await stat(...statArgs);
+          const observed = replaced ? inode - 1n : inode;
+          current.ino = typeof current.ino === "bigint" ? observed : Number(observed);
+          return current;
+        });
+      }
+      return handle;
+    });
+    if (replaced) {
+      await expect(sealImmutableGeneration(file)).rejects.toThrow("changed while sealing");
+      expect((await fs.stat(file)).mode & 0o777).toBe(0o644);
+    } else {
+      await sealImmutableGeneration(file);
+      expect((await fs.stat(file)).mode & 0o777).toBe(0o444);
+    }
+  });
   it.each(["config", "commondir"])(
     "refuses build-authored Git helpers through %s before privileged Git verification",
     async (kind) => {

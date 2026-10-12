@@ -228,7 +228,7 @@ export async function prepareRetainedSessionImport(
       try {
         const current = statMigrationPath(source.path);
         // The importer validates present inputs; a foreign receipt cannot veto their current bytes.
-        if (current?.isFile() && current.size > 0) {
+        if (current?.isFile() && current.size > 0n) {
           continue;
         }
         if (resolveVerifiedSessionSource(source, sourceVerification.resolvedTarget, params.env)) {

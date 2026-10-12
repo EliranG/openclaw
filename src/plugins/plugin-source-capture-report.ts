@@ -1,4 +1,4 @@
-import type { Stats } from "node:fs";
+import type { BigIntStats } from "node:fs";
 import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -16,13 +16,13 @@ import { isLegacyPluginSourceCaptureName } from "./plugin-source-capture-path.js
 type LegacyCapture = {
   path: string;
   bytes: number;
-  identity: Stats;
+  identity: BigIntStats;
   changedAtMs: number;
   complete: boolean;
 };
 
-async function readLegacyCapture(directory: string): Promise<Stats | undefined> {
-  const identity = await fs.lstat(directory);
+async function readLegacyCapture(directory: string): Promise<BigIntStats | undefined> {
+  const identity = await fs.lstat(directory, { bigint: true });
   if (!identity.isDirectory()) {
     return undefined;
   }
@@ -51,7 +51,7 @@ async function inspectLegacyCapture(
     warn(failure.path, failure.error);
   }
   let bytes = 0;
-  let changedAtMs = Math.max(identity.birthtimeMs, identity.ctimeMs);
+  let changedAtMs = Math.max(Number(identity.birthtimeNs), Number(identity.ctimeNs)) / 1e6;
   for (const entry of scan.entries) {
     try {
       const stat = await fs.lstat(entry.path);
@@ -161,7 +161,7 @@ export async function pruneLegacyPluginSourceCaptures(
           skipped.push({ path: root.path, reason: "capture inspection is incomplete" });
           continue;
         }
-        if (process.getuid && current.identity.uid !== process.getuid()) {
+        if (process.getuid && current.identity.uid !== BigInt(process.getuid())) {
           skipped.push({ path: root.path, reason: "owned by another UID" });
           continue;
         }

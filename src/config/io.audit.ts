@@ -167,10 +167,14 @@ export function createConfigObserveAuditRecord(params: {
   restoreErrorMessage?: string | null;
 }) {
   const { current, lastKnownGood, backup } = params;
+  const exactIdentity = [current, lastKnownGood, backup].every(
+    (metadata) => !metadata || hasExactAuditIdentity(metadata),
+  );
   return {
     ts: current.observedAt,
     source: "config-io" as const,
     event: "config.observe" as const,
+    ...(exactIdentity ? { identityEncoding: "exact" as const } : {}),
     phase: "read" as const,
     configPath: params.configPath,
     ...resolveConfigAuditProcessInfo(),
@@ -231,8 +235,12 @@ export type ConfigAuditRecord =
 
 type ConfigAuditStatMetadata = Pick<
   ConfigHealthFingerprint,
-  "dev" | "ino" | "mode" | "nlink" | "uid" | "gid"
+  "dev" | "ino" | "mode" | "nlink" | "uid" | "gid" | "identityEncoding"
 >;
+
+function hasExactAuditIdentity(metadata: ConfigAuditStatMetadata): boolean {
+  return metadata.identityEncoding === "exact" || (metadata.dev === null && metadata.ino === null);
+}
 
 type ConfigAuditProcessInfo = {
   pid: number;
@@ -302,6 +310,9 @@ export function createConfigWriteAuditRecordBase(params: {
     ts: params.now ?? new Date().toISOString(),
     source: "config-io" as const,
     event: "config.write" as const,
+    ...(hasExactAuditIdentity(params.previousMetadata)
+      ? { identityEncoding: "exact" as const }
+      : {}),
     configPath: params.configPath,
     pid: processSnapshot.pid,
     ppid: processSnapshot.ppid,
@@ -362,8 +373,12 @@ export function finalizeConfigWriteAuditRecord(params: {
   const errorMessage = readStringField(errorRecord, "message");
   const success = params.result !== "failed" && params.result !== "rejected";
   const nextMetadata = success ? params.nextMetadata : undefined;
+  const { identityEncoding, ...base } = params.base;
   return {
-    ...params.base,
+    ...base,
+    ...(identityEncoding === "exact" && (!nextMetadata || hasExactAuditIdentity(nextMetadata))
+      ? { identityEncoding: "exact" as const }
+      : {}),
     result: params.result,
     nextHash: success ? params.base.nextHash : null,
     nextBytes: success ? params.base.nextBytes : null,

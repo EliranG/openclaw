@@ -1,4 +1,4 @@
-import nodeFs, { type FSWatcher, type Stats } from "node:fs";
+import nodeFs, { type FSWatcher, type BigIntStats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { setImmediate as nextTurn } from "node:timers/promises";
@@ -103,12 +103,12 @@ async function unlessMissing<T>(operation: Promise<T>): Promise<T | undefined> {
   }
 }
 
-function sameDirectory(left: Stats, right: Stats): boolean {
+function sameDirectory(left: BigIntStats, right: BigIntStats): boolean {
   return (
     left.dev === right.dev &&
     left.ino === right.ino &&
-    left.ctimeMs === right.ctimeMs &&
-    left.mtimeMs === right.mtimeMs
+    left.ctimeNs === right.ctimeNs &&
+    left.mtimeNs === right.mtimeNs
   );
 }
 
@@ -116,7 +116,7 @@ type CachedDirectory = {
   watcher: FSWatcher;
   dirty: boolean;
   armAt: number;
-  stat: Stats;
+  stat: BigIntStats;
   files: Map<string, CodexCatalogRolloutFingerprint>;
 };
 
@@ -161,7 +161,7 @@ export class CodexCatalogRolloutScanner {
     }
   }
 
-  private watch(directory: string, stat: Stats): CachedDirectory | undefined {
+  private watch(directory: string, stat: BigIntStats): CachedDirectory | undefined {
     if (
       this.closed ||
       directory.length > MAX_CWD_LENGTH ||
@@ -220,7 +220,9 @@ export class CodexCatalogRolloutScanner {
         return;
       }
       const directoryPattern = DIRECTORY_PARTS[depth];
-      const stat = !directoryPattern ? await unlessMissing(fs.lstat(directory)) : undefined;
+      const stat = !directoryPattern
+        ? await unlessMissing(fs.lstat(directory, { bigint: true }))
+        : undefined;
       // The watch may have failed while the directory stat was pending.
       let cached = this.directories.get(directory);
       if (!directoryPattern) {

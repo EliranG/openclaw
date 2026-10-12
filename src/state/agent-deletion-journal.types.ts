@@ -48,8 +48,8 @@ export type AgentDeletionJournalCleanupPath = {
   parentPath: string;
   kind: "target" | "symlink";
   sourcePaths: string[];
-  dev: number | null;
-  ino: number | null;
+  dev: string | number | null;
+  ino: string | number | null;
   coversDescendants: boolean;
   done: boolean;
   note?: string;

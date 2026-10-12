@@ -147,7 +147,7 @@ function committedResolveUndo(from, index) {
 
 function stat(pathname) {
   try {
-    return fs.lstatSync(pathname);
+    return fs.lstatSync(pathname, { bigint: true });
   } catch (error) {
     if (error.code === "ENOENT" || error.code === "ENOTDIR") {
       return undefined;
@@ -172,7 +172,7 @@ function worktreeEntry(pathname) {
   const mode = before.isSymbolicLink()
     ? "120000"
     : before.isFile()
-      ? before.mode & 0o100
+      ? before.mode & 0o100n
         ? "100755"
         : "100644"
       : undefined;
@@ -187,7 +187,7 @@ function worktreeEntry(pathname) {
     hash.update(`blob ${before.size}\0`);
     const fd = fs.openSync(pathname, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
     try {
-      const opened = fs.fstatSync(fd);
+      const opened = fs.fstatSync(fd, { bigint: true });
       if (opened.dev !== before.dev || opened.ino !== before.ino) {
         throw new Error("Transition file changed while opening");
       }
@@ -202,7 +202,7 @@ function worktreeEntry(pathname) {
   const after = stat(pathname);
   if (
     !after ||
-    ["dev", "ino", "mode", "size", "mtimeMs", "ctimeMs"].some((key) => before[key] !== after[key])
+    ["dev", "ino", "mode", "size", "mtimeNs", "ctimeNs"].some((key) => before[key] !== after[key])
   ) {
     throw new Error(`Transition file changed while reading ${JSON.stringify(pathname)}`);
   }

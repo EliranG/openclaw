@@ -34,6 +34,7 @@ function sameFingerprint(
     return false;
   }
   return (
+    left.identityEncoding === right.identityEncoding &&
     left.hash === right.hash &&
     left.bytes === right.bytes &&
     left.mtimeMs === right.mtimeMs &&
@@ -49,7 +50,7 @@ function sameFingerprint(
   );
 }
 
-function createObservedFingerprint(snapshot: ConfigFileSnapshot, stat: fs.Stats | null) {
+function createObservedFingerprint(snapshot: ConfigFileSnapshot, stat: fs.BigIntStats | null) {
   const raw = snapshot.raw as string;
   return createConfigHealthFingerprint({
     raw,
@@ -109,7 +110,7 @@ export async function observeConfigSnapshot(
         throw superseded;
       }
     });
-    const stat = await deps.fs.promises.stat(snapshot.path).catch(() => null);
+    const stat = await deps.fs.promises.stat(snapshot.path, { bigint: true }).catch(() => null);
     if (!health.isCurrent()) {
       return;
     }
@@ -178,7 +179,7 @@ export function observeConfigSnapshotSync(
     return;
   }
   supersedeConfigHealthObservations(deps, snapshot.path);
-  const stat = deps.fs.statSync(snapshot.path, { throwIfNoEntry: false }) ?? null;
+  const stat = deps.fs.statSync(snapshot.path, { bigint: true, throwIfNoEntry: false }) ?? null;
   const current = createObservedFingerprint(snapshot, stat);
   const healthState = readConfigHealthStateFromStore(deps);
   const backupPath = `${snapshot.path}.bak`;

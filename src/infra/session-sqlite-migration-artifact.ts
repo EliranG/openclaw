@@ -37,9 +37,9 @@ export const MigrationArtifactSchema = z.object({
 export type MigrationArtifact = z.infer<typeof MigrationArtifactSchema>;
 export type MigrationArtifactIdentity = MigrationArtifact["identity"];
 
-export function statMigrationPath(filePath: string): fs.Stats | undefined {
+export function statMigrationPath(filePath: string): fs.BigIntStats | undefined {
   try {
-    return fs.lstatSync(filePath);
+    return fs.lstatSync(filePath, { bigint: true });
   } catch (error) {
     if ((isRecord(error) ? error.code : undefined) === "ENOENT") {
       return undefined;
@@ -60,8 +60,8 @@ export function isPendingMigrationArtifactClaim(
   return Boolean(
     original?.isFile() &&
     claim?.isFile() &&
-    original.nlink === 2 &&
-    claim.nlink === 2 &&
+    original.nlink === 2n &&
+    claim.nlink === 2n &&
     original.dev === claim.dev &&
     original.ino === claim.ino &&
     String(original.ino) === artifact.identity.ino,

@@ -86,7 +86,7 @@ export async function readCheckoutGitRevision({
       [...tips],
       packedReplacements,
       paths.toSorted().map((file) => {
-        const stat = fs.lstatSync(file, { throwIfNoEntry: false });
+        const stat = fs.lstatSync(file, { bigint: true, throwIfNoEntry: false });
         if (
           stat?.isSymbolicLink() ||
           (stat?.isFile() &&
@@ -96,8 +96,14 @@ export async function readCheckoutGitRevision({
           throw new Error("Symbolic Git metadata requires Git discovery");
         }
         return stat?.isDirectory()
-          ? [file, stat.dev, stat.ino]
-          : [file, stat?.ino, stat?.size, stat?.mtimeMs, stat?.ctimeMs];
+          ? [file, stat.dev.toString(), stat.ino.toString()]
+          : [
+              file,
+              stat?.ino.toString(),
+              stat?.size.toString(),
+              stat?.mtimeNs.toString(),
+              stat?.ctimeNs.toString(),
+            ];
       }),
     ]);
   } catch {

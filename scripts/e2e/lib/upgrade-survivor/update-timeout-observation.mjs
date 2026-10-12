@@ -108,8 +108,8 @@ async function copyFiles(pid) {
       continue;
     }
     const info = await readProc(`/proc/${pid}/fdinfo/${fd}`);
-    const inode = counter(info, "ino");
-    const mount = counter(info, "mnt_id");
+    const inode = /^ino:\s+(\d+)$/mu.exec(info)?.[1] ?? null;
+    const mount = /^mnt_id:\s+(\d+)$/mu.exec(info)?.[1] ?? null;
     const position = counter(info, "pos");
     if (inode !== null && mount !== null && position !== null) {
       // A descriptor can close or be reused while /proc is read.

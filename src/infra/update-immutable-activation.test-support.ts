@@ -17,7 +17,7 @@ import type { ImmutableGatewayObservation } from "./update-immutable-verificatio
 export const previousSha = "a".repeat(40);
 export const candidateSha = "b".repeat(40);
 export const identity = (file: string) => {
-  const stat = fs.lstatSync(file);
+  const stat = fs.lstatSync(file, { bigint: true });
   return `${stat.dev}:${stat.ino}`;
 };
 

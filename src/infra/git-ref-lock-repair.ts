@@ -1,4 +1,4 @@
-import { constants, type Stats } from "node:fs";
+import { constants, type BigIntStats } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -8,16 +8,16 @@ const STALE_REF_LOCK_MS = 60 * 60_000;
 // Linux local filesystems only: remote storage can retain another host's live writer.
 const LOCAL_FILESYSTEM_TYPES = new Set([0xef53, 0x58465342, 0x9123683e, 0xf2f52010]);
 
-function sameLock(left: Stats, right: Stats): boolean {
+function sameLock(left: BigIntStats, right: BigIntStats): boolean {
   return (
     right.isFile() &&
-    right.nlink === 1 &&
-    right.size === 0 &&
+    right.nlink === 1n &&
+    right.size === 0n &&
     left.dev === right.dev &&
     left.ino === right.ino &&
-    left.ctimeMs === right.ctimeMs &&
-    left.mtimeMs === right.mtimeMs &&
-    left.birthtimeMs === right.birthtimeMs
+    left.ctimeNs === right.ctimeNs &&
+    left.mtimeNs === right.mtimeNs &&
+    left.birthtimeNs === right.birthtimeNs
   );
 }
 
@@ -53,7 +53,7 @@ export async function clearStaleGitRemoteRefLocks(params: {
     .then(async (commonDirectory) => ({
       commonDirectory,
       filesystem: await fs.statfs(commonDirectory),
-      directory: await fs.stat(commonDirectory),
+      directory: await fs.stat(commonDirectory, { bigint: true }),
     }))
     .catch(() => undefined);
   assertCurrent();
@@ -89,14 +89,18 @@ export async function clearStaleGitRemoteRefLocks(params: {
             continue;
           }
           try {
-            const observed = await fs.lstat(target);
+            const observed = await fs.lstat(target, { bigint: true });
             if (
               !observed.isFile() ||
-              observed.nlink !== 1 ||
-              observed.size !== 0 ||
+              observed.nlink !== 1n ||
+              observed.size !== 0n ||
               observed.dev !== directory.dev ||
-              observed.birthtimeMs <= 0 ||
-              Math.max(observed.birthtimeMs, observed.ctimeMs, observed.mtimeMs) >= cutoff ||
+              observed.birthtimeMs <= 0n ||
+              Math.max(
+                Number(observed.birthtimeMs),
+                Number(observed.ctimeMs),
+                Number(observed.mtimeMs),
+              ) >= cutoff ||
               !(await regularRefPath(commonDirectory, relative))
             ) {
               continue;
@@ -104,9 +108,9 @@ export async function clearStaleGitRemoteRefLocks(params: {
             const handle = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
             try {
               if (
-                !sameLock(observed, await handle.stat()) ||
+                !sameLock(observed, await handle.stat({ bigint: true })) ||
                 !(await regularRefPath(commonDirectory, relative)) ||
-                !sameLock(observed, await fs.lstat(target))
+                !sameLock(observed, await fs.lstat(target, { bigint: true }))
               ) {
                 continue;
               }

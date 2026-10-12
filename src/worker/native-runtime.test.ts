@@ -16,6 +16,29 @@ import {
   type NativeRuntimeResolved,
 } from "./native-runtime.js";
 
+const fileIdentityFixture = vi.hoisted(() => ({
+  path: undefined as string | undefined,
+  ino: 0n,
+}));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    stat: async (...args: Parameters<typeof actual.stat>) => {
+      const result = await actual.stat(...args);
+      if (result && String(args[0]) === fileIdentityFixture.path) {
+        Object.defineProperty(result, "ino", {
+          value:
+            typeof result.ino === "bigint"
+              ? fileIdentityFixture.ino
+              : Number(fileIdentityFixture.ino),
+        });
+      }
+      return result;
+    },
+  };
+});
+
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
 const runtimes: NativeRuntime[] = [];
 const servers: Server[] = [];
@@ -32,6 +55,8 @@ afterEach(async () => {
         }),
     ),
   );
+  fileIdentityFixture.path = undefined;
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -485,6 +510,18 @@ describe("native runtime startup authority", () => {
       }),
     ).rejects.toThrow("workspace changed");
     await expect(runtime.withTurn(turn, async () => {})).rejects.toThrow("workspace changed");
+  });
+
+  it("keeps full-width workspace identities and rejects adjacent replacement IDs", async () => {
+    const workspace = tempDirs.make("native-runtime-");
+    fileIdentityFixture.path = await realpath(workspace);
+    fileIdentityFixture.ino = 9_007_199_254_740_992n;
+    const runtime = await start(configFor(workspace));
+    await expect(runtime.withTurn(turn, async () => "accepted")).resolves.toBe("accepted");
+    fileIdentityFixture.ino += 1n;
+    await expect(runtime.withTurn(turn, async () => "accepted")).rejects.toThrow(
+      "workspace changed",
+    );
   });
 
   it("rejects directory replacement even when its canonical pathname is unchanged", async () => {

@@ -40,6 +40,7 @@ const pathProof = z.strictObject({
 
 /** Recovery retains fingerprints and path facts, never config values or credentials. */
 export const ImmutableProtectionSnapshotSchema = z.strictObject({
+  identityEncoding: z.literal("exact").optional(),
   capturedAtMs: z.number().int().nonnegative(),
   auditBoundary: hash.nullable(),
   state: z.strictObject({

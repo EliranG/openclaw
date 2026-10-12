@@ -106,7 +106,20 @@ export function pluginCacheRealpathSync(targetPath: string, native = false): str
 /** A trusted owner that changes permissions replaces its own observed stat. */
 export function refreshPluginCacheStat(targetPath: string): fs.Stats | null {
   pathFacts(targetPath).stat = undefined;
+  pathFacts(targetPath).exactIdentity = undefined;
   return pluginCacheStatSync(targetPath);
+}
+
+export function pluginCacheIdentitySync(targetPath: string): fs.BigIntStats | null {
+  const facts = pathFacts(targetPath);
+  if (facts.exactIdentity === undefined) {
+    try {
+      facts.exactIdentity = fs.statSync(targetPath, { bigint: true });
+    } catch {
+      facts.exactIdentity = null;
+    }
+  }
+  return facts.exactIdentity;
 }
 
 export function pluginCacheStatSync(targetPath: string, throwOnError = false): fs.Stats | null {

@@ -86,7 +86,8 @@ it.each([
     const inspected = new Set<number | bigint>();
     const applyFixtureUid = (target: unknown, stat: fs.Stats | fs.BigIntStats) => {
       if ((typeof target === "string" && roots.includes(target)) || inspected.has(stat.ino)) {
-        Object.assign(stat, { uid: changed && inspected.has(stat.ino) ? peerUid : captureUid });
+        const uid = changed && inspected.has(stat.ino) ? peerUid : captureUid;
+        Object.assign(stat, { uid: typeof stat.uid === "bigint" ? BigInt(uid) : uid });
         inspected.add(stat.ino);
       }
     };

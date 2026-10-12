@@ -115,7 +115,7 @@ export async function resolveClaudeCliHistorySource(
   }
   try {
     const filePath = await fs.promises.realpath(candidate);
-    const stats = await fs.promises.stat(filePath);
+    const stats = await fs.promises.stat(filePath, { bigint: true });
     const sourceFingerprint = [stats.dev, stats.ino, stats.size, stats.mtimeMs, stats.ctimeMs].join(
       ":",
     );
@@ -126,7 +126,7 @@ export async function resolveClaudeCliHistorySource(
       params.localSessionId?.trim() || null,
       normalizeCliSessionReseedReceipt(params.reseedReceipt),
     ]);
-    return [filePath, cacheKey, stats.size];
+    return [filePath, cacheKey, Number(stats.size)];
   } catch {
     return undefined;
   }

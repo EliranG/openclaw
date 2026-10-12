@@ -863,7 +863,10 @@ describe("createManagedOutgoingImageBlocks", () => {
       pending.push(
         actual.resolvePlaybackMetadataForSource({
           sourcePath,
-          sourceStat: await fs.stat(sourcePath),
+          sourceStat: {
+            ...(await fs.stat(sourcePath)),
+            exactIdentity: await fs.stat(sourcePath, { bigint: true }),
+          },
           mimeType: "audio/mpeg",
           kind: "audio",
         }),

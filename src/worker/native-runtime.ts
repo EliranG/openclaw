@@ -42,8 +42,8 @@ export type NativeRuntime = {
 type Workspace = {
   sourcePath: string;
   canonicalPath: string;
-  dev: number;
-  ino: number;
+  dev: bigint;
+  ino: bigint;
 };
 type RegisteredModel = {
   model: Model;
@@ -58,7 +58,7 @@ const FULL_CREDENTIAL_PREFIX_SCAN_MAX_CHARS = 16;
 
 async function assertWorkspace(workspace: Workspace): Promise<void> {
   const canonicalPath = await realpath(workspace.sourcePath);
-  const current = await stat(canonicalPath);
+  const current = await stat(canonicalPath, { bigint: true });
   if (
     canonicalPath !== workspace.canonicalPath ||
     !current.isDirectory() ||
@@ -147,7 +147,7 @@ export async function createNativeRuntime(
   }
   const sourcePath = path.resolve(parsed.workspace);
   const canonicalPath = await realpath(sourcePath);
-  const directory = await stat(canonicalPath);
+  const directory = await stat(canonicalPath, { bigint: true });
   if (!directory.isDirectory()) {
     throw new Error("Native runtime workspace must be a directory");
   }
@@ -207,7 +207,7 @@ export async function createNativeRuntime(
       if (workspacePath !== workspace.canonicalPath) {
         throw new Error("Native runtime workspace does not match the admitted workspace");
       }
-      const assignedStat = await stat(workspacePath);
+      const assignedStat = await stat(workspacePath, { bigint: true });
       if (!assignedStat.isDirectory()) {
         throw new Error("Native runtime assigned workspace is not a directory");
       }

@@ -104,14 +104,14 @@ export function collectRecoveryInventory(params: { cfg: OpenClawConfig; env: Nod
     for (const manifestPath of manifestPaths) {
       const stat = statMigrationPath(manifestPath);
       const manifest =
-        stat?.isFile() && stat.nlink === 1
+        stat?.isFile() && stat.nlink === 1n
           ? readSessionSqliteMigrationManifest(manifestPath)
           : undefined;
       if (!manifest) {
         artifacts.push({
           path: manifestPath,
           runs: [],
-          bytes: stat?.size ?? 0,
+          bytes: stat ? Number(stat.size) : 0,
           outcome: "blocked",
           reason: "unreadable-manifest",
         });
