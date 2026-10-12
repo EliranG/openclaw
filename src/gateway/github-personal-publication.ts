@@ -13,7 +13,10 @@ import {
   readGitHubPublicationSessionLifecycleInWorker,
 } from "../state/github-publication-session-lifecycles.js";
 import { captureOpenClawStateWorkerContext } from "../state/openclaw-state-worker-context.js";
-import { prepareUserGitHubConnection } from "../state/user-github-connections.js";
+import {
+  prepareUserGitHubConnection,
+  UserGitHubConnectionAuthorityChangedError,
+} from "../state/user-github-connections.js";
 import { requestCurrentPersonalGitHubRefresh } from "./github-oauth-lifecycle.js";
 import type { PersonalGitHubAction } from "./github-personal-oauth.js";
 import {
@@ -96,10 +99,23 @@ export async function bindPersonalGitHubPublicationSelection(
   selected: Selection,
   preparation?: GitHubPublicationPreparation,
 ) {
-  let prepared = await prepareUserGitHubConnection(action.owner);
+  const rejectRevokedConnection = (error: unknown): never => {
+    if (!(error instanceof UserGitHubConnectionAuthorityChangedError)) {
+      throw error;
+    }
+    rejectGitHubPublicationSelection(
+      "My GitHub identity changed; review the current account before publishing again.",
+      preparation,
+    );
+  };
+  let prepared = await prepareUserGitHubConnection(action.owner).catch(rejectRevokedConnection);
   const assertCurrent = () => {
     action.assertCurrent();
-    prepared.assertCurrent();
+    try {
+      prepared.assertCurrent();
+    } catch (error) {
+      rejectRevokedConnection(error);
+    }
     const record = prepared.connection;
     if (
       record?.generation !== selected.generation ||
@@ -121,7 +137,7 @@ export async function bindPersonalGitHubPublicationSelection(
     accountId: initial.accountId,
     assertCurrent,
     async refresh() {
-      prepared = await prepareUserGitHubConnection(action.owner);
+      prepared = await prepareUserGitHubConnection(action.owner).catch(rejectRevokedConnection);
       assertCurrent();
     },
   };

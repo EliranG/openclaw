@@ -837,8 +837,8 @@ describe("personal GitHub through authenticated Gateway RPC", () => {
     expect((await fs.stat(dir)).mode & 0o077).toBe(0);
     expect(await listSecretStoreEntries({ scope: { kind: "team" } })).toEqual([]);
     expect(await readSecretStoreExecEnvironment({ includeSecretSentinels: true })).toEqual({});
-    expect(listGitHubOAuthRecords()).toEqual([]);
-    expect(listGitHubDeviceAuthorizationRecords()).toEqual([]);
+    expect(await listGitHubOAuthRecords()).toEqual([]);
+    expect(await listGitHubDeviceAuthorizationRecords()).toEqual([]);
     await purgeExpiredSecretStoreEntries();
     await cleanupRetiredManagedGitHubProfiles({ config });
     expect(await fs.readFile(path.join(dir, "hosts.yml"), "utf8")).toContain(tokens.accessToken);

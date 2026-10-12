@@ -2,11 +2,11 @@ import { expectDefined } from "@openclaw/normalization-core";
 import { afterEach, expect, it, vi } from "vitest";
 import { createDeferredCore } from "../shared/deferred.js";
 import { openOpenClawStateDatabase } from "../state/openclaw-state-db.js";
-import * as personalStore from "./github-personal-publication-store.js";
 import {
   createPersonalPublicationFixture,
   personalPublicationAccount as account,
 } from "./github-personal-publication.test-support.js";
+import * as personalStore from "./github-publication-store-async.js";
 import {
   SESSION_KEY,
   commands,
@@ -196,7 +196,7 @@ it.each([false, true])(
     openOpenClawStateDatabase()
       .db.prepare("UPDATE github_personal_publication_requests SET status = ? WHERE request_id = ?")
       .run("needs_confirmation", published.requestId);
-    const fallback = vi.spyOn(personalStore, "readPersonalGitHubPublication");
+    const fallback = vi.spyOn(personalStore, "readPersonalGitHubPublicationAsync");
     if (corrupt) {
       const workspace = await sharedRepositoryWorkspace();
       insertRepositoryGitHubPublication(
