@@ -432,6 +432,25 @@ it("returns a reply tail and its current watermark from one projection snapshot"
       );
       expect(statements.counts.projection - before.projection).toBe(1);
       expect(statements.counts.watermark - before.watermark).toBe(0);
+
+      runSqliteImmediateTransactionSync(database.db, () => {
+        database.db
+          .prepare(
+            `INSERT INTO session_transcript_cold_archives
+             (session_id, generation, archive_name, archive_sha256, event_count,
+              raw_bytes, archive_bytes, last_seq, archived_at, storage)
+             VALUES (?, 'archive-generation', 'synthetic', ?, 6, 0, 0, 5, 1, 'file')`,
+          )
+          .run(scope.sessionId, "0".repeat(64));
+      });
+      expect(read).toThrow("is in cold storage");
+      runSqliteImmediateTransactionSync(database.db, () => {
+        database.db
+          .prepare("DELETE FROM session_transcript_cold_archives WHERE session_id = ?")
+          .run(scope.sessionId);
+      });
+      expect(read().watermark).toEqual(updated.watermark);
+      expect(statements.counts.watermark).toBe(0);
     } finally {
       statements.restore();
     }
