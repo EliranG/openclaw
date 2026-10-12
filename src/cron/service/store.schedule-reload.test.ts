@@ -127,7 +127,12 @@ it.each<ReloadCase>([
   },
 );
 
-it.each([
+it.each<{
+  name: string;
+  initial: Partial<CronJob>;
+  replacement: Partial<CronJob>;
+  nextRunAtMs: number;
+}>([
   {
     name: "schedule key order only",
     initial: { state: { nextRunAtMs: dueNextRunAtMs } },
