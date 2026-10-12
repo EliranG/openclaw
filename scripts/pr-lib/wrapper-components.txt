@@ -314,6 +314,7 @@ src/agents/worktrees/capacity.ts
 src/agents/worktrees/capacity.worker.ts
 src/agents/worktrees/checkout-apfs.ts
 src/agents/worktrees/checkout-git-config.ts
+src/agents/worktrees/checkout-policy-key.ts
 src/agents/worktrees/checkout.ts
 src/agents/worktrees/errors.ts
 src/agents/worktrees/eviction.runtime.ts
@@ -344,6 +345,8 @@ src/agents/worktrees/repository-paths.ts
 src/agents/worktrees/run-end-lifecycle.ts
 src/agents/sandbox/registry-lifecycle.ts
 src/agents/sandbox/registry-publication.ts
+src/sessions/communication-admission.ts
+src/sessions/communication-policy.ts
 src/config/sessions/session-actor-command.ts
 src/config/sessions/session-actor-executor.ts
 src/config/sessions/session-actor-sqlite.ts
@@ -403,6 +406,7 @@ src/channels/plugins/setup-contract.ts
 src/channels/registry-lookup.ts
 src/channels/registry-normalize.ts
 src/channels/registry.ts
+src/claws/provenance-secondary-references.ts
 src/cli/command-format.ts
 src/cli/daemon-cli/restart-health.types.ts
 src/cli/parse-bytes.ts
@@ -601,6 +605,8 @@ src/config/sessions/archive-compression.ts
 src/config/sessions/artifacts.ts
 src/config/sessions/auth-profile-override-provenance.ts
 src/config/sessions/goals-operations.types.ts
+src/config/sessions/group-display.ts
+src/config/sessions/metadata-projection.ts
 src/config/sessions/migration-required.ts
 src/config/sessions/model-override-provenance.ts
 src/config/sessions/paths.ts
@@ -1016,7 +1022,6 @@ src/infra/secure-random.ts
 src/infra/semver.ts
 src/infra/session-cost-usage-cache-migration.ts
 src/infra/session-cost-usage-rollup-codec.ts
-src/infra/session-cost-usage-worker.types.ts
 src/infra/shell-env.ts
 src/infra/shell-inline-command.ts
 src/infra/shell-wrapper-resolution.ts
@@ -1300,6 +1305,7 @@ src/plugins/compat/progress-receipt-handoff-record.ts
 src/plugins/compat/sqlite-runtime-records.ts
 src/plugins/compat/binding-persistence-records.ts
 src/plugins/compat/registry-records.ts
+src/plugins/compat/memory-session-records.ts
 src/plugins/compat/registry.ts
 src/plugins/compat/reply-tool-authority-record.ts
 src/plugins/compat/session-persistence-records.ts
@@ -1970,6 +1976,7 @@ packages/gateway-protocol/src/schema/session-participant.ts
 src/config/sessions/internal-session-key.ts
 src/config/sessions/session-accessor.sqlite-entry-cache-state.ts
 src/config/sessions/session-accessor.sqlite-entry-read.ts
+src/config/sessions/session-accessor.sqlite-entry-select.ts
 src/config/sessions/session-accessor.sqlite-entry-revision.ts
 src/config/sessions/session-accessor.sqlite-participant-projection.ts
 src/config/sessions/session-participant-identity.ts
@@ -2012,6 +2019,10 @@ src/config/sessions/store-maintenance-activity.ts
 src/utils/chunk-items.ts
 src/utils/message-channel-normalize.ts
 src/utils/message-channel.ts
+src/state/agent-deletion-journal-authority.worker.ts
+src/infra/session-cost-usage-worker.types.ts
+src/sessions/session-agent-work-admission.ts
+src/sessions/session-lifecycle-identity.ts
 src/config/sessions/cli-history-boundary.ts
 src/config/sessions/session-accessor.sqlite-identity.ts
 src/config/sessions/session-accessor.sqlite-worker-coordination.ts
@@ -2242,6 +2253,7 @@ src/config/sessions/transcript-replay.ts
 src/config/sessions/transcript-visible-events.ts
 src/config/sessions/work-start-error.ts
 src/gateway/control-reply-text.ts
+src/gateway/payload-limits.ts
 src/gateway/server-constants.ts
 src/gateway/session-display-projection.ts
 src/gateway/session-transcript-entry-message.ts
@@ -2278,3 +2290,5 @@ src/shared/text/text-projection.ts
 src/shared/text/xml-tag-at.ts
 src/shared/widget-theme.ts
 packages/markdown-core/package.json
+src/config/sessions/transcript-recent-text.ts
+src/config/sessions/transcript-recent-window.ts
