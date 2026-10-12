@@ -1,8 +1,8 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import type { GatewaySessionRow, SessionsListResult } from "../api/types.ts";
-import { parseSidebarEntry } from "../app-navigation.ts";
+import { parseSidebarEntry, type NavigationRouteId } from "../app-navigation.ts";
 import { pathForRoute } from "../app-route-paths.ts";
-import type { ApplicationContext } from "../app/context.ts";
+import type { ApplicationContext, ApplicationNavigationOptions } from "../app/context.ts";
 import { gatewayPresentationScope } from "../app/gateway-presentation-scope.ts";
 import { t } from "../i18n/index.ts";
 import { shouldHandleNavigationClick } from "../lib/navigation-click.ts";
@@ -12,7 +12,6 @@ import type {
 } from "../lib/sessions/session-capability.ts";
 import { showToast } from "../lib/toast.ts";
 import { SETTINGS_ROUTE_TARGETS } from "../pages/config/route-data.ts";
-import type { AppSidebarRenderHost } from "./app-sidebar-render.tsx";
 import { buildReconciledSidebarZone } from "./app-sidebar-session-navigation-logic.ts";
 import type { SidebarSessionNavigationState } from "./app-sidebar-session-navigation-logic.ts";
 import { applySidebarSessionOwnerFilter } from "./app-sidebar-session-ownership.ts";
@@ -40,7 +39,16 @@ type PersonalNavigationHost = {
 };
 
 export function hidePersonalSidebarCatalog(
-  host: Pick<AppSidebarRenderHost, "sessionData" | "basePath" | "ownerDocument" | "onNavigate">,
+  host: {
+    readonly sessionData: {
+      readonly sessionCatalogs: ReadonlyArray<{ id: string; label?: string | null }>;
+    };
+    readonly basePath: string;
+    readonly ownerDocument: Document;
+    readonly onNavigate:
+      | ((routeId: NavigationRouteId, options?: ApplicationNavigationOptions) => void)
+      | undefined;
+  },
   catalogId: string,
 ): void {
   const label =

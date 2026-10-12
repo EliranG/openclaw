@@ -1,10 +1,9 @@
-import type { SessionsListResult } from "../api/types.ts";
+import type { GatewaySessionRow, SessionsListResult } from "../api/types.ts";
 import type { ApplicationContext } from "../app/context.ts";
 import { projectSidebarArchiveVisibility } from "./app-sidebar-session-archive-visibility.ts";
 import { excludeSessionCatalogRows } from "./app-sidebar-session-catalog-state.ts";
 import { projectSidebarSessionCatalogs } from "./app-sidebar-session-catalogs.ts";
 import type { SidebarSessionNavigationState } from "./app-sidebar-session-navigation-logic.ts";
-import type { AppSidebarSessionNavigationElement } from "./app-sidebar-session-navigation.ts";
 import type {
   SidebarRecentSession,
   SidebarSessionStatusFilter,
@@ -22,10 +21,14 @@ type SidebarSnoozeVisibilityHost = {
 export function sidebarChildSessionParents(
   rows: readonly SidebarRecentSession[],
   homeAgents: readonly string[],
-  host: Pick<
-    AppSidebarSessionNavigationElement,
-    "isSessionChildrenExpanded" | "mainSessionRow" | "projectHomeSession"
-  >,
+  host: {
+    isSessionChildrenExpanded(session: SidebarRecentSession): boolean;
+    mainSessionRow(agentId: string): GatewaySessionRow | null;
+    projectHomeSession(
+      row: GatewaySessionRow,
+      agentId: string,
+    ): Pick<SidebarRecentSession, "childLoadParentKeys">;
+  },
 ): Set<string> {
   const revalidating = new Set<string>();
   const pending = [...rows];
