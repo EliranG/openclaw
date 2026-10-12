@@ -2,9 +2,9 @@ import { For, createEffect, createMemo } from "solid-js";
 import type { ChatFollowUpMode } from "../../../app/settings.ts";
 import { Icon } from "../../../components/solid/icon.tsx";
 import { syncDropdownItemRadio } from "../../../components/web-awesome.ts";
-import { t } from "../../../i18n/index.ts";
 import { canSubmitBeforeChatHistory } from "../../../lib/chat/commands.ts";
 import type { ControlUiFollowUpMode } from "../../../lib/chat/follow-up-mode.ts";
+import { t } from "../../../lib/reactive/i18n.ts";
 import type { ComposerDictationController } from "../composer-dictation.ts";
 import type { ComposerTalkCapabilityStatus } from "../composer-microphone-picker.ts";
 import {
@@ -94,7 +94,7 @@ function renderMicrophoneNotice(className: string, message: string, role?: "stat
   );
 }
 
-export function renderMicrophonePickerSolid(props: MicrophonePickerProps) {
+function renderMicrophonePickerSolid(props: MicrophonePickerProps) {
   // Without an available capture route, a checked "System default" would claim
   // a selection that cannot exist. Show the discovery issue alone.
   const unavailable = createMemo(() =>
@@ -303,7 +303,7 @@ type ComposerVoiceButtonProps = {
   onToggleVoice?: () => void;
 };
 
-export function renderComposerVoiceButtonSolid(props: ComposerVoiceButtonProps) {
+function renderComposerVoiceButtonSolid(props: ComposerVoiceButtonProps) {
   const active = () => props.readDictation?.()?.active === true;
   const arming = () => props.readDictation?.()?.arming === true;
   const finalizing = () => props.readDictation?.()?.finalizing === true;
