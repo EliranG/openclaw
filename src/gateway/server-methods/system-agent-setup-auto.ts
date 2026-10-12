@@ -53,38 +53,47 @@ function present(candidate: SetupInferenceCandidate) {
 /** Accepted setup belongs to the Gateway; disconnecting a joining caller does not cancel it. */
 export function runGatewayAutomaticSetup(
   context: GatewayRequestContext,
+  assertAuthority: () => void,
 ): Promise<SystemAgentSetupAutoResult> {
+  assertAuthority();
   const previous = runs.get(context.wizardSessions);
   if (previous) {
     return previous;
   }
-  const run = runExclusiveSystemAgentSetupActivation(() => autoSetup());
+  const run = runExclusiveSystemAgentSetupActivation(() => autoSetup(assertAuthority));
   runs.set(context.wizardSessions, run);
   void run.finally(() => runs.delete(context.wizardSessions)).catch(() => {});
   return run;
 }
 
-async function autoSetup(): Promise<SystemAgentSetupAutoResult> {
+async function autoSetup(assertAuthority: () => void): Promise<SystemAgentSetupAutoResult> {
   const runtime = createSystemAgentGatewayRuntime();
   const signal = getAsyncWorkSignal();
-  const assertCurrent = () => signal?.throwIfAborted();
+  const assertCurrent = () => {
+    signal?.throwIfAborted();
+    assertAuthority();
+  };
   const detection = await runSystemAgentGatewayTask(() => detectSetupInference());
   let ranked = rankSetupInferenceCandidates(detection.candidates);
   const attempts: SystemAgentSetupAutoResult["attempts"] = [];
   const failed = new Set<string>();
   const installedPlugins: string[] = [];
+  let codexNeedsSignIn = false;
   const result = (
     status: SystemAgentSetupAutoResult["status"],
     selected?: SetupInferenceCandidate,
-  ): SystemAgentSetupAutoResult => ({
-    status,
-    ...(selected ? { selected: present(selected) } : {}),
-    alternatives: ranked
-      .filter((candidate) => candidate !== selected && !failed.has(candidate.kind))
-      .map(present),
-    attempts,
-    installedPlugins,
-  });
+  ): SystemAgentSetupAutoResult => {
+    assertCurrent();
+    return {
+      status,
+      ...(selected ? { selected: present(selected) } : {}),
+      alternatives: ranked
+        .filter((candidate) => candidate !== selected && !failed.has(candidate.kind))
+        .map(present),
+      attempts,
+      installedPlugins,
+    };
+  };
   if (detection.setupComplete) {
     const selected = ranked.find((candidate) => candidate.kind === "existing-model");
     if (selected) {
@@ -130,10 +139,15 @@ async function autoSetup(): Promise<SystemAgentSetupAutoResult> {
       activationConfirmed: true,
       nativeSessionCatalogsEnabled: false,
       beforePersistentEffect: assertCurrent,
+      isCancelled: () => {
+        assertCurrent();
+        return false;
+      },
       onCommitStarted: () => {
         commitStarted = true;
       },
     }).catch(async (error: unknown) => {
+      assertCurrent();
       if (
         commitStarted ||
         error instanceof SetupInferenceActivationIndeterminateError ||
@@ -141,7 +155,11 @@ async function autoSetup(): Promise<SystemAgentSetupAutoResult> {
       ) {
         throw error;
       }
-      return { ok: false as const, error: await redactSetupInferenceError(error) };
+      return {
+        ok: false as const,
+        status: "unavailable" as const,
+        error: await redactSetupInferenceError(error),
+      };
     });
     if (activation.ok) {
       candidate.modelRef = activation.modelRef;
@@ -151,6 +169,9 @@ async function autoSetup(): Promise<SystemAgentSetupAutoResult> {
       return true;
     }
     failed.add(candidate.kind);
+    if (candidate.kind === "codex-cli" && activation.status === "auth") {
+      codexNeedsSignIn = true;
+    }
     attempts.push({ kind: candidate.kind, label: candidate.label, error: activation.error });
     return false;
   };
@@ -180,6 +201,7 @@ async function autoSetup(): Promise<SystemAgentSetupAutoResult> {
           config: prepared.config,
           workspaceDir: detection.workspace,
           enabled: false,
+          onlyUnset: true,
         });
         const patch = createMergePatch(snapshot.runtimeConfig ?? snapshot.config, config);
         const target: SetupInferenceConfigTarget = {
@@ -224,6 +246,7 @@ async function autoSetup(): Promise<SystemAgentSetupAutoResult> {
     } finally {
       await complete?.();
     }
+    assertCurrent();
     try {
       await appendSystemAgentAuditEntry({
         operation: "openclaw.setup.auto",
@@ -241,7 +264,7 @@ async function autoSetup(): Promise<SystemAgentSetupAutoResult> {
     if (codex && attempts.length < 4 && (await activate(codex))) {
       return result("activated", codex);
     }
-    if (!codex) {
+    if (!codex || codexNeedsSignIn) {
       const signIn = refreshed.authOptions.find(
         (option) =>
           option.brandId === "openai" && (option.kind === "oauth" || option.kind === "device-code"),
@@ -255,6 +278,7 @@ async function autoSetup(): Promise<SystemAgentSetupAutoResult> {
       throw new Error("Codex is installed, but its ChatGPT sign-in option is unavailable.");
     }
   } catch (error) {
+    assertCurrent();
     if (error instanceof SetupInferenceActivationIndeterminateError || signal?.aborted) {
       throw error;
     }

@@ -55,6 +55,7 @@ export async function fixture(
     secretRef?: boolean;
     signal?: AbortSignal;
     codex?: boolean;
+    nativeCatalogEnabled?: boolean;
     subscription?: boolean;
     homeScope?: "agent" | "user";
     modelTarget?: "utility";
@@ -136,7 +137,12 @@ export async function fixture(
   if (options.codex) {
     (config.plugins!.entries ??= {}).codex = {
       enabled: true,
-      config: { appServer: { homeScope: options.homeScope } },
+      config: {
+        appServer: { homeScope: options.homeScope },
+        ...(options.nativeCatalogEnabled !== undefined
+          ? { sessionCatalog: { enabled: options.nativeCatalogEnabled } }
+          : {}),
+      },
     };
   }
   const providerModels = config.models;

@@ -131,7 +131,7 @@ describe("Gateway automatic inference setup", () => {
     };
     fixture.detect.mockResolvedValue(detection([openai, current, codex], { setupComplete: true }));
 
-    expect(await runGatewayAutomaticSetup(context())).toEqual({
+    expect(await runGatewayAutomaticSetup(context(), () => {})).toEqual({
       status: "configured",
       selected: { ...presentedCodex, kind: "existing-model", label: "Current model" },
       alternatives: [
@@ -166,7 +166,7 @@ describe("Gateway automatic inference setup", () => {
       error: "Saved sign-in expired.",
     });
 
-    expect(await runGatewayAutomaticSetup(context())).toEqual({
+    expect(await runGatewayAutomaticSetup(context(), () => {})).toEqual({
       status: "activated",
       selected: presentedCodex,
       alternatives: [
@@ -200,14 +200,25 @@ describe("Gateway automatic inference setup", () => {
     for (const id of ["e", "d", "c", "b", "a"]) {
       candidates.push({ ...openai, kind: `saved-auth:${id}`, label: `Saved ${id}` });
     }
-    fixture.detect
-      .mockResolvedValueOnce(detection(candidates))
-      .mockResolvedValueOnce(detection([codex]));
+    fixture.detect.mockResolvedValueOnce(detection(candidates)).mockResolvedValueOnce(
+      detection([codex], {
+        authOptions: [
+          {
+            id: "openai-device-code",
+            brandId: "openai",
+            label: "ChatGPT",
+            kind: "device-code",
+            featured: true,
+          },
+        ],
+      }),
+    );
     fixture.activate.mockResolvedValue({ ok: false, status: "auth", error: "Sign-in expired." });
     fixture.prepare.mockResolvedValue({ ok: true, config: {} });
 
-    expect(await runGatewayAutomaticSetup(context())).toEqual({
-      status: "unavailable",
+    expect(await runGatewayAutomaticSetup(context(), () => {})).toEqual({
+      status: "needs-sign-in",
+      signIn: { authOptionId: "openai-device-code", label: "ChatGPT" },
       alternatives: [],
       attempts: [
         ...["a", "b", "c"].map((id) => ({
@@ -231,16 +242,16 @@ describe("Gateway automatic inference setup", () => {
       return discovered.promise;
     });
     const gateway = context();
-    const first = runGatewayAutomaticSetup(gateway);
+    const first = runGatewayAutomaticSetup(gateway, () => {});
     try {
       await awaitGateBeforeSettlement(
         started.promise,
         first,
         "automatic setup ended before discovery",
       );
-      const joined = runGatewayAutomaticSetup(gateway);
+      const joined = runGatewayAutomaticSetup(gateway, () => {});
       expect(joined).toBe(first);
-      await expect(runGatewayAutomaticSetup(context())).rejects.toBeInstanceOf(
+      await expect(runGatewayAutomaticSetup(context(), () => {})).rejects.toBeInstanceOf(
         SetupAdmissionBusyError,
       );
       expect(fixture.detect).toHaveBeenCalledOnce();
@@ -254,13 +265,46 @@ describe("Gateway automatic inference setup", () => {
     }
   });
 
+  it("rejects revoked requester authority after discovery before any activation or preparation", async () => {
+    const started = createDeferred();
+    const discovered = createDeferred<SetupInferenceDetection>();
+    fixture.detect.mockImplementationOnce(() => {
+      started.resolve();
+      return discovered.promise;
+    });
+    let current = true;
+    const run = runGatewayAutomaticSetup(context(), () => {
+      if (!current) throw new Error("Requester authority revoked");
+    });
+    const rejection = expect(run).rejects.toThrow("Requester authority revoked");
+    await awaitGateBeforeSettlement(started.promise, run, "setup ended before discovery");
+    current = false;
+    discovered.resolve(detection([codex]));
+    await rejection;
+    expect(fixture.activate).not.toHaveBeenCalled();
+    expect(fixture.prepare).not.toHaveBeenCalled();
+    expect(fixture.commit).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])(
     "prepares Codex and returns sign-in despite audit failure: %s",
     async (auditFails) => {
       if (auditFails) {
         fixture.audit.mockRejectedValueOnce(new Error("audit store unavailable"));
       }
-      const prepared: OpenClawConfig = { plugins: { entries: { codex: { enabled: true } } } };
+      const prepared: OpenClawConfig = {
+        plugins: {
+          entries: {
+            codex: {
+              enabled: true,
+              ...(auditFails ? { config: { sessionCatalog: { enabled: true } } } : {}),
+            },
+            ...(auditFails
+              ? { anthropic: { config: { sessionCatalog: { enabled: false } } } }
+              : {}),
+          },
+        },
+      };
       fixture.prepare.mockResolvedValue({ ok: true, config: prepared });
       fixture.detect.mockResolvedValueOnce(detection()).mockResolvedValueOnce(
         detection([], {
@@ -276,7 +320,7 @@ describe("Gateway automatic inference setup", () => {
         }),
       );
 
-      expect(await runGatewayAutomaticSetup(context())).toEqual({
+      expect(await runGatewayAutomaticSetup(context(), () => {})).toEqual({
         status: "needs-sign-in",
         alternatives: [],
         attempts: [],
@@ -290,7 +334,7 @@ describe("Gateway automatic inference setup", () => {
           config: {
             plugins: {
               entries: {
-                codex: { enabled: true, config: { sessionCatalog: { enabled: false } } },
+                codex: { enabled: true, config: { sessionCatalog: { enabled: auditFails } } },
                 anthropic: { config: { sessionCatalog: { enabled: false } } },
               },
             },

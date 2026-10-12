@@ -165,7 +165,12 @@ describe("setup activation credentials and configuration", () => {
   });
 
   it("automatically imports stored Codex OAuth into an OpenClaw-owned home without login", async () => {
-    const setup = await fixture({ codex: true, subscription: true, homeScope: "user" });
+    const setup = await fixture({
+      codex: true,
+      subscription: true,
+      homeScope: "user",
+      nativeCatalogEnabled: true,
+    });
     const stored = {
       type: "oauth" as const,
       provider: "openai" as const,
@@ -190,6 +195,9 @@ describe("setup activation credentials and configuration", () => {
     expect(setup.config.plugins?.entries?.codex?.config?.appServer).toMatchObject({
       homeScope: "user",
     });
+    expect(
+      (await readConfigFileSnapshot()).config.plugins?.entries?.codex?.config?.sessionCatalog,
+    ).toEqual({ enabled: true });
   });
 
   it("returns from automatic Codex setup without opening login when stored credentials disappear", async () => {

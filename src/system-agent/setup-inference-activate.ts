@@ -344,6 +344,7 @@ async function verifyAndActivateCandidate(
       : applySetupNativeSessionCatalogPreference({
           config: staged.config,
           enabled: catalogPreference,
+          onlyUnset: params.automaticSetup === true,
           workspaceDir: ctx.workspace,
         });
   const providerPatch = createMergePatch(cfg, stripPendingPluginInstallRecords(prepared));
