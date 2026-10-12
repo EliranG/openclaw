@@ -1,5 +1,5 @@
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
-import { For, Show } from "solid-js";
+import { createMemo, For, Show } from "solid-js";
 import { ConfigNode } from "../../components/config-form.node.tsx";
 import {
   humanize,
@@ -19,6 +19,7 @@ export function SetupSection(props: {
   config: ConfigProps;
   disabled: boolean;
 }) {
+  const forceOpen = createMemo(() => props.config.forceAdvancedSection === "wizard");
   const wizard = () => {
     const value = props.config.formValue?.wizard;
     return isRecord(value) ? value : {};
@@ -28,7 +29,7 @@ export function SetupSection(props: {
       <details
         class="settings-section config-advanced-disclosure"
         id="config-section-wizard"
-        open={props.config.forceAdvancedSection === "wizard"}
+        open={forceOpen()}
       >
         <summary class="settings-section__heading config-advanced-disclosure__summary">
           {t("configForm.sections.wizard.label")}

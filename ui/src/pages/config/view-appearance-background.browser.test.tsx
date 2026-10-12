@@ -200,9 +200,14 @@ describe("Appearance backgrounds", () => {
       pointerId: 1,
       isPrimary: true,
       cancelable: true,
+      bubbles: true,
     });
-    const up = new PointerEvent("pointerup", { pointerId: 1 });
-    const key = new KeyboardEvent("keydown", { key: "ArrowRight", cancelable: true });
+    const up = new PointerEvent("pointerup", { pointerId: 1, bubbles: true });
+    const key = new KeyboardEvent("keydown", {
+      key: "ArrowRight",
+      cancelable: true,
+      bubbles: true,
+    });
     range.dispatchEvent(down);
     range.dispatchEvent(up);
     range.dispatchEvent(key);
