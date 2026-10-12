@@ -2,7 +2,10 @@
 import { once } from "node:events";
 import net from "node:net";
 import { normalizeProviderId } from "@openclaw/model-catalog-core/provider-id";
-import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
+import {
+  normalizeLowercaseStringOrEmpty,
+  normalizeOptionalString,
+} from "@openclaw/normalization-core/string-coerce";
 import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import { isLocalProviderBaseUrl } from "../../agents/model-provider-local.js";
 import type { ModelProviderConfig } from "../../config/types.models.js";
@@ -60,14 +63,6 @@ function resolveProviderConfig(
   }
   const normalized = normalizeProviderId(provider);
   return Object.entries(providers).find(([key]) => normalizeProviderId(key) === normalized)?.[1];
-}
-
-function normalizeBaseUrl(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim().replace(/\/+$/, "");
-  return trimmed ? trimmed : undefined;
 }
 
 function normalizeProbeApi(providerConfig: ModelProviderConfig): PreflightApi | undefined {
@@ -160,7 +155,9 @@ async function probeLocalProviderEndpoint(baseUrl: string): Promise<void> {
       port: Number(url.port || (url.protocol === "https:" ? 443 : 80)),
       lookup: pinned.lookup,
     });
-    const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+    const closed = new Promise<void>((resolve) => {
+      socket.once("close", () => resolve());
+    });
     try {
       // Reachability needs no HTTP request or credentials. TLS, auth, and model
       // errors belong to inference, which has the complete provider context.
@@ -185,7 +182,7 @@ export async function preflightCronModelProvider(params: {
   if (!providerConfig) {
     return { status: "available" };
   }
-  const baseUrl = normalizeBaseUrl(providerConfig.baseUrl);
+  const baseUrl = normalizeOptionalString(providerConfig.baseUrl)?.replace(/\/+$/, "");
   const api = normalizeProbeApi(providerConfig);
   if (
     !baseUrl ||

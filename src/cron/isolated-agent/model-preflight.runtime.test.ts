@@ -162,7 +162,11 @@ describe("preflightCronModelProvider", () => {
     const lookup = vi.spyOn(ssrf, "resolvePinnedHostnameWithPolicy").mockImplementationOnce(
       (_hostname, { signal } = {}) =>
         new Promise((_resolve, reject) => {
-          signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+          signal?.addEventListener(
+            "abort",
+            () => reject(new Error("DNS lookup canceled", { cause: signal.reason })),
+            { once: true },
+          );
         }),
     );
     try {
