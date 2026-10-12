@@ -167,7 +167,6 @@ class SolidContent extends AsyncDirective {
   private dispose?: () => void;
   private roots = currentLitRoots;
   private root?: NestedSolidRoot;
-  private remountQueued = false;
 
   render(_component: Component<Record<string, unknown>>, _props: Record<string, unknown>) {
     return this.element ?? nothing;
@@ -206,8 +205,8 @@ class SolidContent extends AsyncDirective {
     if (!component || !element) {
       return;
     }
-    // The directive controls connection; its creator owns resources mounted by later effects.
-    this.dispose = runWithOwner(this.owner, () =>
+    // An initially unowned Lit render can later commit under its renderer's restored owner.
+    this.dispose = runWithOwner(this.owner ?? getOwner(), () =>
       renderSolid(() => {
         // A legacy host can publish props during its parent's Solid commit.
         const [props, setProps] = createSignal(this.props, { ownedWrite: true });
@@ -260,15 +259,8 @@ class SolidContent extends AsyncDirective {
     if (this.dispose) {
       this.updateProps?.(this.props);
       this.updatePresented?.(true);
-    } else if (!this.remountQueued) {
-      this.remountQueued = true;
-      // Lit can reconnect an unowned directive during a Solid effect callback.
-      queueMicrotask(() => {
-        this.remountQueued = false;
-        if (this.isConnected && !this.dispose) {
-          this.mount();
-        }
-      });
+    } else {
+      this.mount();
     }
   }
 }

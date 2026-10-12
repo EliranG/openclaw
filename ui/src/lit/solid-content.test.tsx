@@ -2,7 +2,15 @@
 
 import { html, nothing, render } from "lit";
 import { AsyncDirective, directive } from "lit/async-directive.js";
-import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import {
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  getOwner,
+  onCleanup,
+  runWithOwner,
+} from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { mountSolid } from "../test-helpers/mount-solid.ts";
 import { flush } from "../test-helpers/solid-settle.ts";
@@ -236,7 +244,7 @@ describe("Lit and Solid content boundaries", () => {
     }
   });
 
-  it("remounts an unowned Lit directive reconnected by a Solid effect", async () => {
+  it("remounts initially unowned Lit content synchronously under its renderer owner", async () => {
     const disposed = vi.fn();
     function Content() {
       onCleanup(disposed);
@@ -252,10 +260,12 @@ describe("Lit and Solid content boundaries", () => {
 
     const [connected, setConnected] = createSignal(false);
     const view = mountSolid(() => {
+      const owner = getOwner();
       createEffect(connected, (active) => {
         if (active) {
           document.body.append(container);
-          part.setConnected(true);
+          // The composer and Lit mount restore their renderer owner for later commits.
+          runWithOwner(owner, () => part.setConnected(true));
         }
       });
       return null;
@@ -263,7 +273,6 @@ describe("Lit and Solid content boundaries", () => {
     try {
       setConnected(true);
       expect(() => flush()).not.toThrow();
-      await Promise.resolve();
       const restored = container.querySelector("button")!;
       expect(restored.textContent).toBe("Restored content");
       expect(restored).not.toBe(original);

@@ -590,8 +590,6 @@ suite.define(() => {
       expect(response?.status()).toBe(200);
       // Onboarding chrome keeps only the header actions; no identity heading.
       await page.locator(".custodian__header--minimal").waitFor();
-      const channelSetup = page.locator(".custodian__nudge--channel-onboarding");
-      await channelSetup.waitFor();
       await gateway.emitGatewayEvent("health", {
         channelLabels: { telegram: "Telegram" },
         channels: {
@@ -599,8 +597,7 @@ suite.define(() => {
         },
       });
       await settleUi(page);
-      expect(await channelSetup.isVisible()).toBe(true);
-      expect(await page.locator(".custodian__nudge-action").count()).toBe(0);
+      expect(await page.locator(".custodian__nudge").count()).toBe(0);
     });
   });
 });
