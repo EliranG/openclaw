@@ -157,6 +157,13 @@ answer once. This does not change provider replay. A run ID is provenance, not
 write authorization; the existing session checks still apply. If no source run
 is supplied, correlation retains the latest-message behavior.
 
+Media mirrors retain full references in delivery facts while displaying compact
+filenames. Unkeyed mirrors suppress an exact text-and-media repeat; different
+attachments with the same filename remain distinct. Keyed replay rejects changed
+media references for rows that record them. Earlier fieldless mirrors replay their
+original text and delivery facts without rewriting stored bytes; their
+filename-only representation cannot distinguish same-basename attachments.
+
 ## Bounded model context
 
 Use `await SessionManager.openModelContextAsync(...)` from

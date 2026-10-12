@@ -29,6 +29,7 @@ import {
 import {
   appendAssistantMirrorMessageByIdentity,
   appendSessionTranscriptMessageByIdentity,
+  readSessionTranscriptEvents,
   readVisibleSessionTranscriptMessageEntries,
   withSessionTranscriptWrite,
   type SessionTranscriptAssistantMirrorAppendParams,
@@ -75,6 +76,103 @@ describe("channel-final transcript mirrors", () => {
       scope.sessionId,
     );
   const entries = () => readVisibleSessionTranscriptMessageEntries(scope);
+
+  it.each([false, true])("replays shipped SDK mirror bytes with media=%s", async (media) => {
+    const request = {
+      ...delivery("shipped-sdk-mirror", "Chart"),
+      ...(media ? { mediaUrls: ["https://example.com/one/chart.png"] } : {}),
+    };
+    // Literal v2026.10.2 SDK representation, independent of the current producer.
+    const original = await append({
+      role: "assistant",
+      content: [{ type: "text", text: media ? "Chart\nchart.png" : "Chart" }],
+      api: "openai-responses",
+      provider: "openclaw",
+      model: "delivery-mirror",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: "stop",
+      timestamp: 1_700_000_000_000,
+      idempotencyKey: request.idempotencyKey,
+      openclawDeliveryMirror: request.deliveryMirror,
+    });
+    const before = rows();
+    await expect(appendAssistantMirrorMessageByIdentity(request)).resolves.toEqual({
+      ok: true,
+      messageId: original.messageId,
+    });
+    expect(rows()).toEqual(before);
+    await expect(
+      appendAssistantMirrorMessageByIdentity({ ...request, text: "Different chart" }),
+    ).rejects.toThrow("conflicts with the admitted message");
+    expect(rows()).toEqual(before);
+  });
+
+  it("retains distinct unkeyed media identities and suppresses an exact repeat", async () => {
+    const mediaUrls = ["https://example.com/one/chart.png", "https://example.com/two/chart.png"];
+    const results = [];
+    for (const mediaUrl of [...mediaUrls, mediaUrls[1]]) {
+      results.push(
+        await appendAssistantMirrorMessageByIdentity({
+          ...scope,
+          text: "Chart",
+          mediaUrls: [mediaUrl],
+          updateMode: "none",
+        }),
+      );
+    }
+    expect(await readSessionTranscriptEvents(scope)).toEqual([
+      expect.objectContaining({ type: "session", id: scope.sessionId }),
+      ...mediaUrls.map((mediaUrl) =>
+        expect.objectContaining({
+          type: "message",
+          message: expect.objectContaining({
+            content: [{ type: "text", text: "Chart\nchart.png" }],
+            openclawDelivery: { mediaUrls: [mediaUrl] },
+          }),
+        }),
+      ),
+    ]);
+    expect(results[2]).toEqual(results[1]);
+  });
+
+  it("replays keyed media exactly and rejects a different same-basename attachment", async () => {
+    const request = {
+      ...delivery("media-delivery", "Chart"),
+      mediaUrls: ["https://example.com/one/chart.png"],
+    };
+    const first = await appendAssistantMirrorMessageByIdentity(request);
+    await expect(appendAssistantMirrorMessageByIdentity(request)).resolves.toEqual(first);
+    const before = await readSessionTranscriptEvents(scope);
+    await expect(
+      appendAssistantMirrorMessageByIdentity({
+        ...request,
+        mediaUrls: ["https://example.com/two/chart.png"],
+      }),
+    ).rejects.toThrow("conflicts with the admitted message");
+    expect(await readSessionTranscriptEvents(scope)).toEqual(before);
+  });
+
+  it("rejects adding media to a new keyed text-only mirror with identical display text", async () => {
+    const request = delivery("text-only-media-collision", "Chart\nchart.png");
+    const original = await appendAssistantMirrorMessageByIdentity(request);
+    await expect(appendAssistantMirrorMessageByIdentity(request)).resolves.toEqual(original);
+    const before = await readSessionTranscriptEvents(scope);
+    await expect(
+      appendAssistantMirrorMessageByIdentity({
+        ...request,
+        text: "Chart",
+        mediaUrls: ["https://example.com/chart.png"],
+      }),
+    ).rejects.toThrow("conflicts with the admitted message");
+    expect(await readSessionTranscriptEvents(scope)).toEqual(before);
+  });
 
   it.each([false, true])(
     "correlates queued answers from the source run (identical text: %s)",

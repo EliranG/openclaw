@@ -1,6 +1,7 @@
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { readNonBlankString as readNonEmptyString } from "@openclaw/normalization-core/string-coerce";
 import { buildSessionsYieldContextMessage } from "../agents/sessions-yield-context.js";
+import { makeZeroUsageSnapshot } from "../agents/usage.js";
 import {
   appendTranscriptMessage,
   appendTranscriptMessages,
@@ -36,6 +37,7 @@ import { prepareSessionTranscriptHydration } from "../config/sessions/session-tr
 import { assertLegacyTranscriptPreparation } from "../config/sessions/session-transcript-preparation.js";
 import { normalizeRawDeltaLimits } from "../config/sessions/session-transcript-raw-cursor.js";
 import { targetDiscoveryLane } from "../config/sessions/session-transcript-worker-resources.js";
+import { recordAssistantManagedMediaUrls } from "../config/sessions/transcript-assistant-delivery.js";
 import {
   resolveMirroredTranscriptText,
   type SessionTranscriptDeliveryMirror,
@@ -402,6 +404,7 @@ export async function appendAssistantMirrorMessageByIdentity(
   let message = createAssistantMirrorMessage({
     ...(params.deliveryMirror !== undefined ? { deliveryMirror: params.deliveryMirror } : {}),
     ...(params.idempotencyKey !== undefined ? { idempotencyKey: params.idempotencyKey } : {}),
+    mediaUrls: params.mediaUrls,
     text,
   });
   const sourceRunId = params.sourceRunId;
@@ -677,22 +680,17 @@ export async function withSessionTranscriptWrite<T>(
 function createAssistantMirrorMessage(params: {
   deliveryMirror?: SessionTranscriptDeliveryMirror;
   idempotencyKey?: string;
+  mediaUrls?: string[];
   text: string;
 }): SessionTranscriptAssistantMessage {
-  return {
+  const message: SessionTranscriptAssistantMessage = {
     role: "assistant",
+    openclawDelivery: { mediaUrls: [] },
     content: [{ type: "text", text: params.text }],
     api: "openai-responses",
     provider: "openclaw",
     model: "delivery-mirror",
-    usage: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      totalTokens: 0,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    },
+    usage: makeZeroUsageSnapshot(),
     stopReason: "stop",
     timestamp: Date.now(),
     ...(params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : {}),
@@ -710,6 +708,7 @@ function createAssistantMirrorMessage(params: {
         }
       : {}),
   };
+  return recordAssistantManagedMediaUrls(message, params.mediaUrls);
 }
 
 function projectVisibleMessageEntry(entry: {
