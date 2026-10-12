@@ -162,7 +162,7 @@ describe("file-transfer approvals migration CLI", () => {
         mutate({});
       },
     );
-    const backupStat = { ino: 1, mtimeMs: 1, size: 1 } as Awaited<ReturnType<typeof fs.stat>>;
+    const backupStat = { ino: 1n, mtimeMs: 1n, size: 1n } as Awaited<ReturnType<typeof fs.stat>>;
     vi.spyOn(fs, "stat")
       .mockRejectedValueOnce(new Error("missing"))
       .mockResolvedValueOnce(backupStat);
@@ -172,8 +172,8 @@ describe("file-transfer approvals migration CLI", () => {
 
     await program.parseAsync(["node", "openclaw", "file-transfer", "approvals", "migrate"]);
 
-    expect(fs.stat).toHaveBeenNthCalledWith(1, `${pluginsPath}.bak`);
-    expect(fs.stat).toHaveBeenNthCalledWith(2, `${pluginsPath}.bak`);
+    expect(fs.stat).toHaveBeenNthCalledWith(1, `${pluginsPath}.bak`, { bigint: true });
+    expect(fs.stat).toHaveBeenNthCalledWith(2, `${pluginsPath}.bak`, { bigint: true });
     expect(prompterMock.outro).toHaveBeenCalledWith(expect.stringContaining(`${pluginsPath}.bak`));
   });
 
