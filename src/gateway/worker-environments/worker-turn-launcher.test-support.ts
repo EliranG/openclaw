@@ -10,6 +10,7 @@ import {
   createOperationalRunInstanceRef,
   prepareAgentRunAdmission,
 } from "../../agents/admitted-run-context.js";
+import { waitForEmbeddedAgentRunEnd } from "../../agents/embedded-agent-runner/runs.js";
 import type { SessionPlacementTurnParams } from "../../agents/session-placement-admission.js";
 import { SessionManager } from "../../agents/sessions/session-manager.js";
 import { CORE_WORKER_LAUNCH_TOOL_NAMES } from "../../agents/tool-catalog.js";
@@ -195,6 +196,7 @@ export function cleanupWorkerTurnLauncherTest(options: {
 export async function cleanupWorkerTurnLauncherTest(
   options: { reuseReadWorkers?: boolean } = {},
 ): Promise<void> {
+  await waitForEmbeddedAgentRunEnd(SESSION_ID, null);
   cleanupAdmissionSink?.();
   cleanupAdmissionSink = undefined;
   clearRuntimeConfigSnapshot();
@@ -231,7 +233,7 @@ export function createWorkerTurnSessionRuntimeLoader() {
   };
   return async () => ({
     managedWorktrees: {
-      findLiveByOwner: () => ({
+      findLiveByOwner: async () => ({
         id: "workspace",
         name: "fixture",
         repoFingerprint: "fixture",
@@ -521,10 +523,20 @@ export function turn(runId = "run-worker-turn", executionIdentity = false) {
     ...(executionIdentity
       ? { logging: { audit: { enabled: true, executionIdentity: true } } }
       : {}),
+    models: {
+      providers: {
+        openai: {
+          baseUrl: "https://api.openai.com/v1",
+          apiKey: "synthetic-worker-api-key",
+          models: [],
+        },
+      },
+    },
     agents: {
       defaults: {
+        userTimezone: "UTC",
         models: {
-          "openai/gpt-test": { agentRuntime: { id: "openclaw" } },
+          "openai/gpt-5.6-luna": { agentRuntime: { id: "openclaw" } },
         },
       },
     },
@@ -555,7 +567,7 @@ export function turn(runId = "run-worker-turn", executionIdentity = false) {
     timeoutMs: 5_000,
     runId,
     provider: "openai",
-    model: "gpt-test",
+    model: "gpt-5.6-luna",
     modelHasVision: true,
     config,
   };

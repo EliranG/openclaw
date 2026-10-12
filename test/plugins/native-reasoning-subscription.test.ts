@@ -10,7 +10,7 @@ import { submitEmbeddedAttemptPrompt } from "../../src/agents/embedded-agent-run
 import { buildRuntimeContextCustomMessage } from "../../src/agents/embedded-agent-runner/run/runtime-context-prompt.js";
 import {
   clearEmbeddedSessionPromptStates,
-  getEmbeddedSessionPromptState,
+  retainEmbeddedSessionPromptState,
 } from "../../src/agents/embedded-agent-runner/session-prompt-state.js";
 import { createSubscribedSessionHarness } from "../../src/agents/embedded-agent-subscribe.e2e-harness.js";
 import {
@@ -255,7 +255,8 @@ describe("runtime-context replay at prompt submission", () => {
         },
       ],
     });
-    const sessionPromptState = getEmbeddedSessionPromptState(sessionId);
+    using promptStateLease = retainEmbeddedSessionPromptState(sessionId);
+    const sessionPromptState = promptStateLease.state;
     const submit = (text: string) =>
       submitEmbeddedAttemptPrompt({
         attempt: { sessionId },
@@ -300,12 +301,12 @@ describe("runtime-context replay at prompt submission", () => {
       expect(nextTurn.slice(0, firstTurn.length)).toEqual(firstTurn);
       expect(firstTurn.slice(0, 2)).toMatchObject([
         { role: "user", content: [{ type: "text", text: "first" }] },
-        { role: "user", runtimeContextCarrier: true },
+        { role: "user", runtimeContext: {} },
       ]);
       expect(nextTurn.slice(firstTurn.length)).toMatchObject([
         { role: "assistant", content: [{ type: "text", text: "done" }] },
         { role: "user", content: [{ type: "text", text: "second" }] },
-        { role: "user", runtimeContextCarrier: true },
+        { role: "user", runtimeContext: {} },
       ]);
     }
   });

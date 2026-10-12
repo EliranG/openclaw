@@ -7,7 +7,6 @@ import { createDeferred } from "../../../test/helpers/promise.js";
 import { createApplicationOverlays } from "../app/overlays.ts";
 import type { ConfirmAndStartUpdateParams } from "../app/update-confirmation.ts";
 import { updateRunHarness } from "../app/update-run.test-support.ts";
-import { SESSION_NAVIGATION_KEY_PARAM } from "../lib/sessions/route-navigation.ts";
 import { createStorageMock } from "../test-helpers/storage.ts";
 import { createUpdateRunFixture } from "../test-helpers/update-run.ts";
 import type { SidebarAttentionItem } from "./sidebar-attention-entries.ts";
@@ -98,7 +97,7 @@ describe("renderSidebarMentionItem", () => {
   const pathname = "/team/chat/writer/chat/12345678-90ab-cdef-1234-567890abcdef";
   const navigation = {
     pathname,
-    search: `?${SESSION_NAVIGATION_KEY_PARAM}=${encodeURIComponent(mention.sessionKey)}`,
+    search: undefined,
   };
 
   function renderMention(overrides: Partial<Parameters<typeof renderSidebarMentionItem>[0]> = {}) {
@@ -404,7 +403,7 @@ describe("renderSidebarUpdateSurface", () => {
         if (state === "acknowledged") {
           overlays.acknowledgeUpdateRun();
         }
-        const dismissal = resolveSidebarUpdateAttention(context).dismissal;
+        const dismissal = resolveSidebarUpdateAttention(context)?.dismissal;
         const expected = {
           kind: "updateAvailable",
           signature: JSON.stringify(

@@ -1,8 +1,10 @@
 // Control UI tests cover the responsive disconnected login gate.
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { beforeEach, expect, it } from "vitest";
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
+import { assert, beforeEach, expect, it } from "vitest";
 import { ConnectErrorDetailCodes } from "../../../packages/gateway-protocol/src/connect-error-details.js";
+import { openChatLayoutMenu, selectChatLayoutAction } from "../test-helpers/chat-layout-menu.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
@@ -10,8 +12,12 @@ import {
   controlUiSessionUrl,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
-import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
-import { closeContext, renderLoginGate } from "./login-gate-e2e.test-support.ts";
+import { controlUiE2eRouteStylesheetRequest } from "./control-ui-built-module.test-support.ts";
+import {
+  createControlUiE2eSuite,
+  holdModuleResponse,
+} from "./control-ui-e2e-suite.test-support.ts";
+import { closeContext, mountLoginGate, renderLoginGate } from "./login-gate-e2e.test-support.ts";
 
 const suite = createControlUiE2eSuite({
   name: "Control UI responsive login gate E2E",
@@ -237,8 +243,8 @@ suite.define(() => {
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, sessionKey, "dashboard"));
       const header = page.locator(".chat-pane__header");
       await header.waitFor({ state: "visible" });
-      await header.locator(".chat-side-panel-toggle").click();
-      await header.getByRole("button", { name: "Focus", exact: true }).click();
+      await selectChatLayoutAction(header, /^(Side panel|Minimize side panel)$/);
+      await selectChatLayoutAction(header, "Focus");
       await gateway.setOnline(false);
 
       await expect
@@ -263,20 +269,18 @@ suite.define(() => {
       expect(await outlet.getAttribute("aria-disabled")).toBeNull();
       expect(await header.isVisible()).toBe(true);
 
-      const headerActions = header.locator("fieldset.chat-pane__actions");
-      expect(
-        await headerActions.evaluate((element) => (element as HTMLFieldSetElement).disabled),
-      ).toBe(true);
-      const actionButtons = headerActions.getByRole("button");
-      expect(await actionButtons.count()).toBeGreaterThan(0);
-      for (const button of await actionButtons.all()) {
-        expect(await button.isDisabled()).toBe(true);
-      }
-      const restore = header.getByRole("button", { name: "Restore split", exact: true });
-      expect(await restore.isEnabled()).toBe(true);
-      await restore.click();
+      expect(await header.getByRole("button", { name: "Layout", exact: true }).isEnabled()).toBe(
+        true,
+      );
+      const layoutMenu = await openChatLayoutMenu(header);
+      const split = layoutMenu.getByRole("menuitem", { name: "Open split view", exact: true });
+      expect(await split.isDisabled()).toBe(true);
+      await page.keyboard.press("Escape");
+      await split.waitFor({ state: "hidden" });
+      await selectChatLayoutAction(header, "Restore split");
       await page.locator(".side-panel-empty--selector").waitFor();
-      expect(await header.locator(".chat-side-panel-toggle").isEnabled()).toBe(true);
+      await selectChatLayoutAction(header, "Minimize side panel");
+      await page.locator(".side-panel-empty--selector").waitFor({ state: "hidden" });
     } finally {
       await closeContext(context);
     }
@@ -484,6 +488,67 @@ suite.define(() => {
     }
   });
 
+  it.each(["rejected", "expired"])(
+    "shows a terminal pairing %s until Request again",
+    async (decision) => {
+      const context = await suite.browser.newContext({ viewport: { height: 900, width: 1280 } });
+      const page = await context.newPage();
+      await page.clock.install();
+      const gateway = await installMockGateway(page, { deferredMethods: ["connect"] });
+      try {
+        await page.goto(suite.server.baseUrl);
+        const request = await gateway.waitForRequest("connect");
+        assert(isRecord(request.params) && isRecord(request.params.device));
+        const deviceId = request.params.device.id;
+        assert(typeof deviceId === "string");
+        await gateway.rejectDeferred("connect", {
+          code: "NOT_PAIRED",
+          message: "pairing required",
+          details: {
+            code: "PAIRING_REQUIRED",
+            requestId: "waiting-request",
+            deviceId,
+            waitForResolution: true,
+            pauseReconnect: false,
+          },
+        });
+        await page.getByRole("button", { name: "Check now", exact: true }).waitFor();
+        await page.clock.runFor(60_000);
+        expect(await gateway.getRequests("connect")).toHaveLength(1);
+        await gateway.emitGatewayEvent("device.pair.resolved", {
+          requestId: "waiting-request",
+          deviceId,
+          decision,
+          ts: Date.now(),
+        });
+        await page
+          .getByText(
+            decision === "rejected" ? "Access request declined" : "Access request expired",
+            { exact: true },
+          )
+          .waitFor();
+        await page.evaluate(() => {
+          window.dispatchEvent(new Event("online"));
+          window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+        });
+        await page.clock.runFor(60_000);
+        expect(await gateway.getRequests("connect")).toHaveLength(1);
+        expect(await page.getByText("Waiting for approval", { exact: false }).count()).toBe(0);
+        await page.screenshot({
+          path: path.join(RECOVERY_ARTIFACT_DIR, `pairing-${decision}.png`),
+          fullPage: true,
+        });
+        await gateway.deferNext("connect");
+        await page.getByRole("button", { name: "Request again", exact: true }).click();
+        await gateway.waitForRequest("connect", { after: 1 });
+        await gateway.resolveDeferred("connect");
+        await page.locator("openclaw-app-shell").waitFor();
+      } finally {
+        await closeContext(context);
+      }
+    },
+  );
+
   it("copies an exact recovery command from the application gateway snapshot", async () => {
     const context = await suite.browser.newContext({
       permissions: ["clipboard-read", "clipboard-write"],
@@ -687,9 +752,27 @@ suite.define(() => {
   it("keeps generic help collapsed until requested when there is no failure", async () => {
     const context = await suite.browser.newContext({ viewport: { height: 900, width: 1280 } });
     const page = await context.newPage();
+    // Hold route-only CSS so startup stays pending without blocking the lazy login module.
+    const chatStyles = await holdModuleResponse(
+      page,
+      controlUiE2eRouteStylesheetRequest("chat", "new"),
+    );
 
     try {
-      await renderLoginGate(page, suite.server.baseUrl, { lastError: null });
+      await renderLoginGate(page, suite.server.baseUrl);
+      await chatStyles.request;
+      const mounting = mountLoginGate(page, null);
+      void mounting.catch(() => {});
+      // Let fixture mounting begin before the startup route can finish loading.
+      expect(
+        await page.evaluate(
+          () =>
+            document.querySelector<HTMLElement & { startupPending: boolean }>("openclaw-app")
+              ?.startupPending,
+        ),
+      ).toBe(true);
+      chatStyles.release();
+      await mounting;
       expect(await page.locator(".login-gate__failure").count()).toBe(0);
 
       const help = page.locator(".login-gate__help");
@@ -699,6 +782,8 @@ suite.define(() => {
       await help.locator("summary").click();
       expect(await page.locator(".login-gate__steps").isVisible()).toBe(true);
     } finally {
+      chatStyles.release();
+      await page.unrouteAll({ behavior: "wait" });
       await closeContext(context);
     }
   });

@@ -9,11 +9,11 @@ import { VERSION } from "../../version.js";
 import type { UpdateCommandOptions } from "./shared.js";
 import { runUpdateFinalizationDoctorInFreshProcess } from "./update-command-fresh-doctor.js";
 import { serviceUpdateResult } from "./update-command-service-recovery.test-support.js";
+import { revalidateManagedGatewayServiceAfterUpdate } from "./update-command-service-revalidation.js";
 import { createShippedUnresolvedServiceStop } from "./update-command-service-state.test-support.js";
 import {
   maybeRestartService,
   maybeStopManagedServiceBeforeMutableUpdate,
-  revalidateManagedGatewayServiceAfterUpdate,
 } from "./update-command-service.js";
 
 export const preservedActivationCases = [
@@ -23,6 +23,7 @@ export const preservedActivationCases = [
   { phase: "late", mode: "git", denial: "sealed", outcome: "healthy", json: false },
   { phase: "late", mode: "npm", denial: "unknown", outcome: "healthy", json: false },
   { phase: "late", mode: "git", denial: "unknown", outcome: "json denial", json: true },
+  { phase: "late", mode: "npm", denial: "unknown", outcome: "clean refusal", json: true },
   { phase: "late", mode: "npm", denial: "sealed", outcome: "json denial", json: true },
   { phase: "late", mode: "git", denial: "sealed", outcome: "uninspectable", json: false },
   { phase: "late", mode: "npm", denial: "unknown", outcome: "foreign", json: false },

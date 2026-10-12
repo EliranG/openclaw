@@ -19,9 +19,11 @@ import { resolveSessionStorePathCore } from "../config/sessions/paths.js";
 import {
   loadSessionEntryReadOnly,
   patchSessionEntryCore,
-  readSessionTranscriptWatermark,
 } from "../config/sessions/session-accessor.js";
+import type { SessionEntryPatchCommitted } from "../config/sessions/session-entry-patch.types.js";
+import { readSessionTranscriptWatermarkAsync } from "../config/sessions/session-transcript-watermark.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { racePromiseWithAbortSignal } from "../infra/abort-signal.js";
 import { getAgentRunContext } from "../infra/agent-run-registry.js";
 import { computeBackoff } from "../infra/backoff.js";
 import { formatErrorMessage } from "../infra/errors.js";
@@ -41,7 +43,7 @@ import {
   type SessionLifecycleEvent,
 } from "../sessions/session-lifecycle-events.js";
 import type { InternalSessionTranscriptUpdate } from "../sessions/transcript-events.js";
-import { runInDetachedAsyncContext } from "../shared/async-work-scope.js";
+import { runInDetachedAsyncContext } from "../shared/detached-async-context.js";
 import { readActivitySummarySource } from "./session-activity-summary-source.js";
 import {
   activitySummaryScope,
@@ -101,7 +103,7 @@ class ActivitySummaryCancelledError extends Error {
 }
 
 export type SessionActivitySummaryService = {
-  ensure: (target: ActivitySummaryTarget) => ActivitySummaryView;
+  ensure: (target: ActivitySummaryTarget) => Promise<ActivitySummaryView>;
   handleEvent: (event: SessionObserverEvent) => void;
   handleTranscript: (event: InternalSessionTranscriptUpdate) => void;
   handleLifecycle: (event: SessionLifecycleEvent) => void;
@@ -363,15 +365,6 @@ export function createSessionActivitySummaries(deps: {
           () => controller.abort(new Error("Activity recap timed out")),
           MODEL_TIMEOUT_MS,
         );
-        const aborted = new Promise<never>((_, reject) => {
-          controller.signal.addEventListener(
-            "abort",
-            () => reject(toErrorObject(controller.signal.reason, "Activity recap cancelled")),
-            {
-              once: true,
-            },
-          );
-        });
         try {
           const assertRequestCurrent = () => {
             if (controller.signal.aborted || state.controller !== controller) {
@@ -389,6 +382,7 @@ export function createSessionActivitySummaries(deps: {
             assertRequestCurrent();
             const result = await (deps.completeModel ?? defaultCompleteModel)({
               ...prepared,
+              purpose: "session-activity-summary",
               config: deps.getConfig(),
               systemPrompt: SYSTEM_PROMPT,
               prompt: JSON.stringify({
@@ -399,13 +393,18 @@ export function createSessionActivitySummaries(deps: {
               timeoutMs: MODEL_TIMEOUT_MS,
               abortSignal: controller.signal,
               assertCurrent: assertRequestCurrent,
-              streamParams: { maxTokens: 240, temperature: 0.2 },
+              answerTokenBudget: 240,
+              streamParams: { temperature: 0.2 },
             });
             return result.text;
           };
           ownedWork = execute();
           text = truncateUtf16Safe(
-            redactToolPayloadText(await Promise.race([ownedWork, aborted]))
+            redactToolPayloadText(
+              await racePromiseWithAbortSignal(ownedWork, controller.signal, (signal) =>
+                toErrorObject(signal.reason, "Activity recap cancelled"),
+              ),
+            )
               .replace(/\s+/gu, " ")
               .trim(),
             450,
@@ -435,6 +434,7 @@ export function createSessionActivitySummaries(deps: {
         totalMessages: snapshot.totalMessages,
         omittedContent: omitted,
       };
+      let committedTranscript: SessionEntryPatchCommitted["transcriptPredicate"];
       const committed = await patchSessionEntryCore(
         scope(state),
         (fresh) => {
@@ -443,6 +443,9 @@ export function createSessionActivitySummaries(deps: {
         },
         {
           preserveActivity: true,
+          onCommitted: (_entry, transcriptPredicate) => {
+            committedTranscript = transcriptPredicate;
+          },
           workerGuard: {
             assertCurrent: () => assertCurrentOwner(state, ref),
             shouldCommitIf: {
@@ -458,12 +461,17 @@ export function createSessionActivitySummaries(deps: {
         state.dirty = true;
         return;
       }
+      assertCurrentOwner(state, ref);
+      if (committedTranscript?.sessionId !== state.sessionId) {
+        throw new Error("Activity recap patch omitted its transcript predicate receipt");
+      }
+      // This source-free field patch cannot change the transcript after its transaction guard.
+      const latest = committedTranscript.watermark;
       state.failures = 0;
       if (modelBackoffs.get(ref) === priorBackoff) {
         modelBackoffs.delete(ref);
       }
       partial = summary.coveredMessages < summary.totalMessages;
-      const latest = readSessionTranscriptWatermark(transcriptScope);
       state.dirty ||= latest.generation !== summary.generation || latest.maxSeq !== summary.maxSeq;
       publish(state, partial || state.dirty ? "updating" : "current", true);
     } catch (error) {
@@ -603,16 +611,25 @@ export function createSessionActivitySummaries(deps: {
     }
   });
   return {
-    ensure(requested) {
+    async ensure(requested) {
       const target = eventTarget(requested.key, requested.agentId)!;
       if (isCronSessionKey(target.key)) {
         return { state: "unavailable" };
       }
       const state = request(target);
+      const entry = read(target);
+      const watermark =
+        entry && readSessionActivitySummary(entry)
+          ? await readSessionTranscriptWatermarkAsync({
+              ...scope(target),
+              sessionId: entry.sessionId,
+            })
+          : undefined;
       const projected = projectSessionActivitySummary({
         ...target,
         cfg: deps.getConfig(),
-        entry: read(target),
+        entry,
+        watermark,
       });
       if (!state && projected?.state !== "current") {
         return { ...projected, state: "unavailable" };

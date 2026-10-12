@@ -94,7 +94,7 @@ describe("update.run acknowledgement", () => {
     },
   ])("honors update notice send policy ($name)", async ({ base, account, accountId, allowed }) => {
     const sessions = await import("../../config/sessions.js");
-    vi.mocked(sessions.extractDeliveryInfo).mockReturnValueOnce({
+    vi.mocked(sessions.extractDeliveryInfo).mockResolvedValueOnce({
       deliveryContext: { channel: "telegram", to: "12345", accountId },
       threadId: undefined,
     });
@@ -131,7 +131,7 @@ describe("update.run acknowledgement", () => {
   it("rejects an ambiguous session alias before recording or handing off an update", async () => {
     const respond = vi.fn();
     await invokeUpdateRun({ sessionKey: "global" }, respond, {
-      agents: { list: [{ id: "operations" }, { id: "research" }] },
+      agents: { entries: { operations: {}, research: {} } },
     });
     expect(respond).toHaveBeenCalledExactlyOnceWith(
       false,
@@ -580,6 +580,7 @@ describe("update.run restart scheduling", () => {
             errorName: "Error",
             message: "state database unavailable",
           }),
+          expect.objectContaining({ code: "handoff-payload-failed" }),
         ],
       }),
     );

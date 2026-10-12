@@ -7,6 +7,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { readJson, write, writeJson } from "../fixtures/common.mjs";
 import { readPluginInstallRecords } from "../plugin-index-sqlite.mjs";
+import { readDatabase } from "./observations.mjs";
 
 const [command, ...args] = process.argv.slice(2);
 const runtimeRoot = process.env.OPENCLAW_UPGRADE_SURVIVOR_RUNTIME_ROOT;
@@ -14,6 +15,7 @@ const artifactRoot = process.env.OPENCLAW_UPGRADE_SURVIVOR_ARTIFACT_ROOT;
 const stateDir = process.env.OPENCLAW_STATE_DIR;
 const configPath = process.env.OPENCLAW_CONFIG_PATH;
 assert(runtimeRoot && artifactRoot && stateDir && configPath, "Missing survivor fixture paths");
+const databasePath = path.join(stateDir, "state", "openclaw.sqlite");
 const evidenceRoot = path.join(artifactRoot, "missing-plugin");
 const fixturePath = path.join(evidenceRoot, "fixture.json");
 const requestPath = path.join(evidenceRoot, "registry-requests.jsonl");
@@ -167,7 +169,6 @@ function seed() {
   const logPath = path.join(runtimeRoot, "logs", "missing-plugin.jsonl");
   config.logging = { ...config.logging, file: logPath, level: "warn" };
   writeJson(configPath, config);
-  const databasePath = path.join(stateDir, "state", "openclaw.sqlite");
   const db = new DatabaseSync(databasePath);
   try {
     for (const { id } of installedSetupFixtures) {
@@ -182,15 +183,6 @@ function seed() {
     specimens,
     setupFixtures: installedSetupFixtures,
   });
-}
-
-function withDatabase(read) {
-  const db = new DatabaseSync(path.join(stateDir, "state", "openclaw.sqlite"), { readOnly: true });
-  try {
-    return read(db);
-  } finally {
-    db.close();
-  }
 }
 
 function isPendingWarning(text) {
@@ -210,7 +202,7 @@ function pending(stage) {
       assert.equal(digest(file), expected, `Deferred migration modified ${file}`);
     }
   }
-  const receipt = withDatabase((db) =>
+  const receipt = readDatabase(databasePath, (db) =>
     db.prepare("SELECT status, report_json FROM migration_runs WHERE id = ?").get(migrationId),
   );
   assert.equal(receipt?.status, "pending", "Missing plugin has no pending migration checkpoint");
@@ -247,7 +239,7 @@ function pending(stage) {
 function assertSetupMigrationOutcomes() {
   const fixture = readJson(fixturePath);
   const config = readJson(configPath);
-  const receipts = withDatabase((db) =>
+  const receipts = readDatabase(databasePath, (db) =>
     Object.fromEntries(
       fixture.setupFixtures.map(({ id }) => [
         id,
@@ -288,6 +280,30 @@ function assertSetupMigrationOutcomes() {
   });
 }
 
+function assertLegacyDriverRefusal([updateJson, updateErr, expectedVersion, packageRoot]) {
+  assert(
+    updateJson && updateErr && expectedVersion && packageRoot,
+    "Missing refusal evidence paths",
+  );
+  const evidence = `${fs.readFileSync(updateJson, "utf8")}\n${fs.readFileSync(updateErr, "utf8")}`;
+  assert(
+    evidence.includes("driver PID and host not recorded, liveness: not observed"),
+    "Published updater did not hit the expected identityless-driver refusal",
+  );
+  assert.equal(readJson(path.join(packageRoot, "package.json")).version, expectedVersion);
+  const latest = readDatabase(databasePath, (db) =>
+    db
+      .prepare(
+        "SELECT status, phase, finished_at_ms FROM update_runs ORDER BY created_at_ms DESC LIMIT 1",
+      )
+      .get(),
+  );
+  assert(latest, "Published updater did not record an update run");
+  assert.notEqual(latest.status, "running", "Published updater retained live authority after exit");
+  assert.equal(latest.phase, "finished", "Published updater did not terminalize its run");
+  assert.equal(typeof latest.finished_at_ms, "number");
+}
+
 function cli(name, argv) {
   const out = fs.openSync(path.join(evidenceRoot, `${name}.json`), "w");
   const err = fs.openSync(path.join(evidenceRoot, `${name}.err`), "w");
@@ -326,7 +342,7 @@ function resumed(expectedVersion) {
   assert.equal(packageJson.name, "@openclaw/codex");
   assert.equal(packageJson.version, expectedVersion, "Doctor installed a different Codex version");
   const fixture = readJson(fixturePath);
-  const imported = withDatabase((db) => {
+  const imported = readDatabase(databasePath, (db) => {
     const receipt = db.prepare("SELECT status FROM migration_runs WHERE id = ?").get(migrationId);
     assert.equal(receipt?.status, "completed", "Deferred migration remained pending after Doctor");
     return fixture.specimens.map((specimen) => {
@@ -477,6 +493,8 @@ if (command === "seed") {
   resumed(args[0]);
 } else if (command === "setup-outcomes") {
   assertSetupMigrationOutcomes();
+} else if (command === "legacy-driver-refusal") {
+  assertLegacyDriverRefusal(args);
 } else if (command === "serve") {
   await serve(args);
 } else if (command === "available") {

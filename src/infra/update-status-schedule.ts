@@ -20,6 +20,7 @@ import {
   setUpdateScheduleCache,
   setUpdateAvailableCache,
   withoutUpdateTarget,
+  withoutUpdateCampaign,
 } from "./update-status-state.js";
 
 /** Projects scheduler facts independently of optional checkout discovery. */
@@ -32,14 +33,10 @@ export function getGatewayUpdateSchedule(
   // Read policy, not discovery success. External supervision must not rewrite
   // the authored auto-update preference, and status must never clear a campaign.
   const campaign = currentUpdateCheckLifecycle().campaign?.getState();
-  const { campaign: _cachedCampaign, ...cachedFacts } = schedule ?? {
-    channel,
-    campaign: undefined,
-  };
   const facts =
     schedule &&
     (schedule.channel === channel || (campaign && schedule.campaign?.id === campaign.id))
-      ? cachedFacts
+      ? withoutUpdateCampaign(schedule)
       : { channel };
   const result = {
     ...facts,

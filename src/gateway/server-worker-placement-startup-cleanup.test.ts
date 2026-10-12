@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { collectSessionMaintenancePreserveKeys } from "../config/sessions/store-maintenance-preserve.js";
+import { prepareSessionMaintenancePreservation } from "../config/sessions/store-maintenance-preserve.js";
 import { createDeferredCore } from "../shared/deferred.js";
 import { createTestGatewayScheduler } from "../test-utils/gateway-scheduler-clock.js";
 
@@ -31,6 +31,15 @@ import { createWorkerSessionPlacementStore } from "./worker-environments/placeme
 import * as workerEnvironmentSupport from "./worker-environments/service.test-support.js";
 import { createWorkerWorkspaceOperationCoordinator } from "./worker-environments/workspace-operation-coordinator.js";
 import { createWorkerWorkspaceRecoveryFixture } from "./worker-environments/workspace-recovery.test-support.js";
+
+async function preservedSessionKeys() {
+  const prepared = await prepareSessionMaintenancePreservation("unused-store");
+  try {
+    return new Set(prepared.capture().providerKeys);
+  } finally {
+    prepared.dispose();
+  }
+}
 
 describe("worker placement startup cleanup ownership", () => {
   workerEnvironmentSupport.setupWorkerEnvironmentServiceSuite();
@@ -74,13 +83,16 @@ describe("worker placement startup cleanup ownership", () => {
         path: path.join(workerEnvironmentSupport.testState.root, sessionId),
       };
     });
-    const recovery = createPlacementRecoveryActions({
-      placements,
-      environments,
-      failure: createPlacementFailureActions({ placements, environments }),
-      workspaceOperations: createWorkerWorkspaceOperationCoordinator(),
-      ...createWorkerWorkspaceRecoveryFixture({ resolveWorkspace }),
-    });
+    const recovery = createPlacementRecoveryActions(
+      {
+        placements,
+        environments,
+        failure: createPlacementFailureActions({ placements, environments }),
+        workspaceOperations: createWorkerWorkspaceOperationCoordinator(),
+        ...createWorkerWorkspaceRecoveryFixture({ resolveWorkspace }),
+      },
+      before,
+    );
     const starting = recovery.reconcile("startup");
     let sweeping: Promise<void> | undefined;
     try {
@@ -206,6 +218,7 @@ describe("worker placement startup cleanup ownership", () => {
         sweep: vi.fn().mockResolvedValue(undefined),
       });
       const runtime = createGatewayWorkerPlacementRuntime({
+        initialPlacements: placements.list(),
         scheduler: createTestGatewayScheduler(),
         getCommittedRuntimeConfig: getRuntimeConfig,
         cancelSessionWork: vi.fn(async () => {}),
@@ -222,7 +235,7 @@ describe("worker placement startup cleanup ownership", () => {
       });
       try {
         expect(sidecar).not.toBeNull();
-        expect(collectSessionMaintenancePreserveKeys()?.has(failedSessionKey)).toBe(true);
+        expect((await preservedSessionKeys()).has(failedSessionKey)).toBe(true);
         await environments.reconcileOnce();
         expect(provision).not.toHaveBeenCalled();
         expect(inspect).not.toHaveBeenCalled();
@@ -237,11 +250,11 @@ describe("worker placement startup cleanup ownership", () => {
           from: "provisioning",
           to: "failed",
         });
-        expect(collectSessionMaintenancePreserveKeys()?.has(failedSessionKey)).not.toBe(true);
+        expect((await preservedSessionKeys()).has(failedSessionKey)).not.toBe(true);
       } finally {
         await sidecar?.stop();
       }
-      expect(collectSessionMaintenancePreserveKeys()?.has(failedSessionKey)).not.toBe(true);
+      expect((await preservedSessionKeys()).has(failedSessionKey)).not.toBe(true);
     },
   );
 
@@ -311,6 +324,7 @@ describe("worker placement startup cleanup ownership", () => {
       sweep: vi.fn().mockResolvedValue(undefined),
     });
     const runtime = createGatewayWorkerPlacementRuntime({
+      initialPlacements: placements.list(),
       scheduler: createTestGatewayScheduler(),
       getCommittedRuntimeConfig: getRuntimeConfig,
       cancelSessionWork: vi.fn(async () => {}),

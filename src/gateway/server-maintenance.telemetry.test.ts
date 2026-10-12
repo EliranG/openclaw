@@ -12,13 +12,11 @@ const {
   checkTelemetryUpdateMock,
   generateSecureIntMock,
   devicePairCleanupMock,
-  pluginStateCleanupMock,
   forbiddenDefaultAdapter,
 } = vi.hoisted(() => ({
   checkTelemetryUpdateMock: vi.fn<typeof import("../infra/telemetry.js").checkTelemetryUpdate>(),
   generateSecureIntMock: vi.fn<typeof import("../infra/secure-random.js").generateSecureInt>(),
   devicePairCleanupMock: vi.fn(async () => 0),
-  pluginStateCleanupMock: vi.fn(async (_options: { assertActive: () => void }) => undefined),
   forbiddenDefaultAdapter: vi.fn((adapter: string): never => {
     throw new Error(`Unexpected default maintenance adapter: ${adapter}`);
   }),
@@ -33,10 +31,6 @@ vi.mock("../infra/device-bootstrap.js", () => ({
   pruneExpiredDevicePairSetupCompletions: devicePairCleanupMock,
 }));
 
-vi.mock("../plugin-state/plugin-state-worker-client.js", () => ({
-  sweepExpiredPluginStateEntriesInWorker: pluginStateCleanupMock,
-}));
-
 vi.mock("../infra/telemetry.js", () => ({
   checkTelemetryUpdate: checkTelemetryUpdateMock,
 }));
@@ -46,10 +40,10 @@ vi.mock("../agents/worktrees/owner-protection.js", () => ({
   createManagedWorktreeOwnerPolicy: () => forbiddenDefaultAdapter("worktree owner policy"),
 }));
 
+// mock-isolation: Worker-free timers inject GC and reject accidental default worktree access.
 vi.mock("../agents/worktrees/service.js", () => ({
   WORKTREE_GC_INTERVAL_MS: 60 * 60_000,
   managedWorktrees: { gc: () => forbiddenDefaultAdapter("worktree GC") },
-  resolveWorktreeCleanupLimits: () => forbiddenDefaultAdapter("worktree cleanup limits"),
 }));
 
 vi.mock("../infra/delivery-queue-sqlite.js", () => ({
@@ -65,14 +59,6 @@ vi.mock("../media/store.js", () => ({
   cleanOldMedia: () => forbiddenDefaultAdapter("media GC"),
   pruneOutboundMedia: () => forbiddenDefaultAdapter("outbound media GC"),
   prunePlaybackTranscodeCache: () => forbiddenDefaultAdapter("playback media GC"),
-}));
-
-vi.mock("../skills/workshop/store-sqlite-record.js", () => ({
-  parseSkillProposalRow: () => forbiddenDefaultAdapter("skill proposal reader"),
-}));
-
-vi.mock("../skills/workshop/workspace-skill-read.js", () => ({
-  listWritableWorkshopSkillSummaries: () => forbiddenDefaultAdapter("skill status reader"),
 }));
 
 vi.mock("./chat-abort.js", () => ({
@@ -114,7 +100,6 @@ describe("gateway telemetry maintenance", () => {
     checkTelemetryUpdateMock.mockReset();
     generateSecureIntMock.mockReset();
     devicePairCleanupMock.mockReset().mockResolvedValue(0);
-    pluginStateCleanupMock.mockReset().mockResolvedValue(undefined);
     expect(defaultAdapterCalls).toHaveLength(0);
   });
 
@@ -122,7 +107,6 @@ describe("gateway telemetry maintenance", () => {
     ["health", false],
     ["worktree", false],
     ["device-pair", false],
-    ["plugin-state", false],
     ["worktree", true],
   ] as const)(
     "joins admitted %s work and cleanup before settling stop (failure=%s)",
@@ -166,11 +150,6 @@ describe("gateway telemetry maintenance", () => {
         }
         return 0;
       });
-      pluginStateCleanupMock.mockImplementation(async () => {
-        if (owner === "plugin-state") {
-          await run();
-        }
-      });
       const { startGatewayMaintenanceTimers } = await import("./server-maintenance.js");
       const timers = startGatewayMaintenanceTimers({
         ...state,
@@ -190,21 +169,11 @@ describe("gateway telemetry maintenance", () => {
       });
       try {
         await vi.advanceTimersByTimeAsync(
-          owner === "worktree" ? blockedCall * 60 * 60_000 : 60_000,
+          owner === "worktree" ? blockedCall * 60 * 60_000 + 1 : 60_000,
         );
         expect(calls).toBe(blockedCall);
-        if (owner === "plugin-state") {
-          await vi.advanceTimersByTimeAsync(60_000);
-          expect(calls).toBe(blockedCall);
-        }
         if (!fails) {
           markGatewayRestartDraining();
-        }
-        if (owner === "plugin-state") {
-          state.scheduler.beginClose();
-          const admission = pluginStateCleanupMock.mock.calls.at(-1)?.[0];
-          expect(admission?.assertActive).toBeTypeOf("function");
-          expect(() => admission?.assertActive()).not.toThrow();
         }
         let stopped = false;
         const stopping = timers.stopPeriodicTasks().then(
@@ -232,10 +201,6 @@ describe("gateway telemetry maintenance", () => {
           expect(error).toMatchObject({ errors: [failure] });
         } else {
           expect(error).toBeUndefined();
-        }
-        if (owner === "plugin-state") {
-          const admission = pluginStateCleanupMock.mock.calls.at(-1)?.[0];
-          expect(() => admission?.assertActive()).toThrow();
         }
       } finally {
         operation.resolve();

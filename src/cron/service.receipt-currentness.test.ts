@@ -25,18 +25,16 @@ import { createCronServiceState } from "./service/state.js";
 import { saveCronStore } from "./store.js";
 import { cronStoreKey } from "./store/key.js";
 import {
-  activateCronRunReceiptInDatabase,
   assertCronRunReceiptCurrentInDatabase,
-  CronRunReceiptRevisionError,
   findActiveCronRunReceiptInDatabase,
-  finishCronRunReceiptAsync,
 } from "./store/run-receipt-store.js";
 import {
   claimCronRunReceiptForTest,
   makeCronReceiptJob,
+  finishCronRunReceiptAsync,
 } from "./store/run-receipt-store.test-support.js";
 
-it("rechecks unrepaired delivery in the current row before activating a prepared run", async () => {
+it("rejects unrepaired delivery in the current receipt row", async () => {
   await withOpenClawTestState({ label: "cron-receipt-delivery" }, async (fixture) => {
     const job = makeCronReceiptJob("delivery-changed-after-claim");
     job.delivery = { mode: "announce", channel: "telegram", to: "synthetic-target" };
@@ -71,16 +69,6 @@ it("rechecks unrepaired delivery in the current row before activating a prepared
       ).rejects.toThrow("openclaw doctor --fix");
       expect(() =>
         runOpenClawStateWriteTransaction(({ db: transactionDb }) =>
-          activateCronRunReceiptInDatabase({
-            database: transactionDb,
-            handle,
-            startedAtMs: 2,
-            resolveAgentId: (current) => current.agentId!,
-          }),
-        ),
-      ).toThrow(CronRunReceiptRevisionError);
-      expect(() =>
-        runOpenClawStateWriteTransaction(({ db: transactionDb }) =>
           assertCronRunReceiptCurrentInDatabase({
             database: transactionDb,
             handle,
@@ -112,10 +100,10 @@ it.each(["payload", "webhook"] as const)(
       const preload = state.path("receipt-reply-gate.mjs");
       await fs.writeFile(
         preload,
-        `import { parentPort, workerData, isMainThread, threadId } from "node:worker_threads";
+        `import { MessagePort, workerData, isMainThread, threadId } from "node:worker_threads";
          const gate = new Int32Array(workerData.receiptGate);
-         const post = parentPort.postMessage.bind(parentPort);
-         parentPort.postMessage = (message, ...args) => {
+         const post = MessagePort.prototype.postMessage;
+         MessagePort.prototype.postMessage = function (message, ...args) {
            if (message?.status === "ok" && message.value?.ok &&
                message.value.type === "cron.currentReceipt" && Atomics.load(gate, 0) > 0) {
              const count = Atomics.add(gate, 1, 1) + 1;
@@ -128,7 +116,7 @@ it.each(["payload", "webhook"] as const)(
                Atomics.wait(gate, 2, 0);
              }
            }
-           return post(message, ...args);
+           return post.call(this, message, ...args);
          };`,
       );
       const gate = new Int32Array(new SharedArrayBuffer(12));
@@ -140,9 +128,9 @@ it.each(["payload", "webhook"] as const)(
       const create = nativeWorkers.createRetainedNativeWorker;
       const factory = vi
         .spyOn(nativeWorkers, "createRetainedNativeWorker")
-        .mockImplementation((filename, options, source, resource) => {
+        .mockImplementation((filename, options, source, resource, taskPorts) => {
           if (selected || String(filename) !== readUrl) {
-            return create(filename, options, source, resource);
+            return create(filename, options, source, resource, taskPorts);
           }
           selected = true;
           const nativeOptions = options ?? {};
@@ -161,6 +149,7 @@ it.each(["payload", "webhook"] as const)(
             },
             source,
             resource,
+            taskPorts,
           );
         });
       const enqueueSystemEvent = vi.fn();

@@ -30,6 +30,7 @@ import {
   runWithDiagnosticTraceContext,
 } from "../../../infra/diagnostic-trace-context.js";
 import { isGatewaySuspendControlAvailable } from "../../../infra/gateway-suspend-coordinator.js";
+import { runWithMainThreadTask } from "../../../infra/main-thread-stall.js";
 import { rawDataByteLength } from "../../../infra/ws.js";
 import { logRejectedLargePayload } from "../../../logging/diagnostic-payload.js";
 import {
@@ -75,6 +76,7 @@ function claimsWorkerConnectionIdentity(value: unknown): boolean {
 }
 
 export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerParams) {
+  let waitingForPairing = false;
   const {
     socket,
     ingressAttribution,
@@ -356,6 +358,10 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
           sendHandshakeErrorResponse,
           sendFrame,
           onHelloDelivered: flushQueuedHandshakeFrames,
+          onPairingWait: () => {
+            waitingForPairing = true;
+            params.clearHandshakeTimer();
+          },
           isWebchatConnect,
           runDetachedConnectWork,
           pendingNodePairingCleanup,
@@ -516,7 +522,7 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
     void params.connectionWork
       .track(() =>
         runWithDiagnosticTraceContext(createDiagnosticTraceContext(), () =>
-          handleIncomingMessage(data, admission),
+          runWithMainThreadTask("gateway:ws:frame", () => handleIncomingMessage(data, admission)),
         ),
       )
       .catch((error: unknown) => {
@@ -539,6 +545,10 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
 
   const onMessage = (data: GatewayConnectionFrame): void => {
     if (isClosed()) {
+      return;
+    }
+    if (waitingForPairing) {
+      close(1008, "pairing approval pending; reconnect to request again");
       return;
     }
     if (queuedHandshakeFrames) {
