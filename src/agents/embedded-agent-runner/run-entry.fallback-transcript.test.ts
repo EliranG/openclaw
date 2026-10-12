@@ -18,12 +18,15 @@ import { runEmbeddedAgentEntry } from "./run-entry.js";
 import { createDirectHarness, makeResult } from "./run-entry.test-support.js";
 
 // Provider I/O and plugin preparation are fixtures; fallback decisions and durable writes are real.
+// mock-isolation: Candidate outcomes are explicit; exclude ambient credential-store discovery.
 vi.mock("../auth-profiles/source-check.js", () => ({
   hasAnyAuthProfileStoreSourceAsync: () => false,
 }));
+// mock-isolation: The direct harness fixture must not load or activate the global plugin registry.
 vi.mock("../harness/runtime-plugin.js", () => ({
   ensureSelectedAgentHarnessPlugin: async () => undefined,
 }));
+// mock-isolation: Fix direct-harness metadata while the real fallback loop and write owners run.
 vi.mock("../harness/selection.js", () => ({
   selectAgentHarness: () => ({ id: "openclaw", contextEngineHostCapabilities: [] }),
 }));
