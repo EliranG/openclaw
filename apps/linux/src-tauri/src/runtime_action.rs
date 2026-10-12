@@ -124,7 +124,10 @@ impl Observation {
         if self.paused() {
             return Err(PAUSED.into());
         }
-        if self.text("/service/definitionMutation") != Some("writable")
+        // Creation has no definition to replace; the CLI still owns platform permissions.
+        let mutation = self.text("/service/definitionMutation");
+        if mutation == Some("sealed")
+            || (!fresh && mutation != Some("writable"))
             || self.flag("/service/launcherOverridden") == Some(true)
             || self.flag("/config/mismatch") == Some(true)
             || self.text("/service/revision").is_none()

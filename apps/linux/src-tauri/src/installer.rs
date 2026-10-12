@@ -3,6 +3,8 @@ use crate::cli::{OpenClawCli, SpawnCommand};
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::VecDeque;
+#[cfg(any(target_os = "windows", test))]
+use std::io::Write;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
@@ -14,6 +16,29 @@ use tauri::{Emitter, Manager};
 
 const INSTALL_EVENT: &str = "install-progress";
 const ERROR_TAIL_LINES: usize = 24;
+
+#[cfg(any(target_os = "windows", test))]
+fn prepare_package_root(prefix: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let root = prefix.join("tools/openclaw");
+    std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;
+    // Without its own manifest, Bun can install into an ancestor's unrelated project.
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(root.join("package.json"))
+    {
+        Ok(mut file) => file
+            .write_all(b"{\"name\":\"openclaw-desktop-runtime\",\"private\":true}\n")
+            .map_err(|error| error.to_string())?,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => {
+            return Err(format!(
+                "Could not initialize the private CLI package: {error}"
+            ))
+        }
+    }
+    Ok(root)
+}
 
 pub(crate) fn managed_launcher_absent(prefix: &std::path::Path) -> Result<bool, String> {
     match std::fs::symlink_metadata(crate::cli::managed_launcher(prefix)) {
@@ -189,8 +214,7 @@ fn install_at(
             return Err("For Windows development builds, build the CLI from source and select it with OPENCLAW_DESKTOP_CLI. Use Stable or Beta for app-managed installation.".into());
         }
         let runtime = crate::bundled_runtime::seed(app)?;
-        let package_root = prefix.join("tools/openclaw");
-        std::fs::create_dir_all(&package_root).map_err(|error| error.to_string())?;
+        let package_root = prepare_package_root(&prefix)?;
         let mut command = Command::new(&runtime.bun);
         // This private root has no dev dependencies; Bun rejects --production with --trust.
         command
@@ -291,11 +315,35 @@ where
     })
 }
 
-#[cfg(all(test, not(target_os = "windows")))]
+#[cfg(test)]
 mod tests {
+    use super::prepare_package_root;
+    #[cfg(not(target_os = "windows"))]
     use super::{configure_installer_environment, managed_launcher_absent};
+    #[cfg(not(target_os = "windows"))]
     use std::process::Command;
 
+    #[test]
+    fn private_package_root_prevents_ancestor_selection_and_preserves_retry_metadata() {
+        let root = std::env::temp_dir().join(format!("openclaw-package-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let ancestor = b"{\"name\":\"unrelated-project\",\"private\":true}\n";
+        std::fs::write(root.join("package.json"), ancestor).unwrap();
+        let prefix = root.join("state");
+        let package = prepare_package_root(&prefix).unwrap();
+        let manifest = package.join("package.json");
+        let created: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+        assert_eq!(created["private"], true);
+        let installed = b"{\"private\":true,\"dependencies\":{\"openclaw\":\"2026.9.9\"}}\n";
+        std::fs::write(&manifest, installed).unwrap();
+        assert_eq!(prepare_package_root(&prefix).unwrap(), package);
+        assert_eq!(std::fs::read(&manifest).unwrap(), installed);
+        assert_eq!(std::fs::read(root.join("package.json")).unwrap(), ancestor);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn existing_state_is_not_a_cli_install_but_a_dangling_launcher_is() {
         let prefix =
@@ -317,6 +365,7 @@ mod tests {
         std::fs::remove_dir_all(prefix).unwrap();
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn installer_child_does_not_inherit_the_appimage_library_path() {
         let mut command = Command::new("sh");
