@@ -437,14 +437,19 @@ describe("shared-state worker error transport", () => {
   });
 
   it("projects typed ownership metadata before transporting it", () => {
-    const owner = { pid: 123, threadId: 4, version: "test", privateState: "not-for-transport" };
+    const pluginOwner = {
+      pid: 123,
+      threadId: 4,
+      version: "test",
+      privateState: "not-for-transport",
+    };
     const blockedByRun = { worktreeId: "fixture", pid: 456, privateState: "not-for-transport" };
     const original = new AggregateError(
       [
         new PluginStateStoreError("fixture plugin error", {
           code: "PLUGIN_STATE_READ_FAILED",
           operation: "lookup",
-          owner,
+          owner: pluginOwner,
         }),
         new WorktreeRemovalContentionError("busy", "fixture contention", blockedByRun),
       ],
