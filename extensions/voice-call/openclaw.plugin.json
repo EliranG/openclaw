@@ -1065,10 +1065,6 @@
                   "languageCode": {
                     "type": "string"
                   },
-                  "textPrefix": {
-                    "type": "string",
-                    "description": "Audio tag prepended to every request on Eleven v3 and later models, e.g. \"[warmly]\"."
-                  },
                   "voiceSettings": {
                     "type": "object",
                     "additionalProperties": false,
