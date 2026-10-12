@@ -28,7 +28,9 @@ function maintenanceScope(admission: () => void, database?: string) {
     assertOwnerCurrent: admission,
     assertDatabaseAccess: (pathname) => expect(pathname).toBe(database),
   });
-  if (database) scope.run(() => admitOpenClawMaintenanceLiveAuthorityReads(database));
+  if (database) {
+    scope.run(() => admitOpenClawMaintenanceLiveAuthorityReads(database));
+  }
   return scope;
 }
 
@@ -193,7 +195,9 @@ it.each(["cached-writer", "admitted-read-only"] as const)(
           maintenance.assertAdmission();
         } finally {
           db.exec("ROLLBACK");
-          if (source === "admitted-read-only") db.close();
+          if (source === "admitted-read-only") {
+            db.close();
+          }
         }
         expect(hashes).not.toHaveBeenCalled();
         expect(copies).not.toHaveBeenCalled();
