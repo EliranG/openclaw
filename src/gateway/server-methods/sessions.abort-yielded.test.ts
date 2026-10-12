@@ -131,6 +131,7 @@ it.each(["unchanged", "new turn", "reset incarnation", "partial cancellation"] a
         agentId: "broken",
         sessionKey: brokenKey,
         defaultSessionId: "broken-child-session",
+        lifecycleRevision: "broken-child-revision",
       });
       await registerSubagentRun({
         runId: "broken-child-run",
