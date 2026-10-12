@@ -12,6 +12,7 @@ import { assertExistingDatabaseIdentity } from "../../infra/sqlite-worker-identi
 import { parseAgentSessionKey } from "../../routing/session-key.js";
 import {
   commitSessionInitializationRollback,
+  createSessionInitializationDeletionParticipant,
   getSessionInitializationRollback,
   type SessionInitialization,
 } from "../../sessions/session-initialization.js";
@@ -99,12 +100,10 @@ export function hasPreparedNativeSessionDeletion(): boolean {
   );
 }
 
-/** Initialization and opaque SDK callbacks retain their synchronous agent-row authority. */
+/** Opaque SDK callbacks retain their synchronous agent-row authority. */
 export function preparedSessionDeletionRequiresNativeTransaction(): boolean {
-  return [...(deletions.getStore()?.values() ?? [])].some(
-    ({ target, mutations }) =>
-      target.initialization !== undefined ||
-      mutations.some((mutation) => !getNativeSessionDeletionParticipant(mutation)),
+  return [...(deletions.getStore()?.values() ?? [])].some(({ mutations }) =>
+    mutations.some((mutation) => !getNativeSessionDeletionParticipant(mutation)),
   );
 }
 
@@ -118,7 +117,9 @@ export function captureNativeSessionWorkerDeletion(entries: readonly DeletionEnt
     entry,
     prepared: deletions.getStore()?.get(sessionKey),
   }));
-  if (!captured.some(({ prepared }) => prepared?.mutations.length)) {
+  if (
+    !captured.some(({ prepared }) => prepared?.mutations.length || prepared?.target.initialization)
+  ) {
     return undefined;
   }
   const participants = [];
@@ -132,6 +133,14 @@ export function captureNativeSessionWorkerDeletion(entries: readonly DeletionEnt
         return undefined;
       }
       participants.push({ sessionKey, entry, participant });
+    }
+    const initialization = prepared.target.initialization;
+    if (initialization) {
+      participants.push({
+        sessionKey,
+        entry,
+        participant: createSessionInitializationDeletionParticipant(initialization),
+      });
     }
   }
   return {
