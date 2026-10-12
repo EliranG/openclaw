@@ -6,7 +6,6 @@ import {
 import {
   openOpenClawStateDatabase,
   runOpenClawStateWriteTransaction,
-  type OpenClawStateDatabaseOptions,
 } from "./openclaw-state-db.js";
 import {
   captureOpenClawStateReadWorkerContext,
@@ -21,7 +20,6 @@ import {
   cancelUserGitHubAuthorizationInDatabase,
   disconnectUserGitHubConnectionInDatabase,
   parseUserGitHubConnection,
-  readUserGitHubConnectionInDatabase,
   resolvePersonalGitHubOwnerInDatabase,
 } from "./user-github-connections.kernel.js";
 import {
@@ -111,14 +109,6 @@ export function resolvePersonalGitHubOwner(
   db = openOpenClawStateDatabase().db,
 ): string | undefined {
   return resolvePersonalGitHubOwnerInDatabase(profile, db);
-}
-
-/** Native final-effect guard; never substitute a pre-await connection snapshot. */
-export function readUserGitHubConnection(
-  owner: string,
-  database?: OpenClawStateDatabaseOptions,
-): UserGitHubConnection | undefined {
-  return readUserGitHubConnectionInDatabase(openOpenClawStateDatabase(database).db, owner);
 }
 
 /** Native adapter for the released synchronous personal OAuth service contract. */
