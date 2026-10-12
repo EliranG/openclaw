@@ -201,6 +201,38 @@ describe("public session document", () => {
     expect(PUBLIC_SESSION_CONTENT_SECURITY_POLICY).toContain("img-src 'self'");
   });
 
+  it("retains audio-only and video-only messages as filename chips without publishing their media", () => {
+    const html = render(
+      [
+        {
+          role: "user",
+          __openclaw: { id: "audio-entry" },
+          content: [{ type: "audio", fileName: "voice-note.mp3", url: "/private/audio" }],
+        },
+        {
+          role: "assistant",
+          __openclaw: { id: "video-entry" },
+          content: [{ type: "video", fileName: "walkthrough.mp4", url: "/private/video" }],
+        },
+        {
+          role: "toolResult",
+          content: [
+            { type: "audio", fileName: "hidden-audio.mp3", url: "/private/tool-audio" },
+            { type: "video", fileName: "hidden-video.mp4", url: "/private/tool-video" },
+          ],
+        },
+      ],
+      { mediaBaseUrl: "/control/share/session/media?token=v1.opaque" },
+    );
+    expect(html).toContain("2 messages");
+    expect(html.match(/<article class="message /g)).toHaveLength(2);
+    expect(html).toContain('<span class="attachment">voice-note.mp3</span>');
+    expect(html).toContain('<span class="attachment">walkthrough.mp4</span>');
+    expect(html).not.toMatch(
+      /hidden-audio|hidden-video|\/private\/|<(?:audio|video)\b|&amp;attachment=/,
+    );
+  });
+
   it("strips generated envelopes and applies built-in and operator redaction", () => {
     const token = `sk-${"a".repeat(48)}`;
     const operatorSecret = "internal-ticket-8315";

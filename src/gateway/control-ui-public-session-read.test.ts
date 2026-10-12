@@ -228,58 +228,64 @@ describe("anonymous published session reader", () => {
     });
   });
 
-  it("publishes large inline-image descriptors while preserving captions, tools and exact media", async () => {
-    await withPublicTestState(async () => {
-      const png = createNoisyPngBuffer(1024, 1024);
-      const data = png.toString("base64");
-      expect(data.length).toBeGreaterThan(1024 * 1024);
-      const call = {
-        type: "toolCall",
-        id: "read-call",
-        name: "read",
-        arguments: { path: "notes.md" },
-      };
-      await seed([
-        "Oldest",
-        {
-          role: "assistant",
-          content: [
-            { type: "text", text: "Model caption" },
-            { type: "image", mimeType: "image/png", data },
-            call,
-          ],
-          openclawDisplayContent: [
-            { type: "text", text: "Displayed caption" },
-            { type: "image", source: { type: "base64", media_type: "image/png", data } },
-          ],
-        },
-        "Newest",
-      ]);
-      const latest = await readPublicSessionShare(cfg, locator);
-      expect(latest?.messages).toMatchObject([{ content: "Newest" }]);
-      expect(latest?.olderOffset).toBe(1);
-      const page = await readPublicSessionShare(cfg, locator, { offset: latest?.olderOffset });
-      expect(page).toMatchObject({ olderOffset: 2 });
-      expect(page?.messages).toHaveLength(1);
-      expect(page?.messages[0]).toMatchObject({
-        content: [{ text: "Model caption" }, { type: "image", omitted: true }, call],
-        openclawDisplayContent: [{ text: "Displayed caption" }, { type: "image", omitted: true }],
+  it.each(["image", "image_url", "input_image"])(
+    "publishes large %s descriptors while preserving captions, tools and exact media",
+    async (type) => {
+      await withPublicTestState(async () => {
+        const png = createNoisyPngBuffer(1024, 1024);
+        const data = png.toString("base64");
+        expect(data.length).toBeGreaterThan(1024 * 1024);
+        const image =
+          type === "image"
+            ? { type, mimeType: "image/png", data }
+            : {
+                type,
+                image_url:
+                  type === "input_image"
+                    ? `data:image/png;base64,${data}`
+                    : { url: `data:image/png;base64,${data}` },
+              };
+        const call = {
+          type: "toolCall",
+          id: "read-call",
+          name: "read",
+          arguments: { path: "notes.md" },
+        };
+        await seed([
+          "Oldest",
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "Model caption" }, image, call],
+            openclawDisplayContent: [{ type: "text", text: "Displayed caption" }, image],
+          },
+          "Newest",
+        ]);
+        const latest = await readPublicSessionShare(cfg, locator);
+        expect(latest?.messages).toMatchObject([{ content: "Newest" }]);
+        expect(latest?.olderOffset).toBe(1);
+        const page = await readPublicSessionShare(cfg, locator, { offset: latest?.olderOffset });
+        expect(page).toMatchObject({ olderOffset: 2 });
+        expect(page?.messages).toHaveLength(1);
+        expect(page?.messages[0]).toMatchObject({
+          content: [{ text: "Model caption" }, { type, omitted: true }, call],
+          openclawDisplayContent: [{ text: "Displayed caption" }, { type, omitted: true }],
+        });
+        expect(JSON.stringify(page?.messages).length).toBeLessThan(1024 * 1024);
+        expect(collectPublicSessionAttachments(page?.messages[0])).toEqual([
+          { id: "content-1", name: "Image", image: true },
+        ]);
+        const exact = await readPublicSessionMessage(cfg, locator, {
+          entryId: "message-1",
+          projection: currentProjection(),
+        });
+        const loaded = await readPublicSessionAttachment(exact, "content-1", locator);
+        expect(loaded?.equals(png)).toBe(true);
+        expect(
+          (await readPublicSessionShare(cfg, locator, { offset: page?.olderOffset }))?.messages,
+        ).toMatchObject([{ content: "Oldest" }]);
       });
-      expect(JSON.stringify(page?.messages).length).toBeLessThan(1024 * 1024);
-      expect(collectPublicSessionAttachments(page?.messages[0])).toEqual([
-        { id: "content-1", name: "Image", image: true },
-      ]);
-      const exact = await readPublicSessionMessage(cfg, locator, {
-        entryId: "message-1",
-        projection: currentProjection(),
-      });
-      const loaded = await readPublicSessionAttachment(exact, "content-1", locator);
-      expect(loaded?.equals(png)).toBe(true);
-      expect(
-        (await readPublicSessionShare(cfg, locator, { offset: page?.olderOffset }))?.messages,
-      ).toMatchObject([{ content: "Oldest" }]);
-    });
-  });
+    },
+  );
 
   it("rejects private, unknown-agent, mismatched-instance and mismatched-grant requests", async () => {
     await withPublicTestState(async () => {

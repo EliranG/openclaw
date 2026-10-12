@@ -59,7 +59,7 @@ function collectAttachments(message: unknown): Attachment[] {
     }
     const attachment = asOptionalRecord(block.attachment);
     const image = ["image", "image_url", "input_image"].includes(String(block.type));
-    if (!image && block.type !== "attachment" && block.type !== "file") {
+    if (!image && !["attachment", "file", "audio", "video"].includes(String(block.type))) {
       continue;
     }
     if (

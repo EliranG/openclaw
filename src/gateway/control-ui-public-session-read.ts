@@ -95,16 +95,26 @@ function compactInlineImagePayloads(message: unknown): unknown {
     compacted[field] = content.map((value) => {
       const block = asOptionalRecord(value);
       const source = asOptionalRecord(block?.source);
+      const imageUrl = asOptionalRecord(block?.image_url);
       if (
-        block?.type !== "image" ||
-        ![block.data, block.blob, source?.data, source?.blob].some(
+        !block ||
+        !["image", "image_url", "input_image"].includes(String(block.type)) ||
+        (![block.data, block.blob, source?.data, source?.blob].some(
           (data) => typeof data === "string" && data.length > 0,
-        )
+        ) &&
+          ![block.url, block.image_url, imageUrl?.url, source?.url].some(
+            (url) => typeof url === "string" && url.startsWith("data:image/"),
+          ))
       ) {
         return value;
       }
       hasInlineImage = true;
-      return sanitizeChatHistoryContentBlock(block, { maxChars: Number.MAX_SAFE_INTEGER }).block;
+      const projected = asOptionalRecord(
+        sanitizeChatHistoryContentBlock(Object.assign({}, block, { type: "image" }), {
+          maxChars: Number.MAX_SAFE_INTEGER,
+        }).block,
+      );
+      return Object.assign(projected ?? {}, { type: block.type });
     });
   }
   return hasInlineImage && jsonUtf8Bytes([compacted]) <= PUBLIC_SESSION_READ_BYTES
