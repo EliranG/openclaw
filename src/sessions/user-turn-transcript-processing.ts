@@ -9,9 +9,18 @@ export async function completeUserTurnProcessing(
   recorder: UserTurnTranscriptRecorder | undefined,
   outcome: AgentRunTerminalOutcome,
 ): Promise<AgentRunTerminalOutcome | undefined> {
-  return recorder?.completeProcessingAsync
-    ? await recorder.completeProcessingAsync(outcome)
-    : recorder?.completeProcessing?.(outcome);
+  if (recorder?.completeProcessingAsync) {
+    return await recorder.completeProcessingAsync(outcome);
+  }
+  if (recorder?.completeProcessing) {
+    warnPluginSdkDeprecation({
+      family: "session-input-completion",
+      method: "UserTurnTranscriptRecorder.completeProcessing",
+      replacement: "completeProcessingAsync",
+    });
+    return recorder.completeProcessing(outcome);
+  }
+  return undefined;
 }
 
 /** The recorder owns one completion attempt, including its failure and native settlement. */
@@ -41,6 +50,11 @@ export function createUserTurnProcessingCompletion(
     getProcessingCompletion: () =>
       processingCompletion?.ok ? processingCompletion.value : readPendingInput()?.completion,
     completeProcessing: (outcome: AgentRunTerminalOutcome) => {
+      warnPluginSdkDeprecation({
+        family: "session-input-completion",
+        method: "UserTurnTranscriptRecorder.completeProcessing",
+        replacement: "completeProcessingAsync",
+      });
       const pendingInput = readPendingInput();
       if (!pendingInput?.complete) {
         return undefined;

@@ -14,16 +14,7 @@ import {
   prepareCronRunReceiptAdjudication,
 } from "./run-receipt-store.js";
 import { prepareCronRunReceiptWriteSchema } from "./run-receipt-write-admission.js";
-import type {
-  CronRunReceiptHandle,
-  CronRunReceiptOwnerObservation,
-  PreparedCronRunReceiptAdjudication,
-} from "./run-receipt.types.js";
-
-type PreparedCronRunReceiptClaim = PreparedCronRunReceiptAdjudication & {
-  handle: CronRunReceiptHandle;
-  requestRunId?: string;
-};
+import type { CronRunReceiptHandle, CronRunReceiptOwnerObservation } from "./run-receipt.types.js";
 
 export function inspectActiveCronRunReceipt(params: { storePath: string; jobId: string }) {
   return runOpenClawStateWriteTransaction(({ db }) =>
@@ -82,7 +73,7 @@ export function claimCronRunReceiptForTest(storePath: string, job: CronJob, star
 
 export function claimCronRunReceiptInDatabaseForTest(params: {
   database: Parameters<typeof claimCronRunReceiptInDatabase>[0]["database"];
-  prepared: PreparedCronRunReceiptClaim;
+  prepared: ReturnType<typeof prepareCronRunReceiptClaim>;
   resolveAgentId: (job: CronJob) => string;
 }) {
   const { handle: preparedHandle } = params.prepared;
@@ -115,7 +106,7 @@ export function prepareCronRunReceiptClaim(params: {
   startedAtMs: number;
   requestRunId?: string;
   observed: CronRunReceiptOwnerObservation | undefined;
-}): PreparedCronRunReceiptClaim {
+}) {
   const ownerStartTime = getFileLockProcessStartTime(process.pid);
   if (ownerStartTime === null) {
     throw new Error("cron run cannot acquire a durable fence without process start identity");
