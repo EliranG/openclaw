@@ -13,6 +13,7 @@ import type { OpenClawRegisteredAgentDatabase } from "./openclaw-agent-db-contra
 import {
   assertCanonicalAgentDatabasesPrimaryKey,
   detectOpenClawStateDatabaseSchemaMigrationsFromDatabase,
+  STATE_SCHEMA_MIGRATION_READ_TABLES,
 } from "./openclaw-state-db-schema-repair.js";
 import type { DB as OpenClawStateKyselyDatabase } from "./openclaw-state-db.generated.js";
 import { resolveOpenClawRegisteredAgentDatabasePath } from "./openclaw-state-db.paths.js";
@@ -75,10 +76,9 @@ export function readRegisteredAgentDatabaseRows(
   } else {
     const schema = getAdmittedSqliteSchemaFacts(database);
     if (!schema || !readableSchemas.has(schema)) {
-      // Transcript and retention projections do not change the registry's read contract.
       if (
         detectOpenClawStateDatabaseSchemaMigrationsFromDatabase(database, pathname).some(
-          ({ kind }) => kind !== "predicate-columns-v21",
+          ({ kind }) => STATE_SCHEMA_MIGRATION_READ_TABLES[kind].includes("agent_databases"),
         )
       ) {
         throw new Error(
