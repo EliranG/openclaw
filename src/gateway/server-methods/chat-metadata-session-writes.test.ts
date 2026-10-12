@@ -8,16 +8,12 @@ import {
   listSessionEntriesCore,
   listSessionParticipantsReadOnly,
   loadSessionEntry,
+  patchSessionEntryCore,
   upsertSessionEntryCore,
 } from "../../config/sessions/session-accessor.js";
 import { writeSessionEntry } from "../../config/sessions/session-accessor.sqlite-entry-store.js";
-import { replaceSessionEntrySync } from "../../config/sessions/session-accessor.sqlite-entry.js";
 import { recordSessionParticipant } from "../../config/sessions/session-accessor.sqlite-participants.native.js";
 import { appendTranscriptEventSync } from "../../config/sessions/session-accessor.sqlite-transcript-write.test-support.js";
-import {
-  projectionLane,
-  rotateDatabaseWorkers,
-} from "../../config/sessions/session-transcript-worker-resources.js";
 import { hasOpenClawAgentDatabaseAsyncResources } from "../../state/openclaw-agent-db-resources.js";
 import {
   closeOpenClawAgentDatabasesAsync,
@@ -603,8 +599,10 @@ it.each([
         );
         try {
           if (changeEntry && scenario.allowed) {
-            // Keep fixture writes independent of the request resources checked below.
-            replaceSessionEntrySync(selected, { ...before, lastReadAt: 2 });
+            await patchSessionEntryCore(selected, () => ({ lastReadAt: 2 }), {
+              preserveActivity: true,
+              skipMaintenance: true,
+            });
           } else if (changeEntry && scenario.committed) {
             runOpenClawAgentWriteTransaction((current) => {
               writeSessionEntry(current, selected.sessionKey, {
@@ -671,8 +669,7 @@ it.each([
             message: "Session changed while preparing its metadata. Retry the request.",
           });
           expect(changed.respond).not.toHaveBeenCalled();
-          // Retire cached readers without releasing request-owned registrations.
-          await rotateDatabaseWorkers(projectionLane);
+          await closeOpenClawAgentDatabasesAsync(state.root);
           expect(hasOpenClawAgentDatabaseAsyncResources()).toBe(false);
           return;
         }
@@ -682,7 +679,7 @@ it.each([
         expect(fresh.mock.calls).toEqual(control.respond.mock.calls);
         expect(changed.error).toBeUndefined();
         expect(changed.respond.mock.calls).toEqual(control.respond.mock.calls);
-        await rotateDatabaseWorkers(projectionLane);
+        await closeOpenClawAgentDatabasesAsync(state.root);
         expect(hasOpenClawAgentDatabaseAsyncResources()).toBe(false);
       } finally {
         release?.();

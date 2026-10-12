@@ -12,6 +12,7 @@ import {
   registerOpenClawAgentDatabaseIdentity,
 } from "../../state/openclaw-agent-db-identity.js";
 import { closeCachedOpenClawAgentDatabase } from "../../state/openclaw-agent-db-lifecycle.js";
+import { runOpenClawAgentWriteWithYieldingAdmission } from "../../state/openclaw-agent-db-transaction.js";
 import {
   closeOpenClawAgentDatabaseByPath,
   closeOpenClawAgentDatabaseByPathAsync,
@@ -171,6 +172,45 @@ describe("SQLite session entry patch commit revalidation", () => {
     } finally {
       await release;
       other.close();
+    }
+  });
+
+  it("restores the connection's commit wait after admitting a rollback-journal write", async () => {
+    await closeOpenClawAgentDatabasesAsync();
+    database = openOpenClawAgentDatabase({ agentId: "main", env });
+    expect(database.db.prepare("PRAGMA journal_mode = DELETE").get()?.journal_mode).toBe("delete");
+    setSqliteBusyTimeout(database.db, 37);
+    const reader = new DatabaseSync(database.path);
+    try {
+      reader.exec("BEGIN");
+      reader.prepare("SELECT session_key FROM session_nodes").get();
+      const patched = await runOpenClawAgentWriteWithYieldingAdmission(
+        (writer) => {
+          expect(writer.db.isTransaction).toBe(true);
+          expect(reader.isTransaction).toBe(true);
+          expect(readSqliteBusyTimeout(writer.db)).toBe(37);
+          reader.exec("ROLLBACK");
+          return writeSessionEntry(writer, sessionKey, {
+            sessionId: "session-1",
+            updatedAt: 10,
+            label: "after reader",
+          });
+        },
+        { agentId: "main", env },
+      );
+      expect(patched?.label).toBe("after reader");
+      expect(
+        reader
+          .prepare(
+            "SELECT json_extract(entry_json, '$.label') AS label FROM session_nodes WHERE session_key = ?",
+          )
+          .get(sessionKey),
+      ).toEqual({ label: "after reader" });
+    } finally {
+      if (reader.isTransaction) {
+        reader.exec("ROLLBACK");
+      }
+      reader.close();
     }
   });
 

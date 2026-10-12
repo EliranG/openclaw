@@ -264,6 +264,23 @@ it.each(["worker", "legacy callback", "incognito"] as const)(
   },
 );
 
+it("returns an accepted unchanged patch receipt without publishing a new source", async () => {
+  const f = fixture();
+  const options = { skipMaintenance: true, preserveActivity: true };
+  await patchSessionEntryCore(f.scope, () => ({}), options);
+  const onCommitted = vi.fn();
+  const onCommittedSource = vi.fn();
+  const committed = await patchSessionEntryCore(f.scope, () => ({}), {
+    ...options,
+    onCommitted,
+    onCommittedSource,
+  });
+  expect(committed).toMatchObject({ sessionId: "original", updatedAt: 1 });
+  expect(onCommitted).toHaveBeenCalledExactlyOnceWith(committed);
+  expect(onCommittedSource).not.toHaveBeenCalled();
+  expect(loadSessionEntry(f.scope)).toEqual(committed);
+});
+
 it.each([false, true])(
   "captures the queued state owner before admission (ambient=%s)",
   async (ambient) => {

@@ -2,13 +2,12 @@ import { expectDefined, safeParseJsonRecord } from "@openclaw/normalization-core
 import { describe, expect, it, vi } from "vitest";
 import { createDeferred } from "../../../test/helpers/promise.js";
 import { getPreparedModelRuntimeAuthStore } from "../../agents/prepared-model-runtime-auth.js";
-import { loadSessionEntry } from "../../config/sessions/session-accessor.js";
-import { replaceSessionEntrySync } from "../../config/sessions/session-accessor.sqlite-entry.js";
+import { loadSessionEntry, patchSessionEntryCore } from "../../config/sessions/session-accessor.js";
 import { createFallbackSessionEntry } from "../../config/sessions/session-accessor.sqlite-normalize.js";
 import {
-  projectionLane,
-  rotateDatabaseWorkers,
-} from "../../config/sessions/session-transcript-worker-resources.js";
+  resolveSqliteScope,
+  toDatabaseOptions,
+} from "../../config/sessions/session-accessor.sqlite-scope.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { createEmptyPluginRegistry } from "../../plugins/registry-empty.js";
@@ -17,6 +16,7 @@ import { hasOpenClawAgentDatabaseAsyncResources } from "../../state/openclaw-age
 import {
   closeOpenClawAgentDatabaseByPath,
   closeOpenClawAgentDatabaseByPathAsync,
+  closeOpenClawAgentDatabasesAsync,
   openOpenClawAgentDatabase,
 } from "../../state/openclaw-agent-db.js";
 import {
@@ -46,13 +46,13 @@ import { modelsHandlers } from "./models.js";
 import type { GatewayRequestHandlerOptions, RespondFn } from "./types.js";
 
 function writeSessionFixture(
-  scope: Parameters<typeof replaceSessionEntrySync>[0],
+  scope: Parameters<typeof patchSessionEntryCore>[0],
   patch: Partial<SessionEntry>,
 ) {
-  // Keep fixture writes independent of the request resources checked below.
-  replaceSessionEntrySync(scope, {
-    ...(loadSessionEntry(scope) ?? createFallbackSessionEntry(patch)),
-    ...patch,
+  openOpenClawAgentDatabase(toDatabaseOptions(resolveSqliteScope(scope)));
+  return patchSessionEntryCore(scope, () => patch, {
+    skipMaintenance: true,
+    fallbackEntry: createFallbackSessionEntry(patch),
   });
 }
 
@@ -173,7 +173,7 @@ describe("direct session model catalogs", () => {
       const f = fixture();
       await state.writeConfig(f.config);
       const scope = { agentId: "main", sessionKey: "agent:main:catalog-revision" };
-      writeSessionFixture(scope, {
+      await writeSessionFixture(scope, {
         sessionId: "catalog-revision-session",
         updatedAt: 1,
         createdActor: { type: "human", source: "profile", id: f.person.id },
@@ -189,7 +189,7 @@ describe("direct session model catalogs", () => {
         [{ agentRuntimeOverride: "openclaw" }, true],
         [{ lifecycleRevision: "replacement" }, true],
       ] satisfies Array<[Partial<SessionEntry>, boolean]>) {
-        writeSessionFixture(scope, patch);
+        await writeSessionFixture(scope, patch);
         const respond = await f.request({ sessionKey: scope.sessionKey, view: "configured" });
         const result = respond.mock.calls[0]?.[1];
         expect(respond.mock.calls[0]?.[0]).toBe(true);
@@ -226,7 +226,7 @@ describe("direct session model catalogs", () => {
         const f = fixture();
         await state.writeConfig(f.config);
         const sessionKey = "agent:main:hidden-catalog";
-        writeSessionFixture(
+        await writeSessionFixture(
           { agentId: "main", sessionKey },
           {
             sessionId: "hidden-catalog-session",
@@ -249,8 +249,7 @@ describe("direct session model catalogs", () => {
         });
         expect(f.readPrepared).not.toHaveBeenCalled();
         expect(f.loadDeferred).not.toHaveBeenCalled();
-        // Retire cached readers without releasing request-owned registrations.
-        await rotateDatabaseWorkers(projectionLane);
+        await closeOpenClawAgentDatabasesAsync(state.root);
         expect(hasOpenClawAgentDatabaseAsyncResources()).toBe(false);
       });
     },
@@ -261,7 +260,7 @@ describe("direct session model catalogs", () => {
       const f = fixture();
       await state.writeConfig(f.config);
       const scope = { agentId: "main", sessionKey: "agent:main:catalog-read-marker" };
-      writeSessionFixture(scope, {
+      await writeSessionFixture(scope, {
         sessionId: "catalog-read-marker-session",
         lifecycleRevision: "catalog-read-marker-lifecycle",
         updatedAt: 1,
@@ -311,7 +310,10 @@ describe("direct session model catalogs", () => {
             throw new Error("Model catalog completed before the preparation hold");
           }),
         ]);
-        writeSessionFixture(scope, { lastReadAt: 2 });
+        await patchSessionEntryCore(scope, () => ({ lastReadAt: 2 }), {
+          preserveActivity: true,
+          skipMaintenance: true,
+        });
         expect(loadSessionEntry(scope)).toEqual({ ...before, lastReadAt: 2 });
         expect(readRow()).toEqual({
           ...beforeRow,
@@ -326,7 +328,7 @@ describe("direct session model catalogs", () => {
       const fresh = await f.request(params);
       expect(fresh.mock.calls).toEqual(control.mock.calls);
       expect(changed.mock.calls).toEqual(control.mock.calls);
-      await rotateDatabaseWorkers(projectionLane);
+      await closeOpenClawAgentDatabasesAsync(state.root);
       expect(hasOpenClawAgentDatabaseAsyncResources()).toBe(false);
     });
   });
@@ -344,7 +346,7 @@ describe("direct session model catalogs", () => {
       const f = fixture();
       await state.writeConfig(f.config);
       const scope = { agentId: "main", sessionKey: "agent:main:held-saved" };
-      writeSessionFixture(scope, {
+      await writeSessionFixture(scope, {
         sessionId: "original",
         updatedAt: 1,
         createdActor: { type: "human", source: "profile", id: f.person.id },
@@ -364,9 +366,9 @@ describe("direct session model catalogs", () => {
         await Promise.race([entered.promise, pending]);
         expect(f.readPrepared).toHaveBeenCalledOnce();
         if (change === "selected patch") {
-          writeSessionFixture(scope, { label: "changed" });
+          await writeSessionFixture(scope, { label: "changed" });
         } else if (change === "selected reset") {
-          writeSessionFixture(scope, {
+          await writeSessionFixture(scope, {
             sessionId: "replacement",
             lifecycleRevision: "replacement",
           });
@@ -418,7 +420,7 @@ describe("direct session model catalogs", () => {
           await closeOpenClawAgentDatabaseByPathAsync(closedStorePath);
         }
       }
-      await rotateDatabaseWorkers(projectionLane);
+      await closeOpenClawAgentDatabasesAsync(state.root);
       expect(hasOpenClawAgentDatabaseAsyncResources()).toBe(false);
     });
   });
@@ -431,12 +433,12 @@ describe("direct session model catalogs", () => {
         await state.writeConfig(f.config);
         const selected = { agentId: "main", sessionKey: "agent:main:metadata-selected" };
         const other = { ...selected, sessionKey: "agent:main:metadata-other" };
-        writeSessionFixture(selected, {
+        await writeSessionFixture(selected, {
           sessionId: "selected",
           updatedAt: 1,
           createdActor: { type: "human", source: "profile", id: f.person.id },
         });
-        writeSessionFixture(other, {
+        await writeSessionFixture(other, {
           sessionId: "other",
           updatedAt: 1,
           createdActor: { type: "human", source: "profile", id: f.person.id },
@@ -461,7 +463,7 @@ describe("direct session model catalogs", () => {
         void pending.catch(() => {});
         try {
           await Promise.race([entered.promise, pending]);
-          writeSessionFixture(changeSelected ? selected : other, {
+          await writeSessionFixture(changeSelected ? selected : other, {
             modelOverride: "replacement",
           });
         } finally {
@@ -474,7 +476,7 @@ describe("direct session model catalogs", () => {
           await pending;
           expect(respond).toHaveBeenCalledWith(true, { swarmEnabled: false });
         }
-        await rotateDatabaseWorkers(projectionLane);
+        await closeOpenClawAgentDatabasesAsync(state.root);
         expect(hasOpenClawAgentDatabaseAsyncResources()).toBe(false);
       });
     },
@@ -494,7 +496,7 @@ describe("direct session model catalogs", () => {
       };
       await state.writeConfig(f.config);
       const sessionKey = "agent:main:saved";
-      writeSessionFixture(
+      await writeSessionFixture(
         { agentId: "main", sessionKey },
         {
           sessionId: "saved-catalog-session",
@@ -544,7 +546,7 @@ describe("direct session model catalogs", () => {
       await state.writeConfig(f.config);
       clearUserProfileAuthLink({ profileId: f.person.id, provider: "openai" });
       const sessionKey = "agent:main:harness:catalog-native:saved";
-      writeSessionFixture(
+      await writeSessionFixture(
         { agentId: "main", sessionKey },
         {
           sessionId: "catalog-native-session",
