@@ -99,7 +99,7 @@ async function runScheduler(state: CronServiceState, startup?: StartupOptions): 
     await publish(state, scheduled);
     await drainCronRunQueue(state);
     const completed = await Promise.allSettled(requests.map((request) => request.completion));
-    const failed = completed.find((result) => result.status === "rejected");
+    const failed = completed.find((completion) => completion.status === "rejected");
     if (failed?.status === "rejected") {
       throw failed.reason;
     }

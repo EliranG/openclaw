@@ -114,7 +114,11 @@ export async function startCronScheduler(
     });
   });
   connection.unsubscribe = sessionChanges.subscribe((change) => {
-    if (!("all" in change) || !String(change.scope).startsWith("config")) {
+    if (
+      !("all" in change) ||
+      typeof change.scope !== "string" ||
+      !change.scope.startsWith("config")
+    ) {
       return;
     }
     const config = getRuntimeConfigSnapshot();
@@ -150,7 +154,7 @@ export async function startCronScheduler(
     await publish(state, result);
     await drainCronRunQueue(state);
     const completed = await Promise.allSettled(requests.map((request) => request.completion));
-    const failed = completed.find((result) => result.status === "rejected");
+    const failed = completed.find((completion) => completion.status === "rejected");
     if (failed?.status === "rejected") {
       throw failed.reason;
     }

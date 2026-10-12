@@ -367,7 +367,7 @@ export async function prepareCronJobMutation(
     type: "cron.prepareJobMutation",
     input: { storeKey: source.storeKey, mutation },
     snapshot,
-    assertCurrent: source.assertCurrent,
+    assertCurrent: () => source.assertCurrent(),
     publish: (outcome) => {
       plan = outcome;
     },

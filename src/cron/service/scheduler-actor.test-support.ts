@@ -6,15 +6,14 @@ import type { CronServiceState } from "./state.js";
 export async function captureCronSchedulerWakeForTest<T>(
   start: () => Promise<T>,
 ): Promise<{ result: T; wake: (state: CronServiceState) => Promise<void> }> {
-  let channel: BroadcastChannel | undefined;
-  const addEventListener = BroadcastChannel.prototype.addEventListener;
+  let dispatchWake: (() => void) | undefined;
   const capture = vi
     .spyOn(BroadcastChannel.prototype, "addEventListener")
     .mockImplementation(function (this: BroadcastChannel, type, listener, options) {
       if (type === "message" && this.name.startsWith("openclaw.cron.")) {
-        channel = this;
+        dispatchWake = () => this.dispatchEvent(new MessageEvent("message"));
       }
-      addEventListener.call(this, type, listener, options);
+      EventTarget.prototype.addEventListener.call(this, type, listener, options);
     });
   let result: T;
   try {
@@ -22,8 +21,8 @@ export async function captureCronSchedulerWakeForTest<T>(
   } finally {
     capture.mockRestore();
   }
-  const actorChannel = channel;
-  if (!actorChannel) {
+  const notify = dispatchWake;
+  if (!notify) {
     throw new Error("Cron startup did not register its scheduler wake listener");
   }
   return {
@@ -38,7 +37,7 @@ export async function captureCronSchedulerWakeForTest<T>(
       };
       try {
         // The listener enters runSchedulerOwned synchronously before awaiting admission.
-        actorChannel.dispatchEvent(new MessageEvent("message"));
+        notify();
       } finally {
         state.deps.runSchedulerOwned = runSchedulerOwned;
       }
