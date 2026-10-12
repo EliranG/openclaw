@@ -71,7 +71,7 @@ export function RequiredSessionPlacement(props: { gateway: DraftGatewayState }) 
         <button
           type="button"
           class="btn btn--sm"
-          onClick={() => void props.gateway.refreshCloudProfiles()}
+          onClick={() => void props.gateway.retryRequiredPlacement()}
         >
           {t("common.retry")}
         </button>
@@ -161,8 +161,7 @@ export function NewSessionPlaceControls(props: { params: NewSessionPlaceControls
   });
   return (
     <>
-      {!catalog.isTarget(props.params.data) &&
-      (!props.params.gateway.placementPolicyReady || props.params.place.requiredPlacement) ? (
+      {props.params.place.requiredPlacement ? (
         <RequiredSessionPlacement gateway={props.params.gateway} />
       ) : (
         <>

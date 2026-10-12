@@ -1,6 +1,5 @@
 import { createMemo } from "solid-js";
-import { LitContent } from "../../lit/solid-content.tsx";
-import { renderChatModelControls } from "../chat/components/chat-model-controls.ts";
+import { ChatModelControls } from "../chat/components/chat-model-controls.tsx";
 import type { NewSessionModelControl, NewSessionModelRenderOptions } from "./model-control.ts";
 
 export function NewSessionModelControlView(props: {
@@ -8,5 +7,5 @@ export function NewSessionModelControlView(props: {
   options: NewSessionModelRenderOptions;
 }) {
   const controls = createMemo(() => props.control.renderProps(props.options));
-  return <LitContent value={renderChatModelControls(controls())} />;
+  return <ChatModelControls {...controls()} />;
 }

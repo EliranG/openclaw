@@ -5,12 +5,12 @@ import { registerNewSessionSetupEnglish } from "../../i18n/locales/en-new-sessio
 import { t } from "../../lib/reactive/i18n.ts";
 import type { SessionToolOverrides } from "../../lib/sessions/patch.ts";
 import { countSessionToolOverrides } from "../../lib/sessions/tool-overrides.ts";
-import { LitContent } from "../../lit/solid-content.tsx";
 import {
-  renderChatComposerPlusMenu,
+  ChatComposerPlusMenu,
+  type renderChatComposerPlusMenu,
   type ChatComposerCapabilityMenuProps,
   type ChatComposerPlusMenuView,
-} from "../chat/components/chat-composer-plus-menu.ts";
+} from "../chat/components/chat-composer-plus-menu.tsx";
 import type { NewSessionVisibility } from "./create-params.ts";
 
 registerNewSessionSetupEnglish();
@@ -58,11 +58,11 @@ export function NewSessionPlusMenu(props: {
   options: NewSessionComposerCapabilityOptions;
   attachments: Parameters<typeof renderChatComposerPlusMenu>[0]["attachments"];
 }) {
-  const menu = createMemo(() => {
+  const menu = createMemo((): Parameters<typeof renderChatComposerPlusMenu>[0] => {
     const options = props.options;
     const disabled = options.submitting || options.messageLocked === true;
     const controller = options.textareaController;
-    return renderChatComposerPlusMenu({
+    return {
       attachments: props.attachments,
       capabilityMenu: options.capabilityMenu,
       disabled,
@@ -93,9 +93,9 @@ export function NewSessionPlusMenu(props: {
         controller.capabilityMenuView = view;
         options.requestUpdate();
       },
-    });
+    };
   });
-  return <LitContent value={menu()} />;
+  return <ChatComposerPlusMenu menu={menu()} />;
 }
 
 export function NewSessionSelectionStatus(props: { options: NewSessionComposerCapabilityOptions }) {

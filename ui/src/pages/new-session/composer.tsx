@@ -31,25 +31,29 @@ import {
   renderAttachmentReadStatus,
 } from "../chat/components/chat-attachments.ts";
 import { adjustTextareaHeight, paneDomId } from "../chat/components/chat-composer-dom.ts";
-import type { HumanMentionMenuHost } from "../chat/components/chat-composer-mention-menu.ts";
+import { EmojiMenu } from "../chat/components/chat-composer-emoji.tsx";
+import {
+  HumanMentionMenuView,
+  type HumanMentionMenuHost,
+} from "../chat/components/chat-composer-mention-menu.tsx";
 import "../../components/tooltip.ts";
 import { resolveComposerMenus } from "../chat/components/chat-composer-menus.ts";
-import type { ChatComposerCapabilityMenuProps } from "../chat/components/chat-composer-plus-menu.ts";
-import { renderSelectedHumanMentions } from "../chat/components/chat-composer-selected-mentions.ts";
+import type { ChatComposerCapabilityMenuProps } from "../chat/components/chat-composer-plus-menu.tsx";
+import { SelectedHumanMentions } from "../chat/components/chat-composer-selected-mentions.tsx";
 import {
   handleSkillMenuKeydown,
-  renderSkillMenu,
+  SkillMenu,
   resetSkillMenuState,
   updateSkillMenu,
   type SkillMenuHost,
-} from "../chat/components/chat-composer-skill-menu.ts";
+} from "../chat/components/chat-composer-skill-menu.tsx";
 import {
   handleSlashMenuKeydown,
-  renderSlashMenu,
+  SlashMenu,
   resetSlashMenuState,
   type SlashMenuHost,
   updateSlashMenu,
-} from "../chat/components/chat-composer-slash-menu.ts";
+} from "../chat/components/chat-composer-slash-menu.tsx";
 import type { SidebarContent } from "../chat/components/chat-sidebar-content-types.ts";
 import type { NewSessionAttachmentDraft } from "./attachment-draft.ts";
 import {
@@ -466,29 +470,29 @@ export function NewSessionComposer(props: { options: NewSessionComposerOptions }
             !props.options.textareaController.capabilityMenuOpen
           }
         />
-        <LitContent
-          value={props.options.textareaController.mentionMenu.render(
+        <HumanMentionMenuView
+          args={[
+            props.options.textareaController.mentionMenu,
             frame().mentionMenuHost,
             props.options.requestUpdate,
-          )}
+          ]}
         />
-        <LitContent
-          value={props.options.textareaController.emojiMenu.render(
+        <EmojiMenu
+          args={[
+            props.options.textareaController.emojiMenu,
             "new-session",
             props.options.textareaController.getTextarea(),
             props.options.requestUpdate,
-          )}
+          ]}
         />
         <Show when={!props.options.nativeTerminal}>
           <LitContent value={renderChatAttachmentInputs(frame().attachmentProps)} />
         </Show>
-        <LitContent
-          value={renderSelectedHumanMentions(
-            props.options.message,
-            props.options.mentions,
-            () => props.options.onInput(props.options.message, []),
-            props.options.textareaController.mentionMenu.selectedAvatarUrls,
-          )}
+        <SelectedHumanMentions
+          text={props.options.message}
+          mentions={props.options.mentions}
+          onRemove={() => props.options.onInput(props.options.message, [])}
+          avatarUrls={props.options.textareaController.mentionMenu.selectedAvatarUrls}
         />
         <LitContent value={renderAttachmentPreview(frame().attachmentProps)} />
         <LitContent
@@ -498,22 +502,22 @@ export function NewSessionComposer(props: { options: NewSessionComposerOptions }
         <div class="agent-chat__composer-input-row">
           <div class="agent-chat__composer-combobox">
             <Show when={frame().slashMenuVisible}>
-              <LitContent
-                value={renderSlashMenu(
+              <SlashMenu
+                args={[
                   props.options.textareaController.slashMenuState,
                   frame().slashMenuHost,
                   props.options.message,
                   props.options.requestUpdate,
-                )}
+                ]}
               />
             </Show>
             <Show when={frame().skillMenuVisible}>
-              <LitContent
-                value={renderSkillMenu(
+              <SkillMenu
+                args={[
                   props.options.textareaController.skillMenuState,
                   frame().skillMenuHost,
                   props.options.requestUpdate,
-                )}
+                ]}
               />
             </Show>
             <textarea

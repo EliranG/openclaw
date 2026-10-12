@@ -1,9 +1,12 @@
 /* @vitest-environment jsdom */
 
 import { createSignal, flush } from "solid-js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { createDeferred } from "../../../../test/helpers/promise.ts";
+import { createTestGatewayClient } from "../../test-helpers/gateway-client.ts";
 import { mountSolid } from "../../test-helpers/mount-solid.ts";
 import type * as ComposerDictationModule from "../chat/composer-dictation.ts";
+import { NewSessionComposerTextareaController } from "./composer-controller.ts";
 import { NewSessionDictationView, NewSessionDictationStatus } from "./composer-dictation-view.tsx";
 
 const dictationHarness = vi.hoisted(() => ({
@@ -218,6 +221,48 @@ describe("NewSessionDictationControl", () => {
     container.querySelector<HTMLButtonElement>(".chat-send-btn--dictation-commit")?.click();
     await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
     expect(controller.finishActive).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not submit a replacement route after finishing the previous draft's dictation", async () => {
+    const textarea = new NewSessionComposerTextareaController();
+    const client = createTestGatewayClient(async () => ({}));
+    const onSubmit = vi.fn();
+    const control = new NewSessionDictationControl({
+      textarea,
+      getClient: () => client,
+      isConnected: () => true,
+      canCommit: () => true,
+      onMessage: vi.fn(),
+      onError: vi.fn(),
+      onSubmit,
+      requestUpdate: vi.fn(),
+    });
+    onTestFinished(() => {
+      control.dispose();
+      textarea.disconnect();
+    });
+    const [owner, setOwner] = createSignal("agent-a");
+    const [revision, setRevision] = createSignal({});
+    const { container } = mountSolid(() => (
+      <NewSessionDictationView control={control} ownerKey={owner()} renderRevision={revision()} />
+    ));
+    const dictation = dictationHarness.controllers[0];
+    if (!dictation) {
+      throw new Error("Expected the initial draft's dictation controller");
+    }
+    dictation.active = true;
+    setRevision({});
+    flush();
+    const finishing = createDeferred<boolean>();
+    dictation.finishActive.mockReturnValueOnce(finishing.promise);
+    container.querySelector<HTMLButtonElement>(".chat-send-btn--dictation-commit")?.click();
+    expect(dictation.finishActive).toHaveBeenCalledOnce();
+
+    setOwner("agent-b");
+    flush();
+    finishing.resolve(true);
+    await finishing.promise;
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("cancels active dictation and drops its late transcript when the route owner changes", () => {

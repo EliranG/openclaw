@@ -13,7 +13,7 @@ import "../../styles/chat/composer-surface.css";
 import "../../styles/new-session.css";
 import "../../styles/new-session-attachment-panel.css";
 import { chatStartupStatusLabel } from "../chat/chat-run-startup.ts";
-import { renderChatPermissionPicker } from "../chat/components/chat-permission-picker.ts";
+import { ChatPermissionPicker } from "../chat/components/chat-permission-picker.tsx";
 import type { SidebarContent } from "../chat/components/chat-sidebar-content-types.ts";
 import { renderWelcomeState } from "../chat/components/chat-welcome.ts";
 import { CatalogBar } from "./catalog-target-view.tsx";
@@ -43,15 +43,13 @@ function DraftBlock(props: { page: () => NewSessionPageOwner; revision: () => ob
   const options = () => props.page().composerOptions();
   const permissionControl = (
     <Show when={!catalog.isTarget(props.page().data)}>
-      <LitContent
-        value={renderChatPermissionPicker({
-          canSelectFull: place().isAdmin(),
-          defaultMode: place().selectedAgent()?.defaultPermissionMode,
-          disabled: submission().submitting || Boolean(submission().pendingPlacement.sessionKey),
-          disabledReason: submission().submitting ? t("newSession.starting") : undefined,
-          mode: submission().permissionMode,
-          onSelect: (mode) => submission().setPermissionMode(mode ?? undefined),
-        })}
+      <ChatPermissionPicker
+        canSelectFull={place().isAdmin()}
+        defaultMode={place().selectedAgent()?.defaultPermissionMode}
+        disabled={submission().submitting || Boolean(submission().pendingPlacement.sessionKey)}
+        disabledReason={submission().submitting ? t("newSession.starting") : undefined}
+        mode={submission().permissionMode}
+        onSelect={(mode) => submission().setPermissionMode(mode ?? undefined)}
       />
     </Show>
   );

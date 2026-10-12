@@ -104,7 +104,7 @@ export class NewSessionDictationControl {
       voice: {
         connected,
         disabled: !enabled,
-        dictation,
+        readDictation: () => dictation,
         idleLabel: t("newSession.dictate"),
         microphonePicker: {
           devices: this.devicePicker.devices,

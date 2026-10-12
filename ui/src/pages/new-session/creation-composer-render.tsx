@@ -2,17 +2,17 @@ import { createMemo, Show } from "solid-js";
 import type { ImageLightboxItem } from "../../components/image-lightbox.types.ts";
 import type { HumanMention } from "../../lib/chat/chat-types.ts";
 import { t } from "../../lib/reactive/i18n.ts";
-import { LitContent, solidContent } from "../../lit/solid-content.tsx";
+import { solidContent } from "../../lit/solid-content.tsx";
 import { resolveChatAttachmentLimits } from "../chat/components/chat-attachment-admission.ts";
 import { getChatComposerState } from "../chat/components/chat-composer-state.ts";
-import { renderChatComposer, resetChatComposerState } from "../chat/components/chat-composer.ts";
+import { ChatComposer, resetChatComposerState } from "../chat/components/chat-composer.tsx";
 import type { CreationComposer as CreationComposerOwner } from "./creation-composer.ts";
 
 /** This view has no Gateway client: it can compose and stage, never execute session controls. */
 function prepareCreationComposer(
   composer: CreationComposerOwner,
   onOpenImage: (item: ImageLightboxItem) => void,
-): Parameters<typeof renderChatComposer>[0] {
+): Parameters<typeof ChatComposer>[0] {
   const { context, attachmentDraft } = composer;
   const reads = attachmentDraft.reads;
   const signal = reads.readSignal;
@@ -114,7 +114,7 @@ function CreationComposerContent(props: {
           {props.composer.error}
         </div>
       </Show>
-      <LitContent value={renderChatComposer(prepared())} />
+      <ChatComposer {...prepared()} renderRevision={props.renderRevision} />
     </section>
   );
 }
