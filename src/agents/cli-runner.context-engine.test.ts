@@ -324,7 +324,7 @@ describe("runPreparedCliAgent context engine lifecycle", () => {
     const finishBootstrap = createDeferred();
     const lifecycle: string[] = [];
     let requireScopedSource = false;
-    let expectedReadFence: typeof admission | undefined;
+    const expectedReadFence: { current: typeof admission | undefined } = { current: undefined };
     const source = composeSessionSourceAssertion([
       Object.assign(
         () => {
@@ -334,7 +334,9 @@ describe("runPreparedCliAgent context engine lifecycle", () => {
         },
         {
           prepareSessionSourceScope: async () => {
-            expect(resolveSessionTranscriptReadFence(sessionTarget)).toBe(expectedReadFence);
+            expect(resolveSessionTranscriptReadFence(sessionTarget)).toBe(
+              expectedReadFence.current,
+            );
             lifecycle.push("open");
             let active = true;
             return {
@@ -376,7 +378,7 @@ describe("runPreparedCliAgent context engine lifecycle", () => {
     );
     context.params.runId = "cli-scoped-source";
     context.params.admittedRunContext = await prepared.admit("embedded");
-    expectedReadFence = admission;
+    expectedReadFence.current = admission;
     lifecycle.length = 0;
     context.params.userTurnTranscriptRecorder = recorder;
     const run = runPreparedCliAgent(context);
