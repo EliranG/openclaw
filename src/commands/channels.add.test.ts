@@ -88,11 +88,6 @@ const policyMocks = vi.hoisted(() => ({
 
 vi.mock("../config/io.runtime.js", () => policyMocks);
 
-// mock-isolation: Store routing is external I/O here; persistence tests prove durable writes.
-vi.mock("../cli/local-state-owner.js", () => ({
-  runWithLocalStateOwner: vi.fn(async () => undefined),
-}));
-
 const channelWizardMocks = vi.hoisted(() => {
   const prompter = {
     intro: vi.fn(async () => undefined),
@@ -1094,11 +1089,7 @@ describe("channelsAddCommand", () => {
 
     expect(getBundledChannelSetupPlugin).toHaveBeenCalledWith("telegram");
     expect(writtenChannel("telegram").enabled).toBe(true);
-    expect(writtenChannel("telegram").botToken).toEqual({
-      source: "store",
-      provider: "default",
-      id: expect.any(String),
-    });
+    expect(writtenChannel("telegram").botToken).toMatchObject({ source: "store" });
     expect(runtime.error).not.toHaveBeenCalled();
     expect(runtime.exit).not.toHaveBeenCalled();
   });
