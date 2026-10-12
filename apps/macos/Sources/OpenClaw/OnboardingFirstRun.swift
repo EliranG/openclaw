@@ -7,6 +7,10 @@ enum OnboardingFirstRun {
         case welcome = 0, connection = 1, runtime = 2, aiSetup = 3
     }
 
+    enum Step {
+        case preparingRuntime, startingGateway, openingDashboard
+    }
+
     struct Fallback: Equatable {
         let page: Page
         let message: String?
@@ -24,6 +28,7 @@ enum OnboardingFirstRun {
     }
 
     static func run(
+        reportProgress: (Step) -> Void = { _ in },
         selectLocal: () throws -> Void,
         prepareRuntime: () async throws -> Void,
         startGateway: () async throws -> Void,
@@ -34,10 +39,12 @@ enum OnboardingFirstRun {
         var page = Page.connection
         do {
             try Task.checkCancellation()
+            reportProgress(.preparingRuntime)
             try selectLocal()
             page = .runtime
             try await prepareRuntime()
             try Task.checkCancellation()
+            reportProgress(.startingGateway)
             try await startGateway()
             try Task.checkCancellation()
             page = .connection
@@ -46,6 +53,7 @@ enum OnboardingFirstRun {
             }
             try Task.checkCancellation()
             page = .aiSetup
+            reportProgress(.openingDashboard)
             try await openDashboard()
             try Task.checkCancellation()
             markComplete()

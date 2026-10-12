@@ -532,17 +532,24 @@ final class OnboardingController: NSObject, NSWindowDelegate {
     }
 
     func show(page: OnboardingFirstRun.Page = .welcome, error: String? = nil) {
+        let replacingAutomaticSetup = self.automaticSetupTask != nil
         self.automaticSetupTask?.cancel()
+        if replacingAutomaticSetup { self.busyReason = nil }
         if ProcessInfo.processInfo.isNixMode {
             // Nix mode is fully declarative; onboarding would suggest interactive setup that doesn't apply.
             Self.markComplete()
             return
         }
+        self.present(
+            OnboardingView(initialPage: page, initialError: error),
+            replaceContent: replacingAutomaticSetup || page != .welcome)
+    }
+
+    func present(_ content: some View, replaceContent: Bool = true) {
         if let window {
-            if page != .welcome {
+            if replaceContent {
                 let frame = window.frame
-                window.contentViewController = NSHostingController(
-                    rootView: OnboardingView(initialPage: page, initialError: error))
+                window.contentViewController = NSHostingController(rootView: content)
                 window.setFrame(frame, display: false)
             }
             DockIconManager.shared.temporarilyShowDock()
@@ -550,7 +557,7 @@ final class OnboardingController: NSObject, NSWindowDelegate {
             AppActivation.shared.activate()
             return
         }
-        let hosting = NSHostingController(rootView: OnboardingView(initialPage: page, initialError: error))
+        let hosting = NSHostingController(rootView: content)
         let window = NSWindow(contentViewController: hosting)
         window.isRestorable = false
         window.title = "Welcome to OpenClaw"
@@ -635,6 +642,7 @@ final class OnboardingController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         guard let closing = notification.object as? NSWindow, closing === window else { return }
+        self.automaticSetupTask?.cancel()
         self.busyReason = nil
         self.window = nil
     }

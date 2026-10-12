@@ -18,9 +18,10 @@ struct OnboardingFirstRunTests {
         }
     }
 
-    @Test func `first run marks completion only after the dashboard loads`() async {
+    @Test func `first run presents each step before work and completes only after the dashboard loads`() async {
         var effects: [String] = []
         let fallback = await OnboardingFirstRun.run(
+            reportProgress: { effects.append("show \($0)") },
             selectLocal: { effects.append("local") },
             prepareRuntime: { effects.append("runtime") },
             startGateway: { effects.append("start") },
@@ -33,7 +34,10 @@ struct OnboardingFirstRunTests {
             },
             markComplete: { effects.append("complete") })
         #expect(fallback == nil)
-        #expect(effects == ["local", "runtime", "start", "capability", "dashboard loaded", "complete"])
+        #expect(effects == [
+            "show preparingRuntime", "local", "runtime", "show startingGateway", "start", "capability",
+            "show openingDashboard", "dashboard loaded", "complete",
+        ])
     }
 
     @Test(arguments: 0..<5)

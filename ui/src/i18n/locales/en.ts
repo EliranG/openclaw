@@ -2056,7 +2056,7 @@ export const en: TranslationMap & {
       connecting: "Connecting your AI...",
       verifying: "Checking a real conversation. This may take a minute or more.",
       using: "Using {label} ({modelRef}) on {gateway}",
-      thisMac: "This Mac",
+      thisComputer: "This computer",
       thisGateway: "this Gateway",
       alternatives: "Or use another AI",
       signInTitle: "Connect ChatGPT to get started",

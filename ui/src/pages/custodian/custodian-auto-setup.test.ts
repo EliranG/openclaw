@@ -6,6 +6,7 @@ import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import type { AgentsListResult } from "../../api/types.ts";
 import { createNativeDeviceSettingsCapability } from "../../app/native-device-settings.ts";
 import { createNativeDeviceSettingsSnapshot } from "../../test-helpers/native-device-settings.ts";
+import { flush } from "../../test-helpers/solid-settle.ts";
 import type { SetupAutoResult } from "./custodian-auto-setup.ts";
 import { createContext, mountPage } from "./custodian-page.test-harness.ts";
 
@@ -42,8 +43,26 @@ const reply = {
   action: "none",
 };
 type Page = Awaited<ReturnType<typeof mountPage>>["page"];
-async function settled(page: Page) {
-  await page.updateComplete;
+async function settled(page: Page, expected = () => true) {
+  await new Promise<void>((resolve) => {
+    const ready = () => {
+      const setup = page.store.autoSetup;
+      if (
+        !expected() ||
+        setup.pending ||
+        page.store.sending ||
+        setup.wizard.state.phase === "starting" ||
+        (setup.wizard.state.phase === "step" && setup.wizard.state.busy)
+      ) {
+        return;
+      }
+      unsubscribe();
+      resolve();
+    };
+    const unsubscribe = page.store.subscribe(ready);
+    ready();
+  });
+  flush();
   await page.updateComplete;
 }
 function click(page: Page, text: string) {
@@ -161,7 +180,7 @@ describe("custodian automatic setup", () => {
     );
     expect(page.textContent).toContain("Finish signing in?");
     click(page, "Yes");
-    await settled(page);
+    await settled(page, () => page.store.autoSetup.ready);
     expect(autoCalls).toBe(2);
     expect(page.textContent).toContain("Using ChatGPT");
     expect(page.textContent).toContain(reply.reply);

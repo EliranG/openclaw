@@ -57,9 +57,10 @@ has no macOS app asset, use the newest one that does, or build from source with
 ## First run
 
 Install and launch **OpenClaw.app**. On a fresh installation with no saved Gateway
-or configuration, the app prepares its bundled runtime, starts a Gateway on
-**This Mac**, and opens the dashboard's onboarding conversation. It never joins
-a discovered Gateway automatically.
+or configuration, a progress window appears while the app prepares its bundled
+runtime, starts a Gateway on **This Mac**, and opens the dashboard's onboarding conversation. It never joins
+a discovered Gateway automatically. The window shows the current step and closes
+once the dashboard is ready. Choose **Set up manually** to use native setup instead.
 
 The dashboard connects your AI, shows what it selected, and offers alternatives.
 You can choose another Gateway or review this Mac's permissions from the setup
@@ -68,7 +69,7 @@ permissions) in the same conversation. Grant macOS permissions any time from
 **Dashboard → Settings → This Mac → Permissions**.
 
 If runtime preparation, Gateway startup or authentication, or dashboard loading
-fails, the native setup window opens at the relevant step with the error. An
+fails, the same window switches to the relevant native setup step with the error. An
 older Gateway without automatic AI setup opens the native AI picker instead.
 Native setup remains available from the menu for manual recovery: choose
 **This Mac** or enter an existing Gateway's address, prepare the local runtime

@@ -20,6 +20,10 @@ extension OnboardingController {
         guard !Task.isCancelled, state.connectionMode == .unconfigured, !state.onboardingSeen else { return false }
         let task = Task {
             await OnboardingFirstRun.run(
+                reportProgress: { step in
+                    self.busyReason = step.title
+                    self.present(OnboardingFirstRunProgressView(step: step, setUpManually: { self.show() }))
+                },
                 selectLocal: {
                     guard GatewayProcessManager.shared.installation == .managed else {
                         throw GatewayHostingError(message: GatewayProcessManager.Installation.ownershipFailure)
@@ -63,7 +67,12 @@ extension OnboardingController {
         let fallback = await task.value
         self.automaticSetupTask = nil
         guard !task.isCancelled, !Task.isCancelled, state.connectionMode != .remote else { return true }
-        if let fallback { self.show(page: fallback.page, error: fallback.message) }
+        self.busyReason = nil
+        if let fallback {
+            self.show(page: fallback.page, error: fallback.message)
+        } else {
+            self.close()
+        }
         return true
     }
 }

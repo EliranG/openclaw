@@ -101,6 +101,7 @@ async function capture(page: Page, name: string, surface: Locator, content: Loca
   if (!parent) {
     return;
   }
+  await page.mouse.click(0, 0);
   const artifacts = createControlUiE2eArtifactDir(name, parent);
   const frame = await takeControlUiScreenshotFrame(page, surface, content, {
     elements: [surface],

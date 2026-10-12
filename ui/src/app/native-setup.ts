@@ -35,7 +35,10 @@ export function nativeSetupCapability(
   return {
     currentGateway: current
       ? {
-          name: current.kind === "local" ? t("custodian.autoSetup.thisMac") : current.name,
+          name:
+            current.kind === "local"
+              ? current.name || t("custodian.autoSetup.thisComputer")
+              : current.name,
           kind: current.kind,
         }
       : undefined,

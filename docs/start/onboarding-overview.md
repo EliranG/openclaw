@@ -78,8 +78,9 @@ CLI command docs: [`openclaw onboard`](/cli/onboard)
 ## macOS app onboarding
 
 [Download the macOS app](/platforms/macos#download), then open it. On a fresh
-install with no existing connection or configuration, the app prepares its local
-runtime, starts its own Gateway, and opens guided onboarding in the dashboard.
+install with no existing connection or configuration, a progress window shows the
+app preparing its local runtime, starting its own Gateway, and opening guided
+onboarding in the dashboard. **Set up manually** opens native setup instead.
 It does not automatically connect to a discovered Gateway. Existing local and
 remote setups keep their connection and native onboarding behavior.
 
