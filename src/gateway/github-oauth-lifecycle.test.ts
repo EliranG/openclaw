@@ -38,7 +38,12 @@ const mocks = vi.hoisted(() => ({
   refreshProfile: vi.fn(),
   removeProfile: vi.fn(),
   writeOAuthRecord:
-    vi.fn<(write: (record: GitHubOAuthRecord) => void, record: GitHubOAuthRecord) => void>(),
+    vi.fn<
+      (
+        write: (record: GitHubOAuthRecord) => Promise<void>,
+        record: GitHubOAuthRecord,
+      ) => Promise<void>
+    >(),
   resolveStatus: vi.fn(),
   updateConfig: vi.fn(),
 }));
@@ -909,7 +914,7 @@ describe("GitHub OAuth refresh and maintenance", () => {
       if (writes === 2) {
         throw new Error("final metadata write failed");
       }
-      write(record);
+      return write(record);
     });
     const lifecycle = createLifecycle();
 

@@ -428,11 +428,11 @@ describe("personal GitHub through authenticated Gateway RPC", () => {
         });
         expect(response.mock.calls[0]?.[0]).toBe(true);
         const { requestId } = response.mock.calls[0]![1] as { requestId: string };
-        const pending = readGitHubDeviceAuthorizationRecord(requestId);
+        const pending = await readGitHubDeviceAuthorizationRecord(requestId);
         if (!pending) {
           throw new Error("Expected shared device authorization");
         }
-        writeGitHubDeviceAuthorizationRecord({ ...pending, nextPollAtMs: Date.now() });
+        await writeGitHubDeviceAuthorizationRecord({ ...pending, nextPollAtMs: Date.now() });
         const polled = await rpc(alice, "tools.github.authorize.poll", { requestId });
         expect(polled.mock.calls[0]?.[1]).toMatchObject({ status: "success" });
       }
