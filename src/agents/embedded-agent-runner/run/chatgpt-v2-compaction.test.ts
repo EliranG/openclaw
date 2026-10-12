@@ -1,7 +1,7 @@
 import { zstdDecompressSync } from "node:zlib";
 import { createApiRegistry } from "@openclaw/ai";
 import { createOpenAIResponsesTransportStreamFn } from "@openclaw/ai/transports";
-import type { Model, StreamFn } from "@openclaw/llm-core";
+import type { Context, Model, StreamFn } from "@openclaw/llm-core";
 import { Type } from "typebox";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configureAiTransportHost, getAiTransportHost } from "../../../../packages/ai/src/host.js";
@@ -520,13 +520,14 @@ describe("ChatGPT V2 at the embedded normal request boundary", () => {
       config: { logging: { redactPatterns: ["PRIVATE_VALUE"] } },
     });
     const content = "PRIVATE_VALUE API_TOKEN = computeToken()";
-    const messages = f.sessionManager
-      .buildSessionContext()
-      .messages.filter(
-        (message) =>
-          message.role === "user" || message.role === "assistant" || message.role === "toolResult",
-      )
-      .map((message) => (message.role === "user" ? { ...message, content } : message));
+    const messages: Context["messages"] = [
+      { role: "user", content, timestamp: 1 },
+      ...f.sessionManager
+        .buildSessionContext()
+        .messages.filter(
+          (message) => message.role === "assistant" || message.role === "toolResult",
+        ),
+    ];
     await expect(
       boundary(f.session.agent.streamFn, model, { messages }, {}),
     ).resolves.toMatchObject({ providerReplay: { compactedWindow: { outputTokens: 5 } } });
