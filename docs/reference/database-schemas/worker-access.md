@@ -5919,14 +5919,10 @@ APIs retain other callers pending their owner-level cutover; these changes do no
 classify those callers as worker-only. Schemas, retention, stored bytes, and
 update behavior are unchanged.
 
-### Resident transcript read facts
+### Anchor read watermark facts
 
-Prepared transcript reads on the serialized agent execution worker borrow the
-session actor's committed watermark, cold-archive metadata, and projection
-counters. The existing scoped write receipt invalidates residency after another
-writer changes the session. These synchronous reads do not reacquire facts the
-actor already owns; payload rows still come from the same SQLite read snapshot.
-A missing, evicted, invalidated, or restarted actor uses the existing database
-reader, and arbitrary native snapshots do not borrow the actor's current view.
-The read-only scope never lends mutable actor state to a writer. Schema, stored
-bytes, retention, permissions, and update behavior are unchanged.
+An anchor read that already requires the current transcript projection returns its
+watermark from that same projection snapshot. It does not issue a separate retained
+watermark query. Standalone watermark reads and the early context-authority check
+keep their existing database readers. Schema, stored bytes, retention, permissions,
+and update behavior are unchanged.

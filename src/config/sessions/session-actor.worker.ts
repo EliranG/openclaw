@@ -43,7 +43,6 @@ import {
   cloneSessionActorStoredState,
   withSessionActorTransactionState,
 } from "./session-actor-transaction.js";
-import { registerSessionActorTranscriptReader } from "./session-actor-transcript-state.js";
 import type { SessionEntryWritePostimages } from "./session-entry-write-postimage.js";
 import { prepareSessionTurnPredicates } from "./session-turn-predicate.js";
 import { prepareVoiceTranscriptCommit } from "./session-turn.worker.js";
@@ -98,25 +97,6 @@ export function createSessionActorWorker(
     target: SessionActorTarget,
     sessionIds?: readonly string[],
   ) => readSqliteDatabaseScopedWriteToken(database.db, scopes(target, sessionIds));
-  const readTranscript = (database: OpenClawAgentDatabase, sessionId: string) => {
-    if (closed) {
-      return undefined;
-    }
-    for (const [key, resident] of residents) {
-      const state = resident.state;
-      if (state.hot.entry?.sessionId !== sessionId) {
-        continue;
-      }
-      const currentToken = token(database, state.hot.target, state.hot.dependencySessionIds);
-      if (currentToken === state.hot.writeToken) {
-        return state;
-      }
-      if (currentToken !== undefined) {
-        drop(key);
-      }
-    }
-    return undefined;
-  };
   const prepareEntryPatch = (database: OpenClawAgentDatabase, sessionKey: string) => {
     const before = residents.get(sessionKey)?.state;
     if (
@@ -245,12 +225,9 @@ export function createSessionActorWorker(
       let stale: Extract<SessionActorOutcome<never>, { kind: "stale-version" }> | undefined;
       try {
         database = context.open();
-        const opened = database;
         registerSessionActorEntryPatchOwner(database, prepareEntryPatch);
-        registerSessionActorTranscriptReader(database, (sessionId) =>
-          readTranscript(opened, sessionId),
-        );
         requireTarget(target);
+        const opened = database;
         if (command.type === "session.actor.read") {
           const before = read(database, target);
           context.admit("transaction", {

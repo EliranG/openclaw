@@ -18,7 +18,7 @@ import {
   toDatabaseOptions,
 } from "./session-accessor.sqlite-scope.js";
 import type { SessionTranscriptWatermark } from "./session-accessor.sqlite-transcript-watermark-read.js";
-import { readSessionActorTranscriptState } from "./session-actor-transcript-state.js";
+import { readSessionActorTransactionState } from "./session-actor-transaction.js";
 import { readTranscriptContextFacts } from "./session-transcript-context-facts.js";
 
 const retainedWatermarkQuery = createSqliteQueryCache((database) => {
@@ -55,7 +55,7 @@ export function readSessionTranscriptWatermarkInDatabase(
   database: OpenClawAgentReadOnlyDatabase,
   sessionId: string,
 ): SessionTranscriptWatermark {
-  const actor = readSessionActorTranscriptState(database, { sessionId });
+  const actor = readSessionActorTransactionState(database, { sessionId });
   if (actor) {
     return { ...actor.hot.transcript.watermark };
   }
