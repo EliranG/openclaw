@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { resolveTimerTimeoutMs } from "@openclaw/normalization-core/number-coercion";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
-import { runWithAgentToolSourceExecutionScope } from "../agents/agent-tool-source-execution-guard.js";
+import { runWithSessionSourceScope } from "../config/sessions/session-source-authority.js";
 import { racePromiseWithAbortSignal } from "../infra/abort-signal.js";
 import {
   isPrivateNodeInvokeCommand,
@@ -237,7 +237,7 @@ async function invokeNodeRegistryCore(
     turnSource,
   });
   const dispatchNode = node;
-  const dispatched = await runWithAgentToolSourceExecutionScope(
+  const dispatched = await runWithSessionSourceScope(
     params.isDispatchAuthorized,
     async () => {
       // Serialization can consume the budget or close caller-owned authority.
@@ -342,6 +342,7 @@ async function invokeNodeRegistryCore(
       params.onDispatchReady?.(requestId, dispatchDeadlineAtMs);
       return { result };
     },
+    { checkAfter: false },
   );
   // The prepared source ends at dispatch; the pending node reply owns its lifetime.
   return await dispatched.result;

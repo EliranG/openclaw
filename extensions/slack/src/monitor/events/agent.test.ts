@@ -769,7 +769,8 @@ describe("registerSlackAgentEvents", () => {
       if (rerouted) {
         harness.ctx.cfg = {
           ...harness.ctx.cfg,
-          agents: { list: [{ id: "main" }, { id: "other", default: true }] },
+          agents: { entries: { main: {}, other: {} } },
+          bindings: [{ agentId: "other", match: { channel: "slack", accountId: "default" } }],
         };
       }
       setRuntimeConfigSnapshot(harness.ctx.cfg);

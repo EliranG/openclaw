@@ -4,7 +4,6 @@ import {
   getAdmittedRunDelegatedAuthority,
   resolveAdmittedRunActiveAssertion,
 } from "../agents/admitted-run-context.js";
-import { runWithAgentToolSourceExecutionScope } from "../agents/agent-tool-source-execution-guard.js";
 import type { PreparedCliRunContext } from "../agents/cli-runner/types.js";
 import type { AnyAgentTool } from "../agents/tools/common.js";
 import {
@@ -18,6 +17,7 @@ import { readSessionEntryReadOnlyInWorker } from "../config/sessions/session-ent
 import { captureIncognitoSessionBinding } from "../config/sessions/session-incognito-binding.js";
 import {
   composeSessionSourceAssertion,
+  runWithSessionSourceScope,
   type SessionSourceAssertion,
 } from "../config/sessions/session-source-authority.js";
 import { registerAgentRunDelegatedAuthorityClosedHandler } from "../infra/agent-run-registry.js";
@@ -238,8 +238,11 @@ export async function prepareNodeClaudeSkillRuntime(
     assertCurrent();
     const skillsSnapshot = run.skillsSnapshot;
     const resources: SkillResourceDelivery | undefined = skillsSnapshot?.librarySelections?.length
-      ? await runWithAgentToolSourceExecutionScope(assertCurrent, () =>
-          prepareSkillResourceDelivery(skillsSnapshot, assertCurrent, [], context.workspaceDir),
+      ? await runWithSessionSourceScope(
+          assertCurrent,
+          () =>
+            prepareSkillResourceDelivery(skillsSnapshot, assertCurrent, [], context.workspaceDir),
+          { checkAfter: false },
         )
       : undefined;
     assertCurrent();
@@ -308,12 +311,16 @@ export async function invokeNodeClaudeSkillRuntime(params: {
     },
     onReady() {
       assertCurrent();
-      void runWithAgentToolSourceExecutionScope(assertCurrent, async () => {
-        assertCurrent();
-        await endpoint.send(
-          encodeNodeClaudeSkillMessage(runtime.init, NODE_CLAUDE_SKILLS_MESSAGE_BYTES),
-        );
-      }).catch((error: unknown) => controller.abort(error));
+      void runWithSessionSourceScope(
+        assertCurrent,
+        async () => {
+          assertCurrent();
+          await endpoint.send(
+            encodeNodeClaudeSkillMessage(runtime.init, NODE_CLAUDE_SKILLS_MESSAGE_BYTES),
+          );
+        },
+        { checkAfter: false },
+      ).catch((error: unknown) => controller.abort(error));
     },
     onError: (error) => controller.abort(error),
   });
@@ -327,10 +334,14 @@ export async function invokeNodeClaudeSkillRuntime(params: {
       throw new Error("Invalid paired-node skill message.");
     }
     if (message.type === "stdout") {
-      await runWithAgentToolSourceExecutionScope(assertCurrent, async () => {
-        assertCurrent();
-        params.onProgress(message.text);
-      });
+      await runWithSessionSourceScope(
+        assertCurrent,
+        async () => {
+          assertCurrent();
+          params.onProgress(message.text);
+        },
+        { checkAfter: false },
+      );
       return;
     }
     if (!runtime.workshop || !identity || calls.has(message.id) || calls.size >= 64) {
@@ -342,15 +353,19 @@ export async function invokeNodeClaudeSkillRuntime(params: {
     const result = await withGatewayToolCallerIdentity(identity, () =>
       handlers.callTool({ name: "skill_workshop", arguments: message.arguments }, signal),
     );
-    await runWithAgentToolSourceExecutionScope(assertCurrent, async () => {
-      assertCurrent();
-      await endpoint.send(
-        encodeNodeClaudeSkillMessage(
-          { type: "result", id: message.id, result },
-          NODE_CLAUDE_WORKSHOP_RESULT_BYTES,
-        ),
-      );
-    });
+    await runWithSessionSourceScope(
+      assertCurrent,
+      async () => {
+        assertCurrent();
+        await endpoint.send(
+          encodeNodeClaudeSkillMessage(
+            { type: "result", id: message.id, result },
+            NODE_CLAUDE_WORKSHOP_RESULT_BYTES,
+          ),
+        );
+      },
+      { checkAfter: false },
+    );
   };
   endpoint.onMessage((bytes) => {
     const callback = receive(bytes).finally(() => callbacks.delete(callback));

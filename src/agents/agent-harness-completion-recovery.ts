@@ -50,6 +50,34 @@ export async function readAdmittedHarnessCompletionInputAsync(
     storePath: params.storePath,
   });
   if (!memory) {
+    const binding = captureIncognitoSessionBinding({
+      agentId: params.claim.requesterAgentId,
+      sessionKey: params.claim.requesterSessionKey,
+      storePath: params.storePath,
+    });
+    if (binding) {
+      const snapshot = await binding.actor.sessions.history(
+        { assertCurrent: () => binding.actor.assertReadable() },
+        {
+          type: "session.history.harness-completion-source",
+          input: {
+            sessionKey: params.claim.requesterSessionKey,
+            sessionId: params.entry.sessionId,
+            lifecycleRevision: params.entry.lifecycleRevision,
+            claim: params.claim,
+            admission: resolveSessionTranscriptReadFence({
+              agentId: params.claim.requesterAgentId,
+              sessionId: params.claim.sessionId,
+            }),
+          },
+        },
+        binding.admissionSignal,
+      );
+      if (snapshot.readError) {
+        throw decodeSessionTranscriptWorkerReadError(snapshot.readError);
+      }
+      return snapshot.entry?.sessionId === params.claim.sessionId && snapshot.validInput;
+    }
     return withSessionTranscriptReadSource(
       {
         agentId: params.claim.requesterAgentId,
@@ -389,11 +417,9 @@ export function createHarnessCompletionSourceAssertion(params: {
       if (entry.restartRecoveryDeliveryRunId !== params.claim.sourceRunId) {
         refuse();
       }
-      return;
     }
-    // Bookkeeping retains the live host claim. Durable predicates are prepared
-    // by each effect owner and checked again at its synchronous effect callback.
-    admittedClaims.get(params.claim)?.();
+    // The durable requester receipt outlives the original source admission.
+    // Each effect scope prepares and validates that receipt before its callback.
   };
   const prepareSessionSource = async (checkWriteToken = false) => {
     const { claim } = params;

@@ -37,9 +37,11 @@ import { createSessionTranscriptOwnerPredicate } from "./session-accessor.sqlite
 import { appendTranscriptMessageSync } from "./session-accessor.sqlite-transcript-write.js";
 import { setCanonicalSqliteSessionMainKey } from "./session-canonical-key.js";
 import { assertSessionEntryCurrentAdmission } from "./session-entry-current-admission.js";
-import { readSessionEntryCurrentFactsInDatabase } from "./session-entry-current-admission.worker.js";
+import {
+  readSessionEntryCurrentFacts,
+  readSessionEntryCurrentFactsInDatabase,
+} from "./session-entry-current-admission.worker.js";
 import type { SessionEntryCurrentSource } from "./session-entry-current.types.js";
-import { readSessionEntryCurrentFacts } from "./session-entry-read.worker.js";
 
 const tempDirs = createTempDirTracker();
 const sessionKey = "agent:main:entry-revalidation";

@@ -25,6 +25,7 @@ import {
   assertCanonicalSessionKeyWrite,
   readWithCanonicalSessionAdmission,
   readWithCanonicalSessionReaderContinuation,
+  type CanonicalSessionReaderContinuation,
 } from "./session-canonical-key.js";
 import { projectSessionEntryCapabilityFacts } from "./session-entry-capability-facts.js";
 import type {
@@ -33,10 +34,6 @@ import type {
   SessionEntryCurrentSource,
 } from "./session-entry-current.types.js";
 import { captureSessionEntryReadSource } from "./session-entry-read-source.js";
-import type {
-  SessionEntryCurrentWorkerInput,
-  SessionEntryCurrentWorkerResult,
-} from "./session-transcript-worker.types.js";
 
 // One last-key/read-policy projection per native handle; the revision owner invalidates its facts.
 const currentEntryReads = new WeakMap<
@@ -223,9 +220,16 @@ export function requestSessionEntriesCurrentAdmission(
 }
 
 /** Canonical entry currency reuses parsed facts only at the same native connection revision. */
-export function readSessionEntryCurrentFacts(
-  request: SessionEntryCurrentWorkerInput,
-): SessionEntryCurrentWorkerResult {
+export function readSessionEntryCurrentFacts(request: {
+  database: { agentId: string; path: string };
+  scope: { agentId?: string; sessionKey: string; env?: NodeJS.ProcessEnv };
+  source?: SessionEntryCurrentSource;
+  continuation?: CanonicalSessionReaderContinuation;
+}): {
+  kind: "session-entry-current";
+  entry: SessionEntryCurrentFacts | undefined;
+  source?: ReturnType<typeof captureSessionEntryReadSource>;
+} {
   const sessionKey = request.scope.sessionKey;
   assertCanonicalSessionKeyWrite(sessionKey, request.scope.agentId);
   if (request.source) {
