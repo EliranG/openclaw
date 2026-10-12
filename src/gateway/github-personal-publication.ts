@@ -55,8 +55,6 @@ import type { WorkerSessionPlacementStore } from "./worker-environments/placemen
 
 export {
   preparePersonalRepositoryPublicationStatus,
-  presentPersonalGitHubPublicationStatus,
-  presentPersonalGitHubPublicationStatusAsync,
   type PreparedRepositoryPublicationStatus,
 } from "./github-personal-publication-status.js";
 

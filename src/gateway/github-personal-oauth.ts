@@ -44,7 +44,6 @@ import {
   resolvePersonalGitHubStatus,
   type PersonalGitHubAction,
 } from "./github-personal-status.js";
-export { personalGitHubStatus, personalGitHubStatusAsync } from "./github-personal-status.js";
 export type { PersonalGitHubAction } from "./github-personal-status.js";
 export type PersonalGitHubActionV2 = PersonalGitHubAction & { signal: AbortSignal };
 const profileDir = (profileId: string) =>
