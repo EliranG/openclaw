@@ -1271,6 +1271,7 @@ src/plugin-sdk/message-tool-delivery-hints.ts
 src/plugin-state/plugin-blob-store.types.ts
 src/plugin-state/plugin-state-error-cause.ts
 src/plugin-state/plugin-state-error.ts
+src/plugin-state/plugin-state-publication.ts
 src/plugin-state/plugin-state-worker-contract.ts
 src/plugins/activation-planner.ts
 src/plugins/activation-source-config.ts
@@ -2164,6 +2165,7 @@ src/config/sessions/provider-review-store.ts
 src/config/sessions/restart-recovery-receipt-state.ts
 src/config/sessions/session-accessor.sqlite-normalize.ts
 src/config/sessions/session-accessor.sqlite-parent-fork.ts
+src/config/sessions/session-accessor.sqlite-reclamation-publication.ts
 src/config/sessions/session-accessor.sqlite-replacement-worker.ts
 src/config/sessions/session-accessor.sqlite-visible-cursor.ts
 src/config/sessions/session-actor-memory-closed-turn.ts
@@ -2219,6 +2221,7 @@ src/config/sessions/session-bounded-context-selection.ts
 src/config/sessions/session-cache-ttl-prefix-values.ts
 src/config/sessions/session-entry-lineage.ts
 src/config/sessions/session-entry-patch-operation.ts
+src/config/sessions/session-entry-patch.ts
 src/config/sessions/session-entry-projection.ts
 src/config/sessions/session-entry-provenance.ts
 src/config/sessions/session-entry-public-patch.ts
@@ -2227,9 +2230,11 @@ src/config/sessions/session-entry-selection.ts
 src/config/sessions/session-entry-usage.ts
 src/config/sessions/session-harness-completion-input.ts
 src/config/sessions/session-history-visibility.ts
+src/config/sessions/session-lifecycle-worker-publication.ts
 src/config/sessions/session-memory-targets-policy.ts
 src/config/sessions/session-message-cut-content.ts
 src/config/sessions/session-message-cut-plan.ts
+src/config/sessions/session-native-binding.ts
 src/config/sessions/session-pending-final-settlement.ts
 src/config/sessions/session-pending-input-value.ts
 src/config/sessions/session-reset-boundary-event.ts
