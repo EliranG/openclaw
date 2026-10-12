@@ -36,6 +36,7 @@ import { resolveNonEnvSecretRefApiKeyMarker } from "../secrets/provider-credenti
 import { runTasksWithConcurrency } from "../utils/run-with-concurrency.js";
 import { ensureAuthProfileStoreAsync } from "./auth-profiles/store-runtime.js";
 import type { AuthProfileStore } from "./auth-profiles/types.js";
+import { collectConfiguredCatalogModels } from "./configured-model-entries.js";
 import { isNonSecretApiKeyMarker } from "./model-auth-markers.js";
 import { createPreparedModelCatalogProviderNormalizer } from "./model-catalog-provider-normalizer.js";
 import { mergeProviderModels, type SourceModelFields } from "./models-config.merge.js";
@@ -138,6 +139,7 @@ async function resolvePluginImplicitProviders(
 ): Promise<Record<string, ProviderConfig>> {
   const byOrder = groupPluginDiscoveryProvidersByOrder(providers);
   const merged: Record<string, ProviderConfig> = {};
+  let configuredModels: ReturnType<typeof collectConfiguredCatalogModels> | undefined;
   const selectedProviderIds = ctx.providerDiscoveryScope
     ? new Set([...ctx.providerDiscoveryScope.values()].flat())
     : undefined;
@@ -233,8 +235,10 @@ async function resolvePluginImplicitProviders(
           async () => {
             let result;
             if (!useStaticCatalog) {
+              configuredModels ??= collectConfiguredCatalogModels(catalogConfig);
               result = await runProviderCatalogWithTimeout({
                 provider,
+                configuredModels,
                 normalizeProviderForScope: ctx.normalizeProviderForScope,
                 authStore: ctx.authStore,
                 ...(providerIds !== undefined ? { providerIds } : {}),

@@ -47,6 +47,7 @@ describe("provider-catalog-live-runtime", () => {
     const { fetchGuard, fetchGuardMock } = buildFetchGuard({
       data: [
         { id: "chat-local", object: "model" },
+        { id: "local/chat-local", object: "model" },
         { id: "embed-local", object: "embedding" },
       ],
     });
@@ -60,7 +61,7 @@ describe("provider-catalog-live-runtime", () => {
         models: [],
       },
       configuredModels: [
-        ...["chat-local", "embed-local", "chat-typo"].map((modelId) => ({
+        ...["chat-local", "local/chat-local", "embed-local", "chat-typo"].map((modelId) => ({
           provider: "local",
           modelId,
         })),

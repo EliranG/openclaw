@@ -5,6 +5,40 @@ import lmstudioProviderDiscovery from "./provider-discovery.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
+it.each([undefined, [], [{ type: "embedding", key: "embed-local" }]])(
+  "preserves only successful implicit catalog diagnostics: %j",
+  async (models) => {
+    vi.stubGlobal(
+      "fetch",
+      withFetchPreconnect(
+        vi.fn(async () => {
+          if (!models) {
+            throw new Error("server offline");
+          }
+          return Response.json({ models });
+        }),
+      ),
+    );
+    const result = await lmstudioProviderDiscovery.catalog.run({
+      config: { agents: { defaults: { model: "lmstudio/gemma-typo" } } },
+      configuredModels: [{ provider: "lmstudio", modelId: "gemma-typo" }],
+      env: {},
+      resolveProviderApiKey: () => ({ apiKey: undefined }),
+      resolveProviderAuth: () => ({ apiKey: undefined, mode: "none", source: "none" }),
+    });
+    expect(result).toEqual(
+      models
+        ? {
+            providers: {},
+            outcomes: [
+              { provider: "lmstudio", status: "ready", unlistedConfiguredModelIds: ["gemma-typo"] },
+            ],
+          }
+        : null,
+    );
+  },
+);
+
 it.each([false, true])(
   "warns only from a successful LM Studio inventory (offline=%s)",
   async (offline) => {

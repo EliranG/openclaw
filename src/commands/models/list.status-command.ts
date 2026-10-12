@@ -126,16 +126,6 @@ function resolveStatusProviderUseIncompatibility(usage: StatusProviderUse) {
   return routeResolution?.kind === "incompatible" ? routeResolution : usage.runtimeIncompatibility;
 }
 
-function groupByProvider<T extends { provider: string }>(entries: readonly T[]): Map<string, T[]> {
-  const groups = new Map<string, T[]>();
-  for (const entry of entries) {
-    const group = groups.get(entry.provider) ?? [];
-    group.push(entry);
-    groups.set(entry.provider, group);
-  }
-  return groups;
-}
-
 type StatusRuntimeAuthStatus = "usable" | "missing" | "indeterminate";
 
 type StatusRuntimeAuthRouteBase = {
@@ -883,41 +873,43 @@ export async function modelsStatusCommand(
         return usage.evaluation.availability !== false;
       };
       const runtimeAuthRouteEntries: Array<readonly [string, StatusRuntimeAuthRoute]> = [
-        ...Array.from(groupByProvider(codexRuntimeAuthUsages)).map(([provider, usages]) => {
-          const representative =
-            usages.find((usage) => usage.evaluation.availability === true) ?? usages[0];
-          const effective = resolveRuntimeAuthRouteEffective(
-            codexProvider,
-            representative?.evaluation,
-          );
-          const availabilities = usages.map((usage) => usage.evaluation.availability);
-          const authStatus = availabilities.every((availability) => availability === true)
-            ? "usable"
-            : availabilities.some((availability) => availability === false)
-              ? "missing"
-              : "indeterminate";
-          const runtimeAvailability = representative?.runtimeAvailability;
-          const base: StatusRuntimeAuthRoute = {
-            provider,
-            runtime: "codex",
-            authProvider: codexProvider,
-            status: authStatus,
-            effective,
-          };
-          const route: StatusRuntimeAuthRoute =
-            runtimeAvailability?.status === "unavailable"
-              ? {
-                  ...base,
-                  status: "unavailable",
-                  authStatus,
-                  runtimeStatus: runtimeAvailability.status,
-                  runtimeReason: runtimeAvailability.reason,
-                  runtimeDetail: runtimeAvailability.detail,
-                  runtimePluginIds: runtimeAvailability.ownerPluginIds,
-                }
-              : base;
-          return [`${provider}:codex:${codexProvider}`, route] as const;
-        }),
+        ...Array.from(Map.groupBy(codexRuntimeAuthUsages, ({ provider }) => provider)).map(
+          ([provider, usages]) => {
+            const representative =
+              usages.find((usage) => usage.evaluation.availability === true) ?? usages[0];
+            const effective = resolveRuntimeAuthRouteEffective(
+              codexProvider,
+              representative?.evaluation,
+            );
+            const availabilities = usages.map((usage) => usage.evaluation.availability);
+            const authStatus = availabilities.every((availability) => availability === true)
+              ? "usable"
+              : availabilities.some((availability) => availability === false)
+                ? "missing"
+                : "indeterminate";
+            const runtimeAvailability = representative?.runtimeAvailability;
+            const base: StatusRuntimeAuthRoute = {
+              provider,
+              runtime: "codex",
+              authProvider: codexProvider,
+              status: authStatus,
+              effective,
+            };
+            const route: StatusRuntimeAuthRoute =
+              runtimeAvailability?.status === "unavailable"
+                ? {
+                    ...base,
+                    status: "unavailable",
+                    authStatus,
+                    runtimeStatus: runtimeAvailability.status,
+                    runtimeReason: runtimeAvailability.reason,
+                    runtimeDetail: runtimeAvailability.detail,
+                    runtimePluginIds: runtimeAvailability.ownerPluginIds,
+                  }
+                : base;
+            return [`${provider}:codex:${codexProvider}`, route] as const;
+          },
+        ),
         ...cliRuntimeAuthUsages.map((usage) => {
           const evaluation = authResolver.evaluateModelAuth(usage.runtime);
           const effective = resolveRuntimeAuthRouteEffective(usage.runtime, evaluation);
@@ -1413,7 +1405,7 @@ export async function modelsStatusCommand(
           ["missing", colorize(rich, theme.warn, "unknown")],
         ]);
 
-        for (const [provider, profiles] of groupByProvider(oauthProfiles)) {
+        for (const [provider, profiles] of Map.groupBy(oauthProfiles, ({ provider }) => provider)) {
           const usageKey = resolveUsageProviderId(provider, {
             credentialType: profiles[0]?.type,
           });

@@ -298,18 +298,25 @@ export async function resolveOllamaDiscoveryResult(params: {
     run: async () => {
       let unlistedConfiguredModelIds: string[] = [];
       const provider = await params.buildProvider(configuredBaseUrl, {
-        onListedModels: (names) => {
-          unlistedConfiguredModelIds = (params.ctx.configuredModels ?? [])
-            .filter(
-              (model) =>
-                model.provider === OLLAMA_PROVIDER_ID &&
-                (!model.baseUrl ||
-                  resolveOllamaApiBase(model.baseUrl) ===
-                    resolveOllamaApiBase(configuredBaseUrl)) &&
-                !findAvailableOllamaModelName(normalizeOllamaWireModelId(model.modelId), names),
-            )
-            .map((model) => model.modelId);
-        },
+        ...(params.ctx.configuredModels?.length
+          ? {
+              onListedModels: (names: string[]) => {
+                unlistedConfiguredModelIds = (params.ctx.configuredModels ?? [])
+                  .filter(
+                    (model) =>
+                      model.provider === OLLAMA_PROVIDER_ID &&
+                      (!model.baseUrl ||
+                        resolveOllamaApiBase(model.baseUrl) ===
+                          resolveOllamaApiBase(configuredBaseUrl)) &&
+                      !findAvailableOllamaModelName(
+                        normalizeOllamaWireModelId(model.modelId),
+                        names,
+                      ),
+                  )
+                  .map((model) => model.modelId);
+              },
+            }
+          : {}),
         discoveryMode: "strict",
         ...(discoveryApiKey ? { apiKey: discoveryApiKey } : {}),
       });

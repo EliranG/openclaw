@@ -1,4 +1,3 @@
-import { stripSelfProviderModelPrefix } from "@openclaw/model-catalog-core/provider-model-id-normalization";
 import { asOptionalRecord } from "@openclaw/normalization-core/record-coerce";
 import { resolveProviderRequestHeaders } from "../agents/provider-request-config.js";
 import type {
@@ -21,6 +20,7 @@ import {
 import {
   buildOpenAICompatibleLiveModels,
   readLiveModelCatalogId,
+  readLiveModelCatalogStringField,
   type ProjectedUpstreamProviderCatalogModel,
 } from "./provider-catalog-live-normalize.internal.js";
 import {
@@ -462,14 +462,16 @@ export async function buildOpenAICompatibleLiveProviderCatalog(
     const provider = await buildLiveModelProviderConfig({
       ...discovery.request,
       projectRows: (rows, fallback) => {
-        const listed = new Set(rows.map(readLiveModelCatalogId).filter(Boolean));
+        const listed = new Set(
+          rows.map((row) => readLiveModelCatalogStringField(row, "id")).filter(Boolean),
+        );
         unlistedConfiguredModelIds = (params.configuredModels ?? [])
           .filter(
             (model) =>
               normalizeProviderId(model.provider) === normalizeProviderId(params.providerId) &&
               (!model.baseUrl ||
                 model.baseUrl.replace(/\/+$/, "") === fallback.baseUrl.replace(/\/+$/, "")) &&
-              !listed.has(stripSelfProviderModelPrefix(params.providerId, model.modelId)),
+              !listed.has(model.modelId.trim()),
           )
           .map((model) => model.modelId);
         return projectRows(rows, fallback);

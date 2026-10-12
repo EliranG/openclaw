@@ -12,6 +12,7 @@ import {
 import { discoverLmstudioModels } from "./models.fetch.js";
 import {
   normalizeLmstudioModelKey,
+  type LmstudioModelWire,
   resolveLmstudioCanonicalModelKey,
   resolveLmstudioInferenceBase,
   resolveLmstudioServerBase,
@@ -88,35 +89,54 @@ export async function discoverLmstudioProvider(
       !options && explicit?.models?.length
         ? explicit.models
         : await discoverLmstudioModels({
-            onListedModels: (rows) => {
-              unlistedConfiguredModelIds = (ctx.configuredModels ?? [])
-                .filter((model) => {
-                  if (
-                    model.provider !== PROVIDER_ID ||
-                    (model.baseUrl &&
-                      resolveLmstudioServerBase(model.baseUrl) !==
-                        resolveLmstudioServerBase(baseUrl))
-                  ) {
-                    return false;
-                  }
-                  const modelKey = normalizeLmstudioModelKey(model.modelId);
-                  const canonicalKey = resolveLmstudioCanonicalModelKey({ modelKey, models: rows });
-                  return !rows.some(
-                    (row) =>
-                      row.key?.trim() === canonicalKey ||
-                      row.loaded_instances?.some((instance) => instance?.id?.trim() === modelKey),
-                  );
-                })
-                .map((model) => model.modelId);
-            },
+            ...(ctx.configuredModels?.length
+              ? {
+                  onListedModels: (rows: LmstudioModelWire[]) => {
+                    unlistedConfiguredModelIds = (ctx.configuredModels ?? [])
+                      .filter((model) => {
+                        if (
+                          model.provider !== PROVIDER_ID ||
+                          (model.baseUrl &&
+                            resolveLmstudioServerBase(model.baseUrl) !==
+                              resolveLmstudioServerBase(baseUrl))
+                        ) {
+                          return false;
+                        }
+                        const modelKey = normalizeLmstudioModelKey(model.modelId);
+                        const canonicalKey = resolveLmstudioCanonicalModelKey({
+                          modelKey,
+                          models: rows,
+                        });
+                        return !rows.some(
+                          (row) =>
+                            row.key?.trim() === canonicalKey ||
+                            row.loaded_instances?.some(
+                              (instance) => instance?.id?.trim() === modelKey,
+                            ),
+                        );
+                      })
+                      .map((model) => model.modelId);
+                  },
+                }
+              : {}),
             baseUrl,
             apiKey: resolvedDiscoveryApiKey ?? "",
             headers: resolvedHeaders,
             quiet,
             ...(!quiet && options ? options : {}),
           });
+    const outcomes = unlistedConfiguredModelIds.length
+      ? [
+          {
+            provider: PROVIDER_ID,
+            profileId: catalogProfileId,
+            status: "ready" as const,
+            unlistedConfiguredModelIds,
+          },
+        ]
+      : undefined;
     if (models.length === 0 && (options ? quiet : !apiKey && !explicit?.apiKey)) {
-      return null;
+      return options && outcomes ? { providers: {}, outcomes } : null;
     }
     const persistedApiKey = resolvePersistedLmstudioApiKey({
       currentApiKey: resolvedApiKey,
@@ -127,18 +147,7 @@ export async function discoverLmstudioProvider(
     });
     const persistedAuth = resolveLmstudioProviderAuthMode(persistedApiKey);
     return {
-      ...(unlistedConfiguredModelIds.length
-        ? {
-            outcomes: [
-              {
-                provider: PROVIDER_ID,
-                profileId: catalogProfileId,
-                status: "ready" as const,
-                unlistedConfiguredModelIds,
-              },
-            ],
-          }
-        : {}),
+      ...(outcomes ? { outcomes } : {}),
       provider: {
         ...explicitWithoutHeaders,
         baseUrl,
