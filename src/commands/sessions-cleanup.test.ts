@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.loadConfig,
+  loadConfig: mocks.loadConfig,
 }));
 
 vi.mock("./sessions-cleanup.runtime.js", () => ({

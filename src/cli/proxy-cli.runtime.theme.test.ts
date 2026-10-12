@@ -9,6 +9,7 @@ const { getRuntimeConfigMock, runProxyValidationMock } = vi.hoisted(() => ({
 
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: getRuntimeConfigMock,
+  captureRuntimeConfigAsyncReader: () => async () => getRuntimeConfigMock(),
 }));
 
 vi.mock("../infra/net/proxy/proxy-validation.js", () => ({

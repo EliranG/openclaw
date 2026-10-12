@@ -33,7 +33,7 @@ vi.mock("../infra/tailnet.js", async () => {
 });
 
 vi.mock("../config/config.js", async () => {
-  return { getRuntimeConfig: () => ({}) };
+  return { getRuntimeConfig: () => ({}), loadConfig: () => ({}) };
 });
 
 import { Command } from "commander";

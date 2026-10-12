@@ -91,8 +91,11 @@ vi.mock("openclaw/plugin-sdk/memory-core-host-runtime-cli", async (importOrigina
 }));
 vi.mock("openclaw/plugin-sdk/memory-core-host-runtime-core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("openclaw/plugin-sdk/memory-core-host-runtime-core")>()),
-  getRuntimeConfig,
   resolveDefaultAgentId,
+}));
+vi.mock("openclaw/plugin-sdk/runtime-config-snapshot", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("openclaw/plugin-sdk/runtime-config-snapshot")>()),
+  captureRuntimeConfigAsyncReader: () => async () => getRuntimeConfig(),
 }));
 
 let registerMemoryCli: typeof import("./cli.js").registerMemoryCli;
@@ -629,8 +632,6 @@ describe("memory cli", () => {
 
     const log = spyRuntimeLogs(defaultRuntime);
     await runMemoryCli(["status"]);
-
-    expect(getRuntimeConfig).toHaveBeenCalledWith({ skipPluginValidation: true });
 
     expect(probeVectorAvailability).not.toHaveBeenCalled();
     expectLogged(log, "Vector store: ready");
@@ -1326,8 +1327,6 @@ describe("memory cli", () => {
 
     const writeJson = spyRuntimeJson(defaultRuntime);
     await runMemoryCli(["search", "hidden codeword", "--agent", "main", "--json"]);
-
-    expect(getRuntimeConfig).toHaveBeenCalledWith({ skipPluginValidation: true });
 
     expect(firstWrittenJsonArg(writeJson)).toEqual({
       results: [],

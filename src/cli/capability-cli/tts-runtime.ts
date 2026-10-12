@@ -6,7 +6,7 @@ import {
   normalizeOptionalString,
 } from "@openclaw/normalization-core/string-coerce";
 import { resolveApiKeyForProviderCore } from "../../agents/model-auth.js";
-import { getRuntimeConfig } from "../../config/config.js";
+import { loadConfig } from "../../config/config.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { callGateway } from "../../gateway/call.js";
 import { buildGatewayConnectionDetailsWithResolvers } from "../../gateway/connection-details.js";
@@ -50,7 +50,7 @@ export async function runTtsConvert(params: {
   let attempts: NonNullable<TtsResult["attempts"]> = [];
   if (params.transport === "gateway") {
     const gatewayConnection = buildGatewayConnectionDetailsWithResolvers({
-      config: getRuntimeConfig(),
+      config: loadConfig(),
     });
     if (params.output && !isLoopbackHost(new URL(gatewayConnection.url).hostname)) {
       throw new Error(
@@ -248,7 +248,7 @@ function ttsProviderConfigHasApiKey(value: unknown): boolean {
 }
 
 export async function runTtsProviders(transport: CapabilityTransport, rawAgentId?: string) {
-  const cfg = getRuntimeConfig();
+  const cfg = loadConfig();
   if (transport === "gateway") {
     if (rawAgentId !== undefined) {
       throw new Error("--agent is only supported with local TTS provider inspection.");
@@ -305,7 +305,7 @@ export async function runTtsPersonas(transport: CapabilityTransport) {
       timeoutMs: 30_000,
     });
   }
-  const cfg = getRuntimeConfig();
+  const cfg = loadConfig();
   return resolveTtsPersonaList(cfg);
 }
 
@@ -352,7 +352,7 @@ export async function runTtsStateMutation(params: {
     });
   }
 
-  const cfg = getRuntimeConfig();
+  const cfg = loadConfig();
   const config = resolveTtsConfig(cfg);
   const prefsPath = await resolveTtsPrefsPathAsync(config);
   if (params.capability === "tts.enable" || params.capability === "tts.disable") {

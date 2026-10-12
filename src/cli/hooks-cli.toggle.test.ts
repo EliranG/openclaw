@@ -63,6 +63,7 @@ vi.mock("../agents/agent-scope.js", () => ({
 
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.getRuntimeConfig,
+  loadConfig: mocks.getRuntimeConfig,
   transformConfigFile: async ({ transform }: TransformConfigFileParams<HookStatusEntry>) => {
     const snapshot = await mocks.readConfigFileSnapshot();
     const transformed = await transform(

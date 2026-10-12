@@ -29,7 +29,10 @@ vi.mock("../../../globals.js", () => ({
 
 const pluginRegistry = createMockPluginRegistry([]);
 const loadPluginRegistryHandleMock = vi.fn(() => pluginRegistry);
-vi.mock("../../../config/config.js", () => ({ getRuntimeConfig: () => ({}) }));
+vi.mock("../../../config/config.js", () => ({
+  getRuntimeConfig: () => ({}),
+  loadConfig: () => ({}),
+}));
 vi.mock("../../../plugins/channel-plugin-ids.js", () => ({
   resolveConfiguredChannelPluginIds: () => ["configured-channel"],
   resolveDiscoverableScopedChannelPluginIds: (params: { channelIds: string[] }) =>

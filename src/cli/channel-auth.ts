@@ -12,7 +12,7 @@ import { resolveInstallableChannelPlugin } from "../commands/channel-setup/chann
 import { parseAccountSelector } from "../commands/channels/account-selector.js";
 import { parseChannelSelector } from "../commands/channels/channel-selector.js";
 import { requireValidConfigForWrite } from "../commands/config-validation.js";
-import { getRuntimeConfig, type OpenClawConfig } from "../config/config.js";
+import { loadConfig, type OpenClawConfig } from "../config/config.js";
 import { applyPluginAutoEnable } from "../config/plugin-auto-enable.js";
 import { callGateway } from "../gateway/call.js";
 import type { ChannelAccountStartOutcome } from "../gateway/server-channel-runtime.types.js";
@@ -78,7 +78,7 @@ async function isConfiguredAuthPlugin(
 
 async function resolveConfiguredAuthChannelInput(mode: ChannelAuthMode): Promise<string> {
   // Account callbacks need runtime values; this auto-enabled view is never persisted.
-  const cfg = applyPluginAutoEnable({ config: getRuntimeConfig(), env: process.env }).config;
+  const cfg = applyPluginAutoEnable({ config: loadConfig(), env: process.env }).config;
   const configured: string[] = [];
   for (const plugin of listChannelPlugins()) {
     if (supportsChannelAuthMode(plugin, mode) && (await isConfiguredAuthPlugin(plugin, cfg))) {
@@ -155,7 +155,7 @@ async function resolveChannelPluginForMode(
   }
   return {
     // Execution needs resolved runtime values; successful writes refresh this snapshot.
-    cfg: getRuntimeConfig(),
+    cfg: loadConfig(),
     channelInput,
     channelId,
     plugin,

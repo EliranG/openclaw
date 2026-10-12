@@ -107,7 +107,7 @@ beforeEach(() => {
       assertCurrent() {},
     }),
   );
-  vi.spyOn(runtimeConfig, "getRuntimeConfig").mockReturnValue(cfg);
+  vi.spyOn(runtimeConfig, "loadConfig").mockReturnValue(cfg);
   vi.spyOn(configLoader, "loadModelsConfigWithSource").mockResolvedValue({
     sourceConfig: cfg,
     resolvedConfig: cfg,

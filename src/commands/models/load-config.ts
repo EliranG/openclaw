@@ -2,7 +2,7 @@
 import { resolveCommandConfigWithSecrets } from "../../cli/command-config-resolution.js";
 import { getModelsCommandSecretTargetIds } from "../../cli/command-secret-targets.js";
 import {
-  getRuntimeConfig,
+  loadConfig,
   getRuntimeConfigSourceSnapshot,
   setRuntimeConfigSnapshot,
   type OpenClawConfig,
@@ -15,7 +15,7 @@ export async function loadModelsConfigWithSource(params: {
   runtime?: RuntimeEnv;
   skipPluginValidation?: boolean;
 }) {
-  const runtimeConfig = getRuntimeConfig(
+  const runtimeConfig = loadConfig(
     params.skipPluginValidation ? { skipPluginValidation: true } : undefined,
   );
   const pinnedSourceConfig = getRuntimeConfigSourceSnapshot();

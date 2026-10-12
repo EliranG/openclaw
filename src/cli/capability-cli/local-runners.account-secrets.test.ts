@@ -80,6 +80,7 @@ vi.mock("../../plugin-sdk/memory-core-bundled-runtime.js", async (importOriginal
 vi.mock("../../config/config.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../config/config.js")>()),
   getRuntimeConfig: () => hoisted.rawCfg,
+  loadConfig: () => hoisted.rawCfg,
 }));
 
 vi.mock("../cli-utils.js", () => ({

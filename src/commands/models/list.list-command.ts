@@ -11,7 +11,7 @@ import { modelKey } from "../../agents/model-ref-shared.js";
 import { ExpectedCliError } from "../../cli/failure-output.js";
 import { runWithLocalStateOwner } from "../../cli/local-state-owner.js";
 import { requestExitAfterOneShotOutput } from "../../cli/one-shot-exit.js";
-import { getRuntimeConfig } from "../../config/config.js";
+import { loadConfig } from "../../config/config.js";
 import { callGateway, isImplicitLocalGatewayTarget } from "../../gateway/call.js";
 import { readActiveGatewayLockIdentity } from "../../infra/gateway-lock.js";
 import { startProxy, stopProxy } from "../../infra/net/proxy/proxy-lifecycle.js";
@@ -57,7 +57,7 @@ export async function modelsListCommand(
   }
   const provider = rawProvider ? normalizeProviderId(rawProvider) : undefined;
   // Gateway selection needs connection config, not local provider credentials or plugins.
-  const cfg = getRuntimeConfig({ skipPluginValidation: true });
+  const cfg = loadConfig({ skipPluginValidation: true });
   const params: ModelsListParams = {
     ...(opts.agent?.trim() ? { agentId: opts.agent.trim() } : {}),
     view: opts.all || provider ? "all" : "default",

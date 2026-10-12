@@ -75,6 +75,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.getRuntimeConfig,
+  captureRuntimeConfigAsyncReader: () => async () => mocks.getRuntimeConfig(),
 }));
 
 vi.mock("../../packages/gateway-client/src/readiness.js", () => ({

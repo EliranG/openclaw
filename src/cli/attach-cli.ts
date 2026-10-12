@@ -4,7 +4,7 @@ import { constants as osConstants, tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseStrictPositiveInteger } from "@openclaw/normalization-core/number-coercion";
 import type { Command } from "commander";
-import { getRuntimeConfig } from "../config/io.js";
+import { loadConfig } from "../config/io.js";
 import { defaultRuntime } from "../runtime.js";
 import { getAsyncWorkSignal } from "../shared/async-work-scope.js";
 import {
@@ -88,7 +88,7 @@ export async function registerAttachCli(program: Command) {
           }
         }
 
-        const cfg = getRuntimeConfig();
+        const cfg = loadConfig();
         const requestedGateway: SessionTargetGateway = {
           config: cfg,
           url: opts.url,

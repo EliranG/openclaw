@@ -10,7 +10,7 @@ import {
   loadAuthProfileStoreForRuntime,
 } from "../../agents/auth-profiles.js";
 import {
-  getRuntimeConfig,
+  loadConfig,
   getRuntimeConfigSourceSnapshot,
   setRuntimeConfigSnapshot,
 } from "../../config/config.js";
@@ -141,7 +141,7 @@ export async function resolveLocalCapabilityRuntimeConfig(params: {
   optionalActivePaths?: Set<string>;
   config?: OpenClawConfig;
 }): Promise<OpenClawConfig> {
-  const cfg = params.config ?? getRuntimeConfig();
+  const cfg = params.config ?? loadConfig();
   const { effectiveConfig } = await resolveCommandConfigWithSecrets({
     config: cfg,
     commandName: params.commandName,

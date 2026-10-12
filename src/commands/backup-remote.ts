@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
-import { getRuntimeConfig } from "../config/config.js";
+import { loadConfig } from "../config/config.js";
 import type { BackupCreateOptions, BackupCreateResult } from "../infra/backup-create.js";
 import {
   createRemoteBackupKey,
@@ -46,7 +46,7 @@ export type OffsiteBackupResult = BackupCreateResult & {
 type RemoteBackupOptions = { from: string; namespace?: string; json?: boolean };
 
 async function openBackupLocation(name: string, namespace?: string): Promise<StorageLocation> {
-  const location = await openStorageLocation({ name, config: getRuntimeConfig() });
+  const location = await openStorageLocation({ name, config: loadConfig() });
   try {
     const probe = await location.probe();
     if (probe.state !== "ok") {

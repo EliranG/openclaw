@@ -17,7 +17,7 @@ import {
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
 } from "../agents/agent-scope.js";
-import { getRuntimeConfig } from "../config/config.js";
+import { loadConfig } from "../config/config.js";
 import { resolveGatewayPort } from "../config/paths.js";
 import { CLAWHUB_TRUST_ERROR_CODE } from "../infra/clawhub-install-trust.js";
 import {
@@ -120,7 +120,7 @@ function normalizeExplicitAgentId(agentId?: string): string | undefined {
 
 function resolveSkillsWorkspace(options?: ResolveSkillsWorkspaceOptions) {
   // Prefer explicit --agent, then infer from cwd, then fall back to configured default agent.
-  const config = getRuntimeConfig(
+  const config = loadConfig(
     options?.skipPluginValidation ? { skipPluginValidation: true } : undefined,
   );
   const explicitAgentId = normalizeExplicitAgentId(options?.agentId);
@@ -187,7 +187,7 @@ function resolveClawHubTargetWorkspace(
     return undefined;
   }
   if (opts.global) {
-    return { config: getRuntimeConfig(), workspaceDir: CONFIG_DIR };
+    return { config: loadConfig(), workspaceDir: CONFIG_DIR };
   }
   return resolveSkillsWorkspace({ agentId });
 }

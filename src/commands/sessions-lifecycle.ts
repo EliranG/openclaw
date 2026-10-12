@@ -11,7 +11,7 @@ import { formatCliCommand } from "../cli/command-format.js";
 import { formatCliJsonFailure, rethrowExpectedCliError } from "../cli/failure-output.js";
 import { callGatewayFromCliWithTransport } from "../cli/gateway-rpc.js";
 import { quoteCliArg } from "../cli/quote-cli-arg.js";
-import { getRuntimeConfig } from "../config/config.js";
+import { loadConfig } from "../config/config.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { type RuntimeEnv, writeRuntimeJson } from "../runtime.js";
 import { SESSION_ARCHIVE_REQUEST_TIMEOUT_MS } from "../shared/session-archive-timeout.js";
@@ -62,7 +62,7 @@ function resolveLifecycleAgentId(rawAgent: string | undefined): string | undefin
   if (rawAgent !== undefined && !requested) {
     throw new Error("--agent must not be blank");
   }
-  return requested ? resolveConfiguredAgentId(getRuntimeConfig(), requested) : undefined;
+  return requested ? resolveConfiguredAgentId(loadConfig(), requested) : undefined;
 }
 
 function listHint(agent?: string): string {

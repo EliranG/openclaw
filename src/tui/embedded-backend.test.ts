@@ -236,6 +236,7 @@ vi.mock("../gateway/server-methods/models-list-result.js", () => ({
 
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: () => getRuntimeConfigMock(),
+  captureRuntimeConfigAsyncReader: () => async () => getRuntimeConfigMock(),
   loadConfig: () => getRuntimeConfigMock(),
   registerConfigWriteListener: (
     listener: (event: { runtimeConfig: Record<string, unknown> }) => void,

@@ -3,7 +3,7 @@ import {
   resolveConfiguredAgentId,
   resolveDefaultAgentId,
 } from "../agents/agent-scope.js";
-import { getRuntimeConfig } from "../config/config.js";
+import { loadConfig } from "../config/config.js";
 import { type RuntimeEnv, writeRuntimeJson } from "../runtime.js";
 import {
   createOnboardingRecommendationsStore,
@@ -40,7 +40,7 @@ function createDefaultOnboardingRecommendationsStore(
   if (requestedAgentId !== undefined && !requested) {
     throw new Error("--agent must not be blank");
   }
-  const cfg = getRuntimeConfig();
+  const cfg = loadConfig();
   const agentId = requested ? resolveConfiguredAgentId(cfg, requested) : resolveDefaultAgentId(cfg);
   const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
   return createOnboardingRecommendationsStore({ workspaceDir });

@@ -18,6 +18,7 @@ const mocks = await vi.hoisted(async () => {
 
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.getRuntimeConfig,
+  loadConfig: mocks.getRuntimeConfig,
   transformConfigFileWithRetry: mocks.transformConfigFileWithRetry,
 }));
 vi.mock("../infra/telemetry.js", () => ({

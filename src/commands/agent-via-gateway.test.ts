@@ -251,6 +251,7 @@ vi.mock("../config/gateway-dispatch-config.js", () => ({
 }));
 vi.mock("../config/io.js", () => ({
   getRuntimeConfig: loadRuntimeConfig,
+  captureRuntimeConfigAsyncReader: () => async () => loadRuntimeConfig(),
   loadConfig: loadRuntimeConfig,
 }));
 vi.mock("../gateway/call.js", () => ({

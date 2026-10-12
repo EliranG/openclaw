@@ -15,7 +15,10 @@ const fixture = vi.hoisted(() => ({
   runtime: { log: vi.fn(), error: vi.fn(), exit: vi.fn() },
 }));
 
-vi.mock("../config/config.js", () => ({ getRuntimeConfig: () => fixture.config }));
+vi.mock("../config/config.js", () => ({
+  getRuntimeConfig: () => fixture.config,
+  loadConfig: () => fixture.config,
+}));
 vi.mock("../commands/config-validation.js", () => ({
   requireValidConfigForWrite: async () => ({
     snapshot: { sourceConfig: fixture.config, hash: "fixture" },

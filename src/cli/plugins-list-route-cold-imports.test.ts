@@ -23,6 +23,7 @@ vi.mock("./command-execution-startup.js", () => ({
 
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: () => testState.config,
+  loadConfig: () => testState.config,
 }));
 
 vi.mock("../runtime.js", () => ({

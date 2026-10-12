@@ -40,6 +40,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../config/config.js", () => ({
   assertConfigWriteAllowedInCurrentMode: vi.fn(),
   getRuntimeConfig: mocks.getRuntimeConfig,
+  loadConfig: mocks.getRuntimeConfig,
   readConfigFileSnapshot: vi.fn(),
   replaceConfigFile: vi.fn(),
 }));

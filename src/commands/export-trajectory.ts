@@ -8,7 +8,7 @@ import {
 } from "../agents/agent-scope-config.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import { throwExpectedCliError } from "../cli/failure-output.js";
-import { getRuntimeConfig } from "../config/config.js";
+import { loadConfig } from "../config/config.js";
 import { resolveSessionStorePathCore } from "../config/sessions/paths.js";
 import {
   loadSessionEntryReadOnly,
@@ -98,11 +98,11 @@ export async function exportTrajectoryCommand(
   let targetAgentId: string;
   try {
     targetAgentId = requestedAgent
-      ? resolveConfiguredAgentId(getRuntimeConfig(), requestedAgent)
+      ? resolveConfiguredAgentId(loadConfig(), requestedAgent)
       : resolveAgentIdFromSessionKey(
           sessionKey,
           classifySessionKeyShape(sessionKey) === "legacy_or_alias"
-            ? resolveAgentOperationAgentId(getRuntimeConfig())
+            ? resolveAgentOperationAgentId(loadConfig())
             : undefined,
         );
   } catch (error) {
@@ -110,7 +110,7 @@ export async function exportTrajectoryCommand(
   }
   let storePath = resolvedOpts.store
     ? resolveSessionStorePathCore(resolvedOpts.store, { agentId: targetAgentId })
-    : resolveSessionStorePathCore(getRuntimeConfig().session?.store, { agentId: targetAgentId });
+    : resolveSessionStorePathCore(loadConfig().session?.store, { agentId: targetAgentId });
   if (resolvedOpts.store) {
     try {
       storePath = resolveExplicitSessionStorePath({

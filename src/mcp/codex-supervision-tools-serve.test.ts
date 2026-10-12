@@ -16,7 +16,10 @@ const getRuntimeConfigMock = vi.hoisted(() =>
   vi.fn<() => import("../config/config.js").OpenClawConfig>(() => ({})),
 );
 
-vi.mock("../config/config.js", () => ({ getRuntimeConfig: getRuntimeConfigMock }));
+vi.mock("../config/config.js", () => ({
+  getRuntimeConfig: getRuntimeConfigMock,
+  captureRuntimeConfigAsyncReader: () => async () => getRuntimeConfigMock(),
+}));
 vi.mock("../plugins/tools.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../plugins/tools.js")>();
   return {

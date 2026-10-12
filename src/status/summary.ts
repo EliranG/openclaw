@@ -5,7 +5,7 @@ import { resolveAgentConfig } from "../agents/agent-scope.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { readStartupRecoveryWarning } from "../agents/main-session-recovery/main-session-restart-recovery-diagnostics.js";
 import { areRuntimeModelRefsEquivalent } from "../agents/model-runtime-aliases.js";
-import { getRuntimeConfig } from "../config/config.js";
+import { captureRuntimeConfigAsyncReader } from "../config/config.js";
 import { resolveProjectedSessionContextTokens } from "../config/sessions/context-token-provenance.js";
 import { resolveCanonicalMainSessionKey } from "../config/sessions/main-session-key.js";
 import {
@@ -319,7 +319,7 @@ export async function getStatusSummary(
   } = {},
 ) {
   const { includeSensitive = true, includeChannelSummary = true } = options;
-  const cfg = options.config ?? getRuntimeConfig();
+  const cfg = options.config ?? (await captureRuntimeConfigAsyncReader()());
   const channelScopeConfig =
     options.sourceConfig === undefined
       ? { config: cfg }

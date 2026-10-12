@@ -116,7 +116,7 @@ vi.mock("../runtime.js", async (importOriginal) => ({
     }),
   },
 }));
-vi.mock("../config/io.js", () => ({ getRuntimeConfig: () => ({}) }));
+vi.mock("../config/io.js", () => ({ getRuntimeConfig: () => ({}), loadConfig: () => ({}) }));
 
 import { callGateway } from "../gateway/call.js";
 import { defaultRuntime, ExitError } from "../runtime.js";

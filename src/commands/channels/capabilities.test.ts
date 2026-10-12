@@ -45,6 +45,7 @@ vi.mock("../../config/config.js", async () => {
   return {
     ...actual,
     getRuntimeConfig: mocks.loadConfig,
+    loadConfig: mocks.loadConfig,
     readConfigFileSnapshot: mocks.readConfigFileSnapshot,
     readConfigFileSnapshotForWrite: mocks.readConfigFileSnapshotForWrite,
     replaceConfigFile: mocks.replaceConfigFile,

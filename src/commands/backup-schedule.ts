@@ -6,7 +6,7 @@ import {
   type GatewayRpcOpts,
 } from "../cli/gateway-rpc.js";
 import { parseDurationMs } from "../cli/parse-duration.js";
-import { getRuntimeConfig } from "../config/config.js";
+import { loadConfig } from "../config/config.js";
 import {
   backupScheduleModeForDeclaration,
   buildBackupScheduleJob,
@@ -78,7 +78,7 @@ function resolveScheduleSpec(options: BackupScheduleOptions, everyMs: number): B
     if (!location) {
       throw new Error("--to must name a configured storage location.");
     }
-    if (!getRuntimeConfig({ skipPluginValidation: true }).storage?.locations?.[location]) {
+    if (!loadConfig({ skipPluginValidation: true }).storage?.locations?.[location]) {
       throw new Error(
         `Storage location "${location}" is not configured. Run openclaw storage list.`,
       );
@@ -114,10 +114,7 @@ function resolveScheduleSpec(options: BackupScheduleOptions, everyMs: number): B
     throw new Error("Use either --global-only or --agent <id>, not both.");
   }
   const agentId = agent
-    ? resolveConfiguredAgentId(
-        getRuntimeConfig({ skipPluginValidation: true }),
-        normalizeAgentId(agent),
-      )
+    ? resolveConfiguredAgentId(loadConfig({ skipPluginValidation: true }), normalizeAgentId(agent))
     : undefined;
   return {
     mode: "git",

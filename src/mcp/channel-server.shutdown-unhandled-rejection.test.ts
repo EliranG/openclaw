@@ -45,6 +45,7 @@ vi.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
 
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: vi.fn(() => ({})),
+  captureRuntimeConfigAsyncReader: () => async () => ({}),
 }));
 
 vi.mock("../version.js", async () => ({

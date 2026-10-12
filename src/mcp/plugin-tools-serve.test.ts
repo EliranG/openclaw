@@ -40,6 +40,7 @@ vi.mock("../agents/tools/gateway.js", () => ({
 
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: getRuntimeConfigMock,
+  captureRuntimeConfigAsyncReader: () => async () => getRuntimeConfigMock(),
 }));
 
 vi.mock("../logging/console.js", async (importOriginal) => {

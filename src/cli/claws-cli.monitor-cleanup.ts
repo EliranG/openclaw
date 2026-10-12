@@ -4,12 +4,12 @@ import {
   clawMonitorDrainSchema,
   type ClawMonitorCleanupGateway,
 } from "../claws/monitor-cleanup-contract.js";
-import { getRuntimeConfig } from "../config/config.js";
+import { loadConfig } from "../config/config.js";
 import { resolveCronJobsStorePathFromConfig } from "../cron/store.js";
 import { callGatewayFromCli } from "./gateway-rpc.js";
 
 const binding = () =>
-  resolveClawMonitorCleanupBinding(resolveCronJobsStorePathFromConfig(getRuntimeConfig()));
+  resolveClawMonitorCleanupBinding(resolveCronJobsStorePathFromConfig(loadConfig()));
 
 export const clawMonitorCleanupGateway: ClawMonitorCleanupGateway = {
   inspect: async (agentId) =>

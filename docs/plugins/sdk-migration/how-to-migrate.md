@@ -1377,6 +1377,26 @@ write `agents.entries`. This compatibility window adds no runtime warnings.
   </Step>
 </Steps>
 
+## Read prepared runtime config
+
+Use `readRuntimeConfig()` from `openclaw/plugin-sdk/runtime-config-snapshot`
+inside runtime handlers that need the current published config. It reads the
+prepared snapshot without opening storage and reports a missing-preparation
+error if the runtime has not loaded config yet. Prefer config already supplied
+by the handler or tool context when available.
+
+At a cold preparation boundary, use the same subpath's
+`await captureRuntimeConfigAsyncReader()()` and consume its returned config.
+That existing owner loads and publishes the snapshot asynchronously; later
+calls to `readRuntimeConfig()` read it directly.
+
+The SDK's `getRuntimeConfig(options?)` on `runtime-config-snapshot` and
+`memory-core-host-runtime-core` remains available with its synchronous cold-load
+behavior for released plugins. It is deprecated and warns once per plugin and
+runtime-config family per process. Migrate hot reads to
+`readRuntimeConfig` and cold preparation to `captureRuntimeConfigAsyncReader`.
+Removal requires the next Plugin SDK major; no stored-config migration is needed.
+
 ## Await strict transcript message preparation
 
 For `appendSessionTranscriptMessageByIdentityStrict` and

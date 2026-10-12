@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.getRuntimeConfig,
+  loadConfig: mocks.getRuntimeConfig,
 }));
 
 // mock-isolation: Exercise CLI selection without connecting to an operator Gateway.

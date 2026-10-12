@@ -31,6 +31,7 @@ vi.mock("../node-host/runner.js", () => ({
 vi.mock("../node-host/config.js", () => ({ loadNodeHostConfig: mocks.loadNodeHostConfig }));
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: vi.fn(() => ({})),
+  loadConfig: vi.fn(() => ({})),
   mutateConfigFileWithRetry: mocks.mutateConfigFileWithRetry,
 }));
 vi.mock("./node-cli/daemon.js", () => ({

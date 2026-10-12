@@ -33,6 +33,7 @@ function mockPluginListSnapshot(
 ): void {
   vi.doMock("../config/config.js", () => ({
     getRuntimeConfig: () => config,
+    loadConfig: () => config,
   }));
   vi.doMock("../plugins/status-snapshot.js", () => ({
     buildPluginRegistrySnapshotReport: () => ({

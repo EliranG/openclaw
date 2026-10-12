@@ -45,7 +45,10 @@ vi.mock("./local-state-owner.js", async (importOriginal) => ({
 }));
 vi.mock("../proxy-capture/ca.js", () => ({ ensureDebugProxyCa: ensureCa }));
 vi.mock("../proxy-capture/coverage.js", () => ({ buildDebugProxyCoverageReport: vi.fn() }));
-vi.mock("../config/config.js", () => ({ getRuntimeConfig: vi.fn() }));
+vi.mock("../config/config.js", () => ({
+  getRuntimeConfig: vi.fn(),
+  captureRuntimeConfigAsyncReader: () => async () => ({}),
+}));
 vi.mock("../infra/net/proxy/proxy-validation.js", () => ({ runProxyValidation: vi.fn() }));
 vi.mock("../state/openclaw-state-worker-context.js", () => ({
   captureOpenClawStateWorkerContext: () => ({ environment: {} }),
