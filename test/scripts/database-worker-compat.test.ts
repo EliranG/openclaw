@@ -100,7 +100,13 @@ it("checks same-file calls and propagates reachability through reviewed wrappers
     function bundled() { return ${second}(); }`,
   );
   expect(result.operations.size).toBe(0);
-  expect(result.violations).toHaveLength(2);
+  expect(result.violations).toEqual([
+    expect.stringContaining("extensions/plugin/runtime.ts:"),
+    expect.stringContaining(`${legacyFile}:`),
+    expect.stringContaining(
+      `${legacyFile}:${first}: reviewed compatibility operation is reachable`,
+    ),
+  ]);
 });
 
 it("requires the reviewed declaration's deprecation marker", () => {

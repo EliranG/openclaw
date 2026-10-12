@@ -205,8 +205,8 @@ export function inspectDatabaseWorkerCompatibility(
       if (ts.isTypeNode(node)) {
         return;
       }
-      if (ts.isIdentifier(node)) {
-        references.push(node);
+      if (ts.isCallExpression(node)) {
+        references.push(node.expression);
       }
       node.forEachChild(visit);
     };
