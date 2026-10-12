@@ -592,6 +592,7 @@ async function installPluginWithProgress(
     expectedIntegrity: params.entry.install.expectedIntegrity,
     extensionsDir: resolveDefaultPluginExtensionsDir(),
     onBeforePluginArtifactCommit: capabilityConsent.onBeforePluginArtifactCommit,
+    beforePersistentApply: params.beforePersistentApply,
     logger: {
       info: updateProgress,
       warn: (message: string) => {

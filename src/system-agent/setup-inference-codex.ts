@@ -60,6 +60,7 @@ type PrepareCodexRuntimeParams = {
   runtime: RuntimeEnv;
   workspace: string;
   beforePersistentEffect: () => void | Promise<void>;
+  beforePersistentApply: () => void;
   prompter?: WizardPrompter;
   automaticSetup?: true;
   modelRef?: string;
@@ -118,6 +119,7 @@ async function prepareCodexRuntimePlugin(
     {
       workspaceDir: params.workspace,
       beforePersistentEffect: params.beforePersistentEffect,
+      beforePersistentApply: params.beforePersistentApply,
       onCapabilityConsent,
       recordOfficialCapabilities: params.automaticSetup,
     },
@@ -133,6 +135,7 @@ async function prepareCodexRuntimePlugin(
     runtime: params.runtime,
     workspaceDir: params.workspace,
     beforePersistentEffect: params.beforePersistentEffect,
+    beforePersistentApply: params.beforePersistentApply,
     onCapabilityConsent,
     recordOfficialCapabilities: params.automaticSetup,
   });
@@ -190,6 +193,7 @@ export async function prepareAutomaticSetupCodex(params: {
   runtime: RuntimeEnv;
   workspace: string;
   beforePersistentEffect: () => void | Promise<void>;
+  beforePersistentApply: () => void;
   signal?: AbortSignal;
 }): Promise<{ ok: true; config: OpenClawConfig } | StageFailure> {
   return await withPluginLifecycleLease({ signal: params.signal }, async () => {
@@ -218,6 +222,7 @@ export async function stageCodexCandidate(
       runtime: ctx.params.runtime,
       workspace: ctx.workspace,
       beforePersistentEffect: ctx.beforePersistentEffect,
+      beforePersistentApply: () => throwIfSetupInferenceCancelled(ctx.params),
       prompter: ctx.params.prompter,
       automaticSetup: ctx.params.automaticSetup,
       modelRef,
@@ -339,6 +344,7 @@ export async function stageCodexCandidate(
       agentRuntimeId: "codex",
       agentDir: ctx.agentDir,
       beforePersistentEffect: () => ctx.beforePersistentEffect("credential"),
+      beforeWrite: () => throwIfSetupInferenceCancelled(ctx.params),
     });
     ctx.effects.credentialsSaved = true;
     return { ...candidate, authProfileId: saved.profile.profileId, config: saved.config };

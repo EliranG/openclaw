@@ -97,6 +97,7 @@ export async function enablePluginWithCapabilityConsent(
     onCapabilityConsent?: PluginCapabilityConsentHandler;
     recordOfficialCapabilities?: boolean;
     beforePersistentEffect?: () => void | Promise<void>;
+    beforePersistentApply?: () => void;
   } = {},
 ): Promise<PluginEnableResult> {
   const result = enableExplicitlySelectedPluginInConfig(cfg, pluginId, options);
@@ -137,6 +138,7 @@ export async function enablePluginWithCapabilityConsent(
           onCapabilityConsent: options.onCapabilityConsent,
           recordOfficialCapabilities: options.recordOfficialCapabilities,
           beforePersistentEffect: options.beforePersistentEffect,
+          beforePersistentApply: options.beforePersistentApply,
         });
       }
       return result;

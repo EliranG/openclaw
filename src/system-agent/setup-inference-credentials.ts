@@ -31,6 +31,7 @@ import {
   supportsSetupTextInference,
 } from "./setup-inference-auth-options.js";
 import {
+  type SaveSetupCredentialParams,
   type StagedCandidate,
   type StageContext,
   type StageFailure,
@@ -100,19 +101,9 @@ export async function isSetupCredentialReplacement(params: {
   );
 }
 
-export async function saveSetupCredential(params: {
-  profile: ProviderAuthResult["profiles"][number];
-  config: OpenClawConfig;
-  baseConfig: OpenClawConfig;
-  agentDir: string;
-  modelRef: string;
-  authChoice?: string;
-  pluginId?: string;
-  agentRuntimeId?: string;
-  beforePersistentEffect?: () => void | Promise<void>;
-  /** Retains the wizard auth owner's selected state directory and cancellation boundary. */
-  persistAuthProfiles?: (profiles: ProviderAuthResult["profiles"]) => Promise<void>;
-}): Promise<{ profile: ProviderAuthResult["profiles"][number]; config: OpenClawConfig }> {
+export async function saveSetupCredential(
+  params: SaveSetupCredentialParams,
+): Promise<{ profile: ProviderAuthResult["profiles"][number]; config: OpenClawConfig }> {
   const replacement = await isSetupCredentialReplacement({
     ...params,
     provider: params.profile.credential.provider,
@@ -178,6 +169,7 @@ export async function saveSetupCredential(params: {
     profiles: [candidate],
     config: prepared,
     agentDir: params.agentDir,
+    beforeWrite: params.beforeWrite,
   });
   return { profile: profiles[0]!, config: prepared };
 }
@@ -241,6 +233,10 @@ async function stagePreparedCandidate(
       beforePersistentEffect: () => {
         assertUtilitySeparation(ctx, modelTarget);
         return ctx.beforePersistentEffect("credential");
+      },
+      beforeWrite: () => {
+        throwIfSetupInferenceCancelled(ctx.params);
+        assertUtilitySeparation(ctx, modelTarget);
       },
     });
     ctx.effects.credentialsSaved = true;

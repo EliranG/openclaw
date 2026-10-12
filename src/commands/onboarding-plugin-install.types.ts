@@ -23,6 +23,7 @@ export type OnboardingPluginInstallOptions = {
   promptInstall?: boolean;
   autoConfirmSingleSource?: boolean;
   beforePersistentEffect?: () => void | Promise<void>;
+  beforePersistentApply?: () => void;
   onCapabilityConsent?: PluginCapabilityConsentHandler;
   recordOfficialCapabilities?: boolean;
 };

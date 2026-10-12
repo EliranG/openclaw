@@ -42,6 +42,7 @@ type RuntimePluginEnsureParams = {
   workspaceDir?: string;
   output?: "interactive" | "silent";
   beforePersistentEffect?: () => void | Promise<void>;
+  beforePersistentApply?: () => void;
   onCapabilityConsent?: PluginCapabilityConsentHandler;
   recordOfficialCapabilities?: boolean;
 };
@@ -170,6 +171,7 @@ async function ensureRuntimePluginForModelSelection(
       onCapabilityConsent,
       recordOfficialCapabilities: params.recordOfficialCapabilities,
       beforePersistentEffect: params.beforePersistentEffect,
+      beforePersistentApply: params.beforePersistentApply,
     });
     return finalizeRequiredRuntimePluginInstall(descriptor, {
       cfg: enableResult.config,
@@ -201,6 +203,7 @@ async function ensureRuntimePluginForModelSelection(
     onCapabilityConsent,
     recordOfficialCapabilities: params.recordOfficialCapabilities,
     beforePersistentEffect: params.beforePersistentEffect,
+    beforePersistentApply: params.beforePersistentApply,
   });
   return finalizeRequiredRuntimePluginInstall(descriptor, {
     cfg: result.cfg,

@@ -193,6 +193,7 @@ async function autoSetup(assertAuthority: () => void): Promise<SystemAgentSetupA
           runtime,
           signal,
           beforePersistentEffect: assertCurrent,
+          beforePersistentApply: assertCurrent,
         });
         if ("error" in prepared) {
           throw new Error(prepared.error);
