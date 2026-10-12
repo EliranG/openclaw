@@ -1,6 +1,6 @@
 import { hasAnyAuthProfileStoreSourceAsync } from "../../agents/auth-profiles/source-check.js";
 import { resolveContextTokensForModel } from "../../agents/context.js";
-import { resolveConversationCapabilityProfile } from "../../agents/conversation-capability-profile.js";
+import { prepareConversationCapabilityProfile } from "../../agents/conversation-capability-profile.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
 import { resolveExecDefaults } from "../../agents/exec-defaults.js";
 import { prepareInstalledSkillCatalog } from "../../agents/installed-skill-runtime.js";
@@ -41,7 +41,7 @@ export async function resolveWorkerToolAuthority(params: {
     sessionKey: sandboxSessionKey,
     agentId: turn.agentId,
   });
-  const capabilityProfile = resolveConversationCapabilityProfile({
+  const capabilityProfile = await prepareConversationCapabilityProfile({
     ...turn,
     sandboxSessionKey,
     sessionKey: sandboxSessionKey,

@@ -60,7 +60,7 @@ import { resolveEditorMediaAttachments } from "./session-rewind-editor-media.js"
 import { waitForTerminalSessionRunSettlement } from "./session-run-settlement.js";
 import { listSessionBranchesForGateway } from "./sessions-branches-list.js";
 import {
-  createUpstreamForkCurrentGuard,
+  prepareUpstreamForkCurrentGuard,
   resolveUpstreamForkHarness,
 } from "./sessions-fork-runtime-guard.js";
 import { loadAccessorSessionEntryForGatewayTarget, sessionLog } from "./sessions-shared.js";
@@ -312,59 +312,69 @@ async function mutatePreparedSessionAtMessage({
       }
       const creation = resolveOperatorSessionCreation(client);
       const sandbox = action === "fork" ? resolveCreatorSandbox(cfg, creation) : undefined;
-      const upstreamForkGuard =
-        upstreamLink && upstreamForkHarness
-          ? createUpstreamForkCurrentGuard({
-              client,
-              commitGuard: assertMutationCurrent,
-              context,
-              forkHarness: upstreamForkHarness,
-              requestedAgentId,
-              sessionKey,
-              source: current,
-              targetKey,
-            })
-          : { assertCurrent: assertMutationCurrent, assertRollbackCurrent: assertMutationCurrent };
-      if (upstreamForkHarness) {
-        try {
-          upstreamForkGuard.assertCurrent();
-        } catch (error) {
-          if (error instanceof SessionMutationAuthorizationChangedError) {
-            respond(false, undefined, error.error);
-            return;
-          }
-          throw error;
-        }
-      }
-      const upstreamFork =
-        upstreamLink && upstreamForkHarness
-          ? await withSessionInitializationSource(upstreamForkGuard, (assertCurrent) => {
-              const forkParams = {
+      let upstreamForkGuard: {
+        assertCurrent: () => void;
+        assertRollbackCurrent: () => void;
+        release?: () => void;
+      };
+      try {
+        upstreamForkGuard =
+          upstreamLink && upstreamForkHarness
+            ? await prepareUpstreamForkCurrentGuard({
+                client,
+                commitGuard: assertMutationCurrent,
+                context,
+                forkHarness: upstreamForkHarness,
+                requestedAgentId,
+                sessionKey,
+                source: current,
                 targetKey,
-                sandbox,
-                source: {
-                  agentId: current.agentId,
-                  sessionId: initialSessionId,
-                  sessionKey: current.canonicalKey,
-                  storePath: current.storePath,
-                  entryId,
-                },
-                upstream: {
-                  catalogId: upstreamLink.catalogId,
-                  hostId: upstreamLink.hostId,
-                  kind: upstreamLink.upstreamKind,
-                  threadId: upstreamLink.threadId,
-                  ref: upstreamLink.upstreamRef,
-                },
+              })
+            : {
+                assertCurrent: assertMutationCurrent,
+                assertRollbackCurrent: assertMutationCurrent,
               };
-              return upstreamForkHarness.contract === "v2"
-                ? upstreamForkHarness.sessionFork.fork({
-                    ...forkParams,
-                    assertCurrent,
-                  })
-                : upstreamForkHarness.sessionFork.fork(forkParams);
-            })
-          : undefined;
+      } catch (error) {
+        if (error instanceof SessionMutationAuthorizationChangedError) {
+          respond(false, undefined, error.error);
+          return;
+        }
+        throw error;
+      }
+      const upstreamFork = await (async () => {
+        try {
+          return upstreamLink && upstreamForkHarness
+            ? await withSessionInitializationSource(upstreamForkGuard, (assertCurrent) => {
+                const forkParams = {
+                  targetKey,
+                  sandbox,
+                  source: {
+                    agentId: current.agentId,
+                    sessionId: initialSessionId,
+                    sessionKey: current.canonicalKey,
+                    storePath: current.storePath,
+                    entryId,
+                  },
+                  upstream: {
+                    catalogId: upstreamLink.catalogId,
+                    hostId: upstreamLink.hostId,
+                    kind: upstreamLink.upstreamKind,
+                    threadId: upstreamLink.threadId,
+                    ref: upstreamLink.upstreamRef,
+                  },
+                };
+                return upstreamForkHarness.contract === "v2"
+                  ? upstreamForkHarness.sessionFork.fork({
+                      ...forkParams,
+                      assertCurrent,
+                    })
+                  : upstreamForkHarness.sessionFork.fork(forkParams);
+              })
+            : undefined;
+        } finally {
+          upstreamForkGuard.release?.();
+        }
+      })();
       if (upstreamFork?.status === "failed") {
         respond(
           false,

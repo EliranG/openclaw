@@ -165,10 +165,6 @@ export async function finalizeDispatchAndAudit(state: ExecuteDispatchReadyState)
           );
         registerReplyDispatcherSettledTask(dispatcher, () => outcome.then(settle));
       }
-      if (finalReply.sessionWriterDeliveryRevoked) {
-        sessionWriterDeliveryRevoked = true;
-        continue;
-      }
       if (finalReply.suppressionReason) {
         channelTransformSuppressedFinal ||= finalReply.suppressionReason === "channel_transform";
         if (!finalReply.blockDeliveryOutcome) {

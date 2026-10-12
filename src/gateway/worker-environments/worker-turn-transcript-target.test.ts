@@ -1,5 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { observeHostDataSql } from "../../../test/helpers/sqlite-statement-execution-counter.js";
+import {
+  isSessionEntryDataSql,
+  observeHostDataSql,
+} from "../../../test/helpers/sqlite-statement-execution-counter.js";
 import {
   patchSessionEntryCore,
   upsertSessionEntryCore,
@@ -14,6 +17,7 @@ import { withOpenClawTestState } from "../../test-utils/openclaw-test-state.js";
 import {
   resolveWorkerTurnTranscriptTarget,
   captureWorkerTurnTranscriptSource,
+  prepareWorkerTurnTranscriptSource,
   withWorkerTurnTranscriptDatabase,
 } from "./worker-turn-transcript-target.js";
 
@@ -157,12 +161,56 @@ it("preadmits cloud transcript guards and retains their handle through turn sett
         expect(result).toBe("settled");
         expect(releaseAuthority).toHaveBeenCalledOnce();
         expect(inspections).toEqual([]);
+        expect(observer.queries.filter(isSessionEntryDataSql)).toEqual([]);
       } finally {
         observer.restore();
         vi.useRealTimers();
       }
     } finally {
       await execution.release();
+    }
+  });
+});
+
+it("refuses a worker transcript effect after a committed writer change without host SQL", async () => {
+  await withOpenClawTestState({ scenario: "minimal" }, async (state) => {
+    const target = {
+      agentId: "main",
+      sessionKey: "agent:main:writer-receipt",
+      sessionId: "writer-receipt",
+      storePath: agentDatabase.resolveOpenClawAgentSqlitePath({ agentId: "main", env: state.env }),
+      expectedLifecycleRevision: "writer-lifecycle",
+      expectedWriterRunId: "first-writer",
+    };
+    await upsertSessionEntryCore(target, {
+      sessionId: target.sessionId,
+      lifecycleRevision: target.expectedLifecycleRevision,
+      activeWriterRunId: target.expectedWriterRunId,
+      updatedAt: 1,
+    });
+    const observer = observeHostDataSql();
+    try {
+      await using source = await prepareWorkerTurnTranscriptSource(target);
+      source();
+      await withWorkerTurnTranscriptDatabase(
+        { ...target, sessionTarget: target },
+        {
+          assertCurrent() {},
+          prepareAuthority: async () => ({ isCurrent: () => true, release() {} }),
+        },
+        async (pinned) => {
+          const effect = vi.fn(() => {
+            resolveWorkerTurnTranscriptTarget({ ...pinned, sessionTarget: pinned });
+          });
+          effect();
+          await patchSessionEntryCore(target, () => ({ activeWriterRunId: "next-writer" }));
+          expect(effect).toThrow("transcript identity is no longer current");
+          expect(source).toThrow("transcript identity is no longer current");
+        },
+      );
+      expect(observer.queries.filter(isSessionEntryDataSql)).toEqual([]);
+    } finally {
+      observer.restore();
     }
   });
 });

@@ -64,7 +64,7 @@ import {
 import { createPlacementWorkspaceResultOps } from "./placement-workspace-result.js";
 import { createWorkerSessionToolSourceRunner } from "./worker-session-tool-source.js";
 import { prepareWorkerAgentRuntimeIdentity } from "./worker-turn-payload.js";
-import { captureWorkerTurnTranscriptSource } from "./worker-turn-transcript-target.js";
+import { prepareWorkerTurnTranscriptSource } from "./worker-turn-transcript-target.js";
 
 const SESSION: WorkerSessionPlacementIdentity = {
   sessionId: "session-placement-claim-close",
@@ -224,7 +224,7 @@ it("retains worker-parent source predicates through tool execution and rejects a
     const active = await advanceToActive();
     const claim = await store.claimTurn(workerClaimInput("child-source", active));
     await store.authorizeWorkerTurnTools(claim, ["sessions_spawn"]);
-    const source = captureWorkerTurnTranscriptSource(target);
+    await using source = await prepareWorkerTurnTranscriptSource(target);
     const admission = prepareAgentRunAdmission({
       cfg: {},
       operationalRunInstance: createOperationalRunInstanceRef(claim.runId),

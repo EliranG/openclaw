@@ -1,7 +1,7 @@
 // Handles /learn by turning the command into a Skill Workshop authoring turn.
 import { resolveCliBackendConfig } from "../../agents/cli-backends.js";
 import { detectNodeClaudePlacement } from "../../agents/cli-runner/prepare-claude.js";
-import { resolveConversationCapabilityProfile } from "../../agents/conversation-capability-profile.js";
+import { prepareConversationCapabilityProfile } from "../../agents/conversation-capability-profile.js";
 import { selectAgentHarness } from "../../agents/harness/selection.js";
 import { agentHarnessExposesOpenClawTools } from "../../agents/harness/tool-surface.js";
 import {
@@ -53,7 +53,7 @@ function parseLearnCommand(raw: string): LearnCommand | null {
 }
 
 /** /learn needs a harness that exposes OpenClaw tools and a policy that allows skill_workshop. */
-function isWorkshopAvailable(params: HandleCommandsParams): boolean {
+async function isWorkshopAvailable(params: HandleCommandsParams): Promise<boolean> {
   if (
     params.opts?.disableTools ||
     params.opts?.toolsAllow?.length === 0 ||
@@ -132,7 +132,7 @@ function isWorkshopAvailable(params: HandleCommandsParams): boolean {
     if (modelCompat && !supportsModelTools({ compat: modelCompat })) {
       return false;
     }
-    const capabilityProfile = resolveConversationCapabilityProfile({
+    const capabilityProfile = await prepareConversationCapabilityProfile({
       config: params.cfg,
       agentId: sandboxRuntime.classificationAgentId,
       sessionKey: sandboxRuntime.classificationSessionKey,
@@ -208,11 +208,11 @@ export const handleLearnCommand: CommandHandler = defineAuthorizedTextCommand(
     // Undo changes skills without a model turn, so it takes the owner gate other writes use.
     ownerOnly: (_params, command) => command.kind === "undo",
   },
-  (params, command) => {
+  async (params, command) => {
     if (command.kind === "undo") {
       return undoReview(params, command.reviewId);
     }
-    if (!isWorkshopAvailable(params)) {
+    if (!(await isWorkshopAvailable(params))) {
       return commandReply(SKILL_WORKSHOP_UNAVAILABLE_REPLY);
     }
 

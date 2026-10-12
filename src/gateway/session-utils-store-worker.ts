@@ -70,8 +70,9 @@ export async function resolveGatewaySessionStoreTargetInWorker(params: {
   assertActive?: () => void;
   projection?: SessionEntryReadScope["projection"];
   preserveQualifiedAddress?: boolean;
+  onSelected?: (target: GatewaySessionStoreTargetWithStore) => void;
 }): Promise<GatewaySessionStoreTargetWithStore> {
-  const prepared = await prepareGatewaySessionStoreReadInWorker(params);
+  const prepared = await prepareGatewaySessionStoreReadInWorker(params, false, params.onSelected);
   params.assertActive?.();
   return prepared.target;
 }
@@ -192,17 +193,18 @@ async function prepareGatewaySessionStoreReadInWorker(
         { ordered: onSelected !== undefined },
       );
     };
-    const selected = retainPlan
-      ? await prepareGatewaySessionStoreTargetReadPlan(lookup, prepareReads, onSelected)
-      : {
-          target: await prepareGatewaySessionStoreTargetReadOnly(lookup, prepareReads),
-          plan: undefined,
-        };
+    const selected =
+      retainPlan || onSelected
+        ? await prepareGatewaySessionStoreTargetReadPlan(lookup, prepareReads, onSelected)
+        : {
+            target: await prepareGatewaySessionStoreTargetReadOnly(lookup, prepareReads),
+            plan: undefined,
+          };
     assertCurrent();
     return selected;
   }, params.assertActive);
   params.assertActive?.();
-  if (!prepared.plan) {
+  if (!retainPlan || !prepared.plan) {
     return { target: prepared.target };
   }
   const assertCurrent = () => {

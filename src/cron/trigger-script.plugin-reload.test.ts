@@ -46,7 +46,14 @@ describe("automation plugin reload recovery", () => {
     "uses current tools when the plugin retires %s without changing config",
     async (when) => {
       let generation = 0;
-      const prepareRuntime = vi.fn(async () => preparePluginRuntime(++generation).prepared);
+      const disposed: number[] = [];
+      const prepareRuntime = vi.fn(async () => {
+        const current = ++generation;
+        return {
+          ...preparePluginRuntime(current).prepared,
+          [Symbol.dispose]: () => disposed.push(current),
+        };
+      });
       const admissions: AdmittedRunContext[] = [];
       const started = vi.fn();
       const runtime = createCronScriptRuntime({ config: {}, prepareRuntime });
@@ -75,6 +82,7 @@ describe("automation plugin reload recovery", () => {
       expect(prepareRuntime).toHaveBeenCalledTimes(2);
       expect(admissions).toHaveLength(1);
       expect(started).toHaveBeenCalledOnce();
+      expect(disposed).toEqual([1]);
     },
   );
 

@@ -34,6 +34,8 @@ export type CodexNativeSubagentSubmission = z.infer<typeof submissionSchema>;
 export type CodexNativeSubagentSubmissions = z.infer<typeof submissionsSchema>;
 
 export type CodexNativeSubagentSubmissionStore = {
+  /** Retained source facts belong to the monitor until detached work settles. */
+  release?: () => void;
   assertCurrent(): void;
   read(): Promise<readonly CodexNativeSubagentSubmission[]>;
   record(receipt: CodexNativeSubagentSubmission, assertCurrent: () => void): Promise<boolean>;

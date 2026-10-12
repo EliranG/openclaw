@@ -8,7 +8,7 @@ import {
   resolveAgentWorkspaceDir,
   resolveAgentSkillsFilter,
 } from "../../agents/agent-scope.js";
-import { resolveConversationCapabilityProfile } from "../../agents/conversation-capability-profile.js";
+import { prepareConversationCapabilityProfile } from "../../agents/conversation-capability-profile.js";
 import { projectConversationToolNames } from "../../agents/conversation-tool-policy-pipeline.js";
 import type { ModelCatalogSnapshot } from "../../agents/model-catalog.types.js";
 import { splitTrailingAuthProfile } from "../../agents/model-ref-profile.js";
@@ -1036,7 +1036,7 @@ export async function getReplyFromConfig(
       (sandboxed && stagedAttachmentPaths.size > 0) ||
       (!sandboxed && resolveEffectiveToolFsRootExpansionAllowed({ cfg, agentId }))
     ) {
-      const capabilityProfile = resolveConversationCapabilityProfile({
+      const capabilityProfile = await prepareConversationCapabilityProfile({
         config: cfg,
         sessionKey: policySessionKey,
         runSessionKey: policySessionKey === sessionKey ? undefined : sessionKey,

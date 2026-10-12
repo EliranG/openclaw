@@ -54,7 +54,7 @@ import {
 } from "./main-session-restart-dispatch-start.js";
 import {
   announceRestartRecoveryResumption,
-  captureRestartRecoveryDeliveryCurrent,
+  prepareRestartRecoveryDeliveryCurrent,
   resolveRestartRecoveryDeliveryContext,
 } from "./main-session-restart-recovery-delivery.js";
 import { mainSessionRecoveryLog as log } from "./main-session-restart-recovery-shared.js";
@@ -283,18 +283,10 @@ async function resumeMainSessionWithinAdmission(
     sessionKey: params.sessionKey,
     storePath: params.storePath,
   };
-  const isDeliveryCurrent = deliveryContext
-    ? captureRestartRecoveryDeliveryCurrent({
-        ...target,
-        sessionKey: dispatchSessionKey,
-        sessionId: params.entry.sessionId,
-        recoveryRunId,
-        lifecycleGeneration,
-        deliveryContext,
-        cfg: params.cfg,
-        shouldContinue: params.shouldContinue,
-      })
-    : undefined;
+  let deliveryCurrent:
+    | Awaited<ReturnType<typeof prepareRestartRecoveryDeliveryCurrent>>
+    | undefined;
+  let retainDeliveryCurrent = false;
   const settlementTarget = {
     ...target,
     expectedRecoveryRunId: recoveryRunId,
@@ -533,6 +525,8 @@ async function resumeMainSessionWithinAdmission(
       onSettled: () => {
         dispatchSettled = true;
         stopTyping?.();
+        deliveryCurrent?.release();
+        retainDeliveryCurrent = false;
       },
     });
     ({ dispatchAccepted, executionStarted, preStartAbortAttempted, preStartAbortConfirmed } =
@@ -583,29 +577,46 @@ async function resumeMainSessionWithinAdmission(
     }
     const resumeResult = terminalStatus ? "settled" : "started";
     if (resumeResult === "started" && agentParams.deliver && deliveryContext && taskRemainsOwed()) {
-      if (!dispatchSettled) {
-        stopTyping = params.gatewayRuntime.startRecoveryTyping?.({
-          ...deliveryContext,
-          agentId: params.agentId,
-          runId: recoveryRunId,
-          isCurrent: (cfg) =>
-            !dispatchSettled && taskRemainsOwed() && isDeliveryCurrent?.(cfg) === true,
-        });
-      }
-      await announceRestartRecoveryResumption({
+      deliveryCurrent = await prepareRestartRecoveryDeliveryCurrent({
         ...target,
-        isCurrent: (cfg) =>
-          !dispatchSettled && taskRemainsOwed() && isDeliveryCurrent?.(cfg) === true,
         sessionKey: dispatchSessionKey,
         sessionId: params.entry.sessionId,
         recoveryRunId,
         lifecycleGeneration,
         deliveryContext,
         cfg: params.cfg,
-        shouldContinue: () =>
-          !dispatchSettled && taskRemainsOwed() && params.shouldContinue?.() !== false,
-        gatewayRuntime: params.gatewayRuntime,
+        shouldContinue: params.shouldContinue,
+      }).catch((error: unknown) => {
+        log.warn(
+          `failed to prepare restart recovery notice ${params.sessionKey}: ${String(error)}`,
+        );
+        return undefined;
       });
+      if (deliveryCurrent) {
+        const isDeliveryCurrent = deliveryCurrent.isCurrent;
+        if (!dispatchSettled) {
+          stopTyping = params.gatewayRuntime.startRecoveryTyping?.({
+            ...deliveryContext,
+            agentId: params.agentId,
+            runId: recoveryRunId,
+            isCurrent: (cfg) => !dispatchSettled && taskRemainsOwed() && isDeliveryCurrent(cfg),
+          });
+          retainDeliveryCurrent = stopTyping !== undefined;
+        }
+        await announceRestartRecoveryResumption({
+          ...target,
+          isCurrent: (cfg) => !dispatchSettled && taskRemainsOwed() && isDeliveryCurrent(cfg),
+          sessionKey: dispatchSessionKey,
+          sessionId: params.entry.sessionId,
+          recoveryRunId,
+          lifecycleGeneration,
+          deliveryContext,
+          cfg: params.cfg,
+          shouldContinue: () =>
+            !dispatchSettled && taskRemainsOwed() && params.shouldContinue?.() !== false,
+          gatewayRuntime: params.gatewayRuntime,
+        });
+      }
     }
     log.info(
       `${resumeResult} interrupted main session: ${params.sessionKey}${
@@ -683,5 +694,9 @@ async function resumeMainSessionWithinAdmission(
       `failed to resume interrupted main session ${params.sessionKey}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
     );
     return "failed";
+  } finally {
+    if (!retainDeliveryCurrent) {
+      deliveryCurrent?.release();
+    }
   }
 }

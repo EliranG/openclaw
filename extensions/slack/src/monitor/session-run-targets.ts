@@ -19,14 +19,14 @@ export async function captureSlackSessionTargetGuard(
   ctx: SlackMonitorContext,
   route: ResolvedAgentRoute,
   isActive?: () => boolean,
-): Promise<() => boolean> {
-  const { isCurrent } = await captureSessionEntryCurrentCheck({
+): Promise<{ isCurrent: () => boolean; release: () => void }> {
+  const { isCurrent, release } = await captureSessionEntryCurrentCheck({
     agentId: route.agentId,
     sessionKey: route.sessionKey,
     storePath: resolveStorePath(ctx.cfg.session?.store, { agentId: route.agentId }),
     isActive,
   });
-  return isCurrent;
+  return { isCurrent, release };
 }
 
 // Reloaded turn contexts inherit the same Bolt app; each new monitor owns a new app.

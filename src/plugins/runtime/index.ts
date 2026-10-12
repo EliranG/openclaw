@@ -301,7 +301,7 @@ function createRuntimeSandbox(agent: PluginRuntime["agent"]): PluginRuntime["san
         }
         const { resolveSandboxContext } = await import("../../agents/sandbox/context.js");
         assertCurrent();
-        await resolveSandboxContext({
+        const sandbox = await resolveSandboxContext({
           config: params.config,
           agentId: params.agentId,
           sessionKey: params.sessionKey,
@@ -310,8 +310,12 @@ function createRuntimeSandbox(agent: PluginRuntime["agent"]): PluginRuntime["san
           preparedRuntimeStatus,
           assertCurrent,
         });
-        assertCurrent();
-        return authority;
+        try {
+          assertCurrent();
+          return authority;
+        } finally {
+          sandbox?.[Symbol.dispose]?.();
+        }
       };
       return source && !("kind" in source)
         ? source.actor.sessions.withSharedState(prepare)

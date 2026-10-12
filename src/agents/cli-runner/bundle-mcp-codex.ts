@@ -18,7 +18,7 @@ import {
   buildCodexMcpServersConfig,
   normalizeCodexMcpServerConfig,
 } from "../codex-mcp-config.js";
-import { resolveConversationCapabilityProfile } from "../conversation-capability-profile.js";
+import { prepareConversationCapabilityProfile } from "../conversation-capability-profile.js";
 import { requiresMcpBearerProjection, resolveMcpBearerBundleConfig } from "../mcp-auth-profile.js";
 import { partitionMcpServersByConnectionScope } from "../mcp-connection-resolver.js";
 import { applyPreparedNativeMcpPolicy, prepareNativeMcpPolicy } from "../native-mcp-policy.js";
@@ -210,7 +210,7 @@ export async function buildCodexUserMcpServersThreadConfigPatchForRun(params: {
     sessionKey: policySessionKey,
     agentId: policyAgentId,
   });
-  const capabilityProfile = resolveConversationCapabilityProfile({
+  const capabilityProfile = await prepareConversationCapabilityProfile({
     ...projectNativeMcpRunContext(run),
     config: run.config,
     sessionKey: policySessionKey,

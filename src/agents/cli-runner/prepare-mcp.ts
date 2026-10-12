@@ -1,7 +1,7 @@
 import type { McpLoopbackRequestContext } from "../../gateway/mcp-grant-store.js";
 import type { resolveMcpLoopbackScopedTools } from "../../gateway/mcp-http.runtime.js";
 import type { ResolvedCliBackend } from "../cli-backends.js";
-import { resolveConversationCapabilityProfile } from "../conversation-capability-profile.js";
+import { prepareConversationCapabilityProfile } from "../conversation-capability-profile.js";
 import { resolveExecConfigState } from "../exec-defaults.js";
 import { resolveSandboxRuntimeStatus } from "../sandbox/runtime-status.js";
 import { normalizeToolPolicyName } from "../tool-policy.js";
@@ -14,7 +14,7 @@ type ResolveMcpTools = typeof resolveMcpLoopbackScopedTools;
 type McpScope = Parameters<ResolveMcpTools>[0];
 
 /** Project native MCP from the same requester and runtime cap as mediated tools. */
-export function resolveCliNativeMcpPolicy(
+export async function resolveCliNativeMcpPolicy(
   run: RunCliAgentParams,
   options: {
     config: McpScope["cfg"];
@@ -33,7 +33,7 @@ export function resolveCliNativeMcpPolicy(
     sessionKey: options.policySessionKey,
     agentId: options.policyAgentId,
   });
-  return resolveConversationCapabilityProfile({
+  return prepareConversationCapabilityProfile({
     ...projectNativeMcpRunContext(run),
     config: options.config,
     sessionKey: options.policySessionKey,

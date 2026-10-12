@@ -22,6 +22,7 @@ import type { ReplyPayload } from "../types.js";
 import { appendUsageLine } from "./agent-runner-usage-line.js";
 import { markCommandSessionMetadataChanged } from "./command-session-metadata.js";
 import { createReplyDispatcher } from "./reply-dispatcher.js";
+import { assertReplyPayloadSessionWriterDeliveryAuthorized } from "./session-writer-delivery-authority.js";
 
 let dispatchReplyFromConfig: typeof import("./dispatch-from-config.js").dispatchReplyFromConfig;
 let resetInboundDedupe: typeof import("./inbound-dedupe.js").resetInboundDedupe;
@@ -531,6 +532,7 @@ describe("accepted continuation status delivery", () => {
           },
         },
         sessionWriterDeliveryAuthority: {
+          readCurrentSession: () => sessionStoreMocks.currentEntry,
           agentId: "main",
           expectedLifecycleRevision: "revision-before-replacement",
           expectedSessionId: "session-1",
@@ -546,7 +548,9 @@ describe("accepted continuation status delivery", () => {
       activeWriterRunId: "run-after-replacement",
     };
     const settle = vi.fn(async () => {});
-    const dispatcher = createReplyDispatcher({ deliver: vi.fn() });
+    const dispatcher = createReplyDispatcher({
+      deliver: async (payload) => assertReplyPayloadSessionWriterDeliveryAuthorized(payload),
+    });
 
     await withReplyDispatcher({
       dispatcher,
@@ -563,7 +567,6 @@ describe("accepted continuation status delivery", () => {
     });
 
     expect(settle).toHaveBeenCalledExactlyOnceWith(false);
-    expect(mocks.routeReply).not.toHaveBeenCalled();
     expect(adopt()).toBe(false);
   });
 

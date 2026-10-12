@@ -149,6 +149,11 @@ const defaultPublicDeprecatedExportsByEntrypointBudget = Object.freeze({
   "approval-gateway-runtime": 1,
   "approval-handler-runtime": 1,
   "approval-reply-runtime": 0,
+  // Released synchronous approval routing remains until the next Plugin SDK major.
+  "approval-client-runtime": 1,
+  "approval-delivery-runtime": 1,
+  "approval-native-runtime": 9,
+  "approval-runtime": 6,
   "config-contracts": 0,
   "inbound-reply-dispatch": 21,
   "interactive-runtime": 11,
@@ -239,7 +244,8 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +7: approved async session, command-menu, model-override, TTS-path, and list replacements.
       // +1: preview adapters strip only normalization-owned response decoration.
       // +1: shared stale-read cache replaces board, preview, search, and credential cache policies.
-      3696,
+      // +24: approved async approval-routing replacements and delivery facts across four public facades.
+      3720,
       env,
     ),
     publicFunctionExports: readPluginSdkSurfaceBudgetEnv(
@@ -264,7 +270,8 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +7: the same session, command-menu, model-override, TTS-path, and list replacements.
       // +1: stripReplyPayloadResponsePrefix preserves durable text while assembling previews.
       // +1: the same bounded stale-read cache factory on collection-runtime.
-      2157,
+      // +22: the same async approval-routing functions; two delivery-fact exports are types.
+      2179,
       env,
     ),
     publicDeprecatedExports: readPluginSdkSurfaceBudgetEnv(
@@ -277,7 +284,8 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +3: released synchronous skill-command list helpers during async migration.
       // +15: retained synchronous auth, model, and TTS compatibility exports.
       // +7: retained synchronous session, command-menu, model-override, TTS-path, and list exports.
-      183,
+      // +17: eleven synchronous approval-routing APIs retained across four public facades.
+      200,
       env,
     ),
     publicWildcardReexports: readPluginSdkSurfaceBudgetEnv(

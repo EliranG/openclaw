@@ -11,7 +11,7 @@ import {
 import { testing as replyTesting } from "../../auto-reply/reply/reply-run-registry.test-support.js";
 import {
   prepareReplyToolAuthority,
-  resolveFollowupRunToolAuthorityFingerprint,
+  resolveFollowupRunToolAuthorityFingerprintAsync,
 } from "../../auto-reply/reply/reply-tool-authority.js";
 import type { OpenClawConfig } from "../../config/types.js";
 import { rotateAgentEventLifecycleGeneration } from "../../infra/agent-events.js";
@@ -669,14 +669,16 @@ describe("host-prepared embedded tool authority", () => {
       await published(
         async ({ handle, queue }) => {
           if (handleChange === "hash") {
-            handle.toolAuthorityFingerprint = resolveFollowupRunToolAuthorityFingerprint({
-              toolsAllow: [],
-              run: {
-                ...attempt,
-                model: attempt.modelId,
-                runtimePolicySessionKey: attempt.sandboxSessionKey,
+            handle.toolAuthorityFingerprint = await resolveFollowupRunToolAuthorityFingerprintAsync(
+              {
+                toolsAllow: [],
+                run: {
+                  ...attempt,
+                  model: attempt.modelId,
+                  runtimePolicySessionKey: attempt.sandboxSessionKey,
+                },
               },
-            });
+            );
           } else if (handleChange === "unbound") {
             withoutGatewayToolCallerIdentity(() =>
               setActiveEmbeddedRun(sessionId, { ...handle }, sessionKey),
@@ -703,7 +705,7 @@ describe("host-prepared embedded tool authority", () => {
         sandboxSessionKey: "agent:main:voice",
         config: { agents: { defaults: { sandbox: { mode: "non-main" as const } } } },
       };
-      const expected = resolveFollowupRunToolAuthorityFingerprint({
+      const expected = await resolveFollowupRunToolAuthorityFingerprintAsync({
         run: {
           ...attempt,
           config: direct.config,
@@ -718,7 +720,7 @@ describe("host-prepared embedded tool authority", () => {
         async (prepared) => {
           expect(prepared.toolAuthorityFingerprint).toBe(expected);
           expect(prepared.toolAuthorityFingerprint).not.toBe(
-            resolveFollowupRunToolAuthorityFingerprint({
+            await resolveFollowupRunToolAuthorityFingerprintAsync({
               run: {
                 ...attempt,
                 config: direct.config,

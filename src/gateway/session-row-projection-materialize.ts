@@ -522,6 +522,40 @@ export function createSessionRowLookup(owner: {
   runInOwner: <T>(consume: () => T) => T;
 }) {
   return {
+    /** Capability policy consumes only the receipt-updated metadata projection. */
+    readCapabilityEntry(
+      query: { agentId: string; storePath: string } & (
+        | { key: string; sessionId?: never }
+        | { sessionId: string; key?: never }
+      ),
+    ) {
+      const state = owner.state();
+      if (state.disposed || state.topologyDirty) {
+        return undefined;
+      }
+      let row: records.Row | undefined;
+      if (query.key !== undefined) {
+        const candidate = owner.lookup(query);
+        row = candidate?.key === query.key ? candidate : undefined;
+      } else {
+        const sessionId = query.sessionId;
+        const scope = { agentId: query.agentId, storePath: query.storePath };
+        const exact = owner.matching({ ...scope, key: sessionId }, "id");
+        const candidates = (exact.length ? exact : owner.matching(scope))
+          .filter((candidate) => !isInternalSessionEffectsKey(candidate.key))
+          .toSorted((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
+        if (candidates.some((candidate) => !candidate.sharingEntry)) {
+          return undefined;
+        }
+        row =
+          candidates.find((candidate) => candidate.sharingEntry?.sessionId === sessionId) ??
+          candidates.find((candidate) => candidate.sharingEntry?.sessionId.trim() === sessionId);
+      }
+      // Known absence is authoritative. A row awaiting metadata preparation is not absent.
+      return row && (!row.storedEntry || row.sharingEntry !== row.storedEntry)
+        ? undefined
+        : { entry: row?.storedEntry };
+    },
     async readLookup(selection: Parameters<typeof readSessionRowLookup>[0], agentId?: string) {
       const selected = owner.state();
       const queries = await owner.runInOwner(() =>

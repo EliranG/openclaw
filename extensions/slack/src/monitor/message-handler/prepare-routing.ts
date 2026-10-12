@@ -148,6 +148,7 @@ export async function resolveSlackSessionEventRoutingContext(
   SlackRoutingContext & {
     isCurrentSession: () => boolean;
     assertCurrentSession: SessionEntrySourceAuthority;
+    release: () => void;
   }
 > {
   const { ctx, message, eventScope } = params;
@@ -263,5 +264,6 @@ export async function resolveSlackSessionEventRoutingContext(
     sessionKey: route.sessionKey,
     isCurrentSession: current.isCurrent,
     assertCurrentSession: current.assertCurrent,
+    release: current.release,
   };
 }

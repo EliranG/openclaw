@@ -136,14 +136,17 @@ describe("dispatch Stop before provider allocation", () => {
           },
         },
       );
-      const sessionUtils =
-        await vi.importActual<typeof import("./session-utils.js")>("./session-utils.js");
-      const sessionTarget = await sessionUtils.resolveGatewaySessionStoreTargetInWorker({
+      const targetReader = await vi.importActual<typeof import("./session-utils-store-worker.js")>(
+        "./session-utils-store-worker.js",
+      );
+      const sessionTarget = await targetReader.resolveGatewaySessionStoreTargetInWorker({
         cfg: { ...support.testState.config, session: { store: storePath } },
         key: REQUEST.sessionKey,
         agentId: REQUEST.agentId,
       });
-      moveDestinationMocks.resolveGatewaySessionTarget.mockReturnValue(sessionTarget);
+      moveDestinationMocks.prepareGatewaySessionTarget.mockImplementation(
+        targetReader.resolveGatewaySessionStoreTargetInWorker,
+      );
       runtimeFactoryMocks.createDispatch.mockImplementation((options) =>
         actual.createWorkerPlacementDispatchService({
           ...options,

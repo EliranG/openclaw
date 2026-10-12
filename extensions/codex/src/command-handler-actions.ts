@@ -68,17 +68,17 @@ export async function resolveCodexNativeCommandSandboxBlock(
   ctx: PluginCommandContext,
   subcommand: string,
   args: readonly string[],
-): Promise<{ block: string | undefined; assertCurrent: () => void }> {
+): Promise<{ block: string | undefined; assertCurrent: () => void; release: () => void }> {
   if (
     isReadOnlyCodexGoalCommand(subcommand, args) ||
     returnsBeforeNativeCodexExecution(subcommand, args)
   ) {
-    return { block: undefined, assertCurrent() {} };
+    return { block: undefined, assertCurrent() {}, release() {} };
   }
   const sessionKey = ctx.sessionTarget?.sessionKey ?? ctx.sessionKey;
   const checksModelLock = ["bind", "resume", "detach", "unbind", "model"].includes(subcommand);
   if (!checksModelLock && !CODEX_NATIVE_EXECUTION_SUBCOMMANDS.has(subcommand)) {
-    return { block: undefined, assertCurrent() {} };
+    return { block: undefined, assertCurrent() {}, release() {} };
   }
   const agentId = ctx.sessionTarget?.agentId ?? resolveCodexConversationControlScope(ctx).agentId;
   const storePath =
@@ -93,7 +93,11 @@ export async function resolveCodexNativeCommandSandboxBlock(
         })
       : undefined;
   if (!CODEX_NATIVE_EXECUTION_SUBCOMMANDS.has(subcommand)) {
-    return { block: undefined, assertCurrent: modelCurrent?.assertCurrent ?? (() => {}) };
+    return {
+      block: undefined,
+      assertCurrent: modelCurrent?.assertCurrent ?? (() => {}),
+      release: modelCurrent?.release ?? (() => {}),
+    };
   }
   if (isCodexCliNodeResumeBind(subcommand, args)) {
     return {
@@ -104,22 +108,33 @@ export async function resolveCodexNativeCommandSandboxBlock(
         surface: `/${["codex", subcommand].join(" ")}`,
       }),
       assertCurrent: modelCurrent?.assertCurrent ?? (() => {}),
+      release: modelCurrent?.release ?? (() => {}),
     };
   }
-  const execution = await prepareCodexNativeExecutionBlock({
-    config: ctx.config,
-    agentId: ctx.agentId,
-    sessionKey,
-    sessionId: ctx.sessionId,
-    storePath,
-    surface: `/${["codex", subcommand].join(" ")}`,
-  });
+  let execution: Awaited<ReturnType<typeof prepareCodexNativeExecutionBlock>>;
+  try {
+    execution = await prepareCodexNativeExecutionBlock({
+      config: ctx.config,
+      agentId: ctx.agentId,
+      sessionKey,
+      sessionId: ctx.sessionId,
+      storePath,
+      surface: `/${["codex", subcommand].join(" ")}`,
+    });
+  } catch (error) {
+    modelCurrent?.release();
+    throw error;
+  }
   return {
     block: execution.block,
     assertCurrent: composeSessionEntryCommitGuards([
       modelCurrent?.assertCurrent,
       execution.assertCurrent,
     ]),
+    release: () => {
+      modelCurrent?.release();
+      execution.release();
+    },
   };
 }
 

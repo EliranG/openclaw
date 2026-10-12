@@ -198,10 +198,11 @@ export function createWorkerSessionTurnPlacementProvider(options: WorkerTurnLaun
               agentId: identity.agentId,
             });
           let routablePlacement: WorkerSessionPlacementRecord = current;
-          let assertInitialSetupCurrent: (() => void) | undefined;
+          let initialSetup: Awaited<ReturnType<typeof waitForInitialWorkerPlacement>> | undefined;
+          await using _ = { [Symbol.asyncDispose]: async () => initialSetup?.release() };
           // Every admission wait retains the caller's authority, not only initial setup.
           const initialSetupSource = createDynamicSessionSourceAssertion(
-            () => assertInitialSetupCurrent,
+            () => initialSetup?.assertCurrent,
             () => {
               throw new Error("Worker setup authority changed during turn admission");
             },
@@ -259,7 +260,9 @@ export function createWorkerSessionTurnPlacementProvider(options: WorkerTurnLaun
                 assertRunCurrent,
               });
               routablePlacement = ready.placement;
-              assertInitialSetupCurrent = ready.assertCurrent;
+              const previousSetup = initialSetup;
+              initialSetup = ready;
+              await previousSetup?.release();
             }
             if (
               routablePlacement.state === "reclaimed" ||
@@ -533,7 +536,8 @@ export function createWorkerSessionTurnPlacementProvider(options: WorkerTurnLaun
                   assertAdmissionCurrent();
                   turn.abortSignal?.throwIfAborted();
                   // Reconciliation may supersede the placement captured by initial setup.
-                  assertInitialSetupCurrent = undefined;
+                  await initialSetup?.release();
+                  initialSetup = undefined;
                   if (!recoveredAdmission) {
                     const waitTimeoutMs = Math.min(WORKER_ADMISSION_DEADLINE_MS, turn.timeoutMs);
                     if (waitTimeoutMs <= 0) {

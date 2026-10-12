@@ -33,7 +33,7 @@ import { resolveSpawnAdmission } from "../spawn-plan.js";
 import { resolveSpawnedWorkspaceInheritance } from "../spawned-context.js";
 import { prepareSubagentSessionListReadCache } from "../subagents/registry/subagent-registry-state.js";
 import { registerSubagentRun } from "../subagents/registry/subagent-registry.js";
-import { getSubagentDepthFromSessionStore } from "../subagents/spawn/subagent-depth.js";
+import { getSubagentDepthFromSessionStoreInWorker } from "../subagents/spawn/subagent-depth.js";
 import { terminateAcceptedCollectorRun } from "../subagents/spawn/subagent-spawn-cleanup.js";
 import {
   callNativeSubagentGateway,
@@ -256,7 +256,7 @@ export async function maybeSpawnVisibleSession(params: {
   const completionRequesterSessionId = requesterEntry?.sessionId;
   const completionRequesterLifecycleRevision = requesterEntry?.lifecycleRevision;
   const requesterKey = ownership.controllerSessionKey;
-  const callerDepth = getSubagentDepthFromSessionStore(requesterKey, {
+  const callerDepth = await getSubagentDepthFromSessionStoreInWorker(requesterKey, {
     cfg,
     agentId: params.options?.requesterAgentIdOverride,
   });
@@ -289,6 +289,7 @@ export async function maybeSpawnVisibleSession(params: {
   const resolveAdmission = (pendingChildren = 0) =>
     resolveSpawnAdmission({
       cfg,
+      callerDepth,
       requesterSessionKey: requesterKey,
       requesterAgentId,
       targetAgentId,

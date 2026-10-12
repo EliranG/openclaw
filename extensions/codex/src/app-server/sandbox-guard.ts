@@ -104,12 +104,12 @@ export function resolveCodexAppServerDirectSandboxBypassBlock(params: {
 /** Resolve policy before yielding to client acquisition and recheck it at each write. */
 export async function prepareCodexAppServerDirectSandboxBypassBlock(
   params: Parameters<typeof resolveCodexAppServerDirectSandboxBypassBlock>[0],
-): Promise<{ block: string | undefined; assertCurrent: () => void }> {
+): Promise<{ block: string | undefined; assertCurrent: () => void; release: () => void }> {
   if (
     ALLOWED_CONTROL_PLANE_METHODS.has(params.method) &&
     params.method !== "config/mcpServer/reload"
   ) {
-    return { block: undefined, assertCurrent() {} };
+    return { block: undefined, assertCurrent() {}, release() {} };
   }
   const selected = await prepareCodexNativeExecutionPolicy({
     ...params,
@@ -121,12 +121,13 @@ export async function prepareCodexAppServerDirectSandboxBypassBlock(
       executionPolicy: selected.policy,
     }),
     assertCurrent: selected.assertCurrent,
+    release: selected.release,
   };
 }
 
 export async function prepareCodexNativeExecutionBlock(
   params: Parameters<typeof resolveCodexNativeExecutionBlock>[0],
-): Promise<{ block: string | undefined; assertCurrent: () => void }> {
+): Promise<{ block: string | undefined; assertCurrent: () => void; release: () => void }> {
   const selected = await prepareCodexNativeExecutionPolicy({
     ...params,
     readRuntimeSessionEntry: true,
@@ -134,6 +135,7 @@ export async function prepareCodexNativeExecutionBlock(
   return {
     block: resolveCodexNativeExecutionBlock({ ...params, executionPolicy: selected.policy }),
     assertCurrent: selected.assertCurrent,
+    release: selected.release,
   };
 }
 

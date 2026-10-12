@@ -449,8 +449,18 @@ describe("worker placement session maintenance ownership", () => {
         }
         const originalManifest = placement.workspaceBaseManifestRef;
         placement.workspaceBaseManifestRef = `sha256:${"b".repeat(64)}`;
-        const currentManifestRefs = await additionalManifestRefs(currentPlacement);
+        using currentManifestRefs = await additionalManifestRefs(currentPlacement);
         expect(currentManifestRefs()).toEqual([originalManifest]);
+        await patchSessionEntryCore({ ...placement, storePath }, () => ({
+          repositoryWorkspaceId: "replacement-workspace",
+        }));
+        const sql = observeHostDataSql();
+        try {
+          expect(currentManifestRefs()).toBeNull();
+          expect(sql.queries).toEqual([]);
+        } finally {
+          sql.restore();
+        }
       } finally {
         prepared?.release();
         createRetention.mockRestore();

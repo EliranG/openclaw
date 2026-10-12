@@ -250,123 +250,135 @@ export function prepareCodexAttemptResources(prompt: CodexAttemptPrompt) {
             errorMessage: "Native submission session lifecycle is no longer current.",
           })
         : undefined;
-    await unregisterNativeSubagentMonitor();
-    connection.assertCurrent();
-    const generation = ++nativeSubagentMonitorGeneration;
-    const parentSession = parent?.entry;
-    const historyOwner = createCodexNativeSubagentHistoryOwner({
-      parentThreadId,
-      sessionId: params.sessionId,
-      ...(parentSession?.sessionId === params.sessionId
-        ? { lifecycleRevision: parentSession.lifecycleRevision }
-        : {}),
-      binding: thread,
-    });
-    const { bindingStore, bindingIdentity } = connection;
-    const assertParentSessionCurrent = () => {
-      parent?.assertCurrent();
-    };
-    const submissionStore: CodexNativeSubagentSubmissionStore | undefined =
-      historyOwner && thread.lifecycle.preserveExistingBinding !== true
-        ? {
-            assertCurrent: () => {
-              const current = bindingStore.read(bindingIdentity);
-              if (!current || !matchesCodexNativeSubagentSubmissionBinding(current, historyOwner)) {
-                throw new Error("Native submission binding is no longer current.");
-              }
-              assertParentSessionCurrent();
-            },
-            read: () => bindingStore.readNativeSubagentSubmissions(bindingIdentity, historyOwner),
-            record: (receipt, assertCurrent) =>
-              bindingStore.mutate(
-                bindingIdentity,
-                { kind: "record-native-subagent-submission", owner: historyOwner, receipt },
-                assertCurrent,
-              ),
-            consume: (receipt, assertCurrent) =>
-              bindingStore.mutate(
-                bindingIdentity,
-                { kind: "consume-native-subagent-submission", owner: historyOwner, receipt },
-                assertCurrent,
-              ),
-          }
-        : undefined;
-    const assignmentStore =
-      historyOwner && submissionStore
-        ? createNativeSubagentAssignmentStore({
-            bindingStore,
-            identity: bindingIdentity,
-            owner: historyOwner,
-            assertLifecycleCurrent: () => submissionStore.assertCurrent(),
-          })
-        : undefined;
-    const assertRegistrationCurrent = () => {
-      runAbortController.signal.throwIfAborted();
-      params.hostCapabilities.assertActive();
-      connection.assertCurrent();
-      if (submissionStore) {
-        submissionStore.assertCurrent();
-      } else {
-        assertParentSessionCurrent();
-      }
-      thread.liveThreadOwnership?.assertCurrent();
-      if (
-        generation !== nativeSubagentMonitorGeneration ||
-        state.client !== client ||
-        state.thread !== thread ||
-        state.nativeHookRelay !== nativeHookRelay ||
-        state.turnRoute !== turnRoute
-      ) {
-        throw new Error("Codex native subagent registration was superseded during setup");
-      }
-    };
-    const retainModelSource = params.hostCapabilities.retainSourceAuthority;
-    const modelSource = retainModelSource?.();
+    let parentTransferred = false;
     try {
-      const configurationQualification = getCodexInferenceThreadQualification(
-        client,
+      await unregisterNativeSubagentMonitor();
+      connection.assertCurrent();
+      const generation = ++nativeSubagentMonitorGeneration;
+      const parentSession = parent?.entry;
+      const historyOwner = createCodexNativeSubagentHistoryOwner({
         parentThreadId,
-      );
-      const registration = await codexNativeSubagentMonitorRuntime.register({
-        client,
-        parentThreadId,
-        ...(retainModelSource ? { modelSource } : {}),
-        configurationQualification,
-        unqualifiedModelExecution: modelSource && !configurationQualification ? true : undefined,
-        onUnqualifiedModelCancelled: connection.abortExplicitly,
-        requesterSessionKey: params.sessionKey,
-        completionScope: params.agentHarnessCompletionScope,
-        historyOwner,
-        submissionStore,
-        assignmentStore,
-        agentId: sessionAgentId,
-        assertCurrent: assertRegistrationCurrent,
-        isTurnYielded: () => attemptTools.toolState.yieldDetected,
-        retainClient: () => retainSharedCodexAppServerClientIfCurrent(client),
-        retainParentThread: (protectedThreadId) =>
-          protectCodexAppServerLiveThread(client, protectedThreadId),
-        claimDirectChild: (childThreadId) => nativeHookRelay?.claimDirectChild(childThreadId),
-        rejectPendingDirectChild: (childThreadId, reason) =>
-          nativeHookRelay?.rejectPendingDirectChild(childThreadId, reason),
-        ...(params.sessionKey && params.agentHarnessCompletionScope
-          ? {
-              onDirectChildAccepted: () => {
-                state.runtimeContinuationStarted = true;
-              },
-            }
+        sessionId: params.sessionId,
+        ...(parentSession?.sessionId === params.sessionId
+          ? { lifecycleRevision: parentSession.lifecycleRevision }
           : {}),
+        binding: thread,
       });
+      const { bindingStore, bindingIdentity } = connection;
+      const assertParentSessionCurrent = () => {
+        parent?.assertCurrent();
+      };
+      const submissionStore: CodexNativeSubagentSubmissionStore | undefined =
+        historyOwner && thread.lifecycle.preserveExistingBinding !== true
+          ? {
+              release: () => parent?.release(),
+              assertCurrent: () => {
+                const current = bindingStore.read(bindingIdentity);
+                if (
+                  !current ||
+                  !matchesCodexNativeSubagentSubmissionBinding(current, historyOwner)
+                ) {
+                  throw new Error("Native submission binding is no longer current.");
+                }
+                assertParentSessionCurrent();
+              },
+              read: () => bindingStore.readNativeSubagentSubmissions(bindingIdentity, historyOwner),
+              record: (receipt, assertCurrent) =>
+                bindingStore.mutate(
+                  bindingIdentity,
+                  { kind: "record-native-subagent-submission", owner: historyOwner, receipt },
+                  assertCurrent,
+                ),
+              consume: (receipt, assertCurrent) =>
+                bindingStore.mutate(
+                  bindingIdentity,
+                  { kind: "consume-native-subagent-submission", owner: historyOwner, receipt },
+                  assertCurrent,
+                ),
+            }
+          : undefined;
+      const assignmentStore =
+        historyOwner && submissionStore
+          ? createNativeSubagentAssignmentStore({
+              bindingStore,
+              identity: bindingIdentity,
+              owner: historyOwner,
+              assertLifecycleCurrent: () => submissionStore.assertCurrent(),
+            })
+          : undefined;
+      const assertRegistrationCurrent = () => {
+        runAbortController.signal.throwIfAborted();
+        params.hostCapabilities.assertActive();
+        connection.assertCurrent();
+        if (submissionStore) {
+          submissionStore.assertCurrent();
+        } else {
+          assertParentSessionCurrent();
+        }
+        thread.liveThreadOwnership?.assertCurrent();
+        if (
+          generation !== nativeSubagentMonitorGeneration ||
+          state.client !== client ||
+          state.thread !== thread ||
+          state.nativeHookRelay !== nativeHookRelay ||
+          state.turnRoute !== turnRoute
+        ) {
+          throw new Error("Codex native subagent registration was superseded during setup");
+        }
+      };
+      const retainModelSource = params.hostCapabilities.retainSourceAuthority;
+      const modelSource = retainModelSource?.();
       try {
-        await registration.ready;
-        assertRegistrationCurrent();
-        state.nativeSubagentMonitor = registration;
+        const configurationQualification = getCodexInferenceThreadQualification(
+          client,
+          parentThreadId,
+        );
+        const registration = await codexNativeSubagentMonitorRuntime.register({
+          client,
+          parentThreadId,
+          ...(retainModelSource ? { modelSource } : {}),
+          configurationQualification,
+          unqualifiedModelExecution: modelSource && !configurationQualification ? true : undefined,
+          onUnqualifiedModelCancelled: connection.abortExplicitly,
+          requesterSessionKey: params.sessionKey,
+          completionScope: params.agentHarnessCompletionScope,
+          historyOwner,
+          submissionStore,
+          assignmentStore,
+          agentId: sessionAgentId,
+          assertCurrent: assertRegistrationCurrent,
+          isTurnYielded: () => attemptTools.toolState.yieldDetected,
+          retainClient: () => retainSharedCodexAppServerClientIfCurrent(client),
+          retainParentThread: (protectedThreadId) =>
+            protectCodexAppServerLiveThread(client, protectedThreadId),
+          claimDirectChild: (childThreadId) => nativeHookRelay?.claimDirectChild(childThreadId),
+          rejectPendingDirectChild: (childThreadId, reason) =>
+            nativeHookRelay?.rejectPendingDirectChild(childThreadId, reason),
+          ...(params.sessionKey && params.agentHarnessCompletionScope
+            ? {
+                onDirectChildAccepted: () => {
+                  state.runtimeContinuationStarted = true;
+                },
+              }
+            : {}),
+        });
+        parentTransferred = submissionStore !== undefined;
+        try {
+          await registration.ready;
+          assertRegistrationCurrent();
+          state.nativeSubagentMonitor = registration;
+        } catch (error) {
+          await registration.unregister();
+          throw error;
+        }
       } catch (error) {
-        await registration.unregister();
+        modelSource?.release();
         throw error;
       }
-    } catch (error) {
-      modelSource?.release();
-      throw error;
+    } finally {
+      if (!parentTransferred) {
+        parent?.release();
+      }
     }
   };
   const releaseCurrentRoute = async () => {

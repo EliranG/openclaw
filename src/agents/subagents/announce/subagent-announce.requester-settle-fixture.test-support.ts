@@ -88,8 +88,11 @@ vi.mock("./subagent-announce-delivery.js", () => ({
     params.requesterOrigin,
 }));
 
+// mock-isolation: Settlement fixtures supply requester depth without opening a session database.
 vi.mock("../spawn/subagent-depth.js", () => ({
   getSubagentDepthFromSessionStore: (sessionKey: string) =>
+    sessionKey.split(":subagent:").length - 1,
+  getSubagentDepthFromSessionStoreInWorker: async (sessionKey: string) =>
     sessionKey.split(":subagent:").length - 1,
 }));
 

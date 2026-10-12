@@ -33,6 +33,7 @@ export type CodexNativeExecutionPolicy = {
 export type PreparedCodexNativeExecutionPolicy = {
   policy: CodexNativeExecutionPolicy;
   assertCurrent: () => void;
+  release: () => void;
 };
 
 type RunPolicyOptions = {
@@ -85,7 +86,11 @@ export async function prepareCodexNativeExecutionPolicy(
   const { sourceAgentId, sourceSessionKey, canReadSessionEntry } =
     resolveSessionSelection(captured);
   if (!canReadSessionEntry || !sourceAgentId || !sourceSessionKey) {
-    return { policy: resolveCodexNativeExecutionPolicy(captured), assertCurrent() {} };
+    return {
+      policy: resolveCodexNativeExecutionPolicy(captured),
+      assertCurrent() {},
+      release() {},
+    };
   }
   const selected = await captureSessionEntryCurrentCheck({
     agentId: sourceAgentId,
@@ -94,14 +99,20 @@ export async function prepareCodexNativeExecutionPolicy(
     fields: ["sessionId", "lifecycleRevision", "execHost", "execNode", "sandbox", "sandboxMode"],
     errorMessage: "Codex session execution policy changed; prepare the operation again.",
   });
-  return {
-    policy: resolveCodexNativeExecutionPolicy({
-      ...captured,
-      sessionEntry: selected.entry ?? null,
-      readRuntimeSessionEntry: false,
-    }),
-    assertCurrent: selected.assertCurrent,
-  };
+  try {
+    return {
+      policy: resolveCodexNativeExecutionPolicy({
+        ...captured,
+        sessionEntry: selected.entry ?? null,
+        readRuntimeSessionEntry: false,
+      }),
+      assertCurrent: selected.assertCurrent,
+      release: selected.release,
+    };
+  } catch (error) {
+    selected.release();
+    throw error;
+  }
 }
 
 /** Projects node execution ownership into the runtime tool factory options. */
