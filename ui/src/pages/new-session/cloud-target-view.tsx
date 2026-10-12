@@ -13,7 +13,7 @@ import "../../components/tooltip.ts";
 import { CloudProfileIcon } from "../../components/solid/provider-icon.tsx";
 import { t } from "../../lib/reactive/i18n.ts";
 import { nativeListener } from "../../lib/solid-native-listener.ts";
-import { LitContent } from "../../lit/solid-content.tsx";
+import { LitContent, solidContent } from "../../lit/solid-content.tsx";
 import {
   machineShapeText,
   type SessionMenuItemOptions,
@@ -28,6 +28,18 @@ import {
 } from "./discovery.ts";
 
 type NativeSessionMenuItem = Omit<SessionMenuItemOptions, "icon"> & { icon?: JSX.Element };
+
+export function renderSessionMenuItem(item: SessionMenuItemOptions, submitting: boolean) {
+  return solidContent(LegacySessionMenuItem, { item, submitting });
+}
+
+export function renderCloudProfileMenuItems(params: CloudProfileMenuItemsOptions) {
+  return solidContent(CloudProfileMenuItems, { params });
+}
+
+export function renderCloudChoiceMenuItems(params: CloudChoiceMenuItemsOptions) {
+  return solidContent(CloudChoiceMenuItems, { params });
+}
 
 function UnavailableReason(props: {
   reason: string;

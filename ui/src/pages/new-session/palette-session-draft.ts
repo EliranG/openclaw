@@ -19,6 +19,7 @@ import {
   handleChatAttachmentPaste,
   renderAttachmentPreview,
 } from "../chat/components/chat-attachments.ts";
+import { ConnectMachineDialog } from "./connect-machine-dialog-view.tsx";
 import { ConnectMachineSetupState } from "./connect-machine-dialog.ts";
 import { NewSessionDraftController } from "./draft-controller.ts";
 import type { NewSessionRouteData } from "./location.ts";
@@ -29,6 +30,7 @@ import {
   PaletteSessionRecovery,
 } from "./palette-session-draft-view.tsx";
 import { PaletteSessionPreferences } from "./palette-session-preferences.ts";
+import { PaletteSessionSettingsView } from "./palette-session-settings-view.tsx";
 import { PaletteSessionSettings } from "./palette-session-settings.ts";
 import type { PaletteSessionPreference } from "./preferences.ts";
 import { captureSessionNoticeOwner, openSessionNoticeTarget } from "./session-notice-owner.ts";
@@ -376,22 +378,24 @@ export class PaletteSessionDraft implements ReactiveController {
     if (!draft) {
       return emptyLegacyContent;
     }
-    return this.settings.render({
-      draft,
-      context: this.read().context,
-      preferences: this.preferences,
-      onAgentPickerOpen: (open) => {
-        this.agentPickerOpen = open;
-        this.host.requestUpdate();
-      },
-      onChange: () => this.preferences.changed(),
-      onConnectMachine: () => {
-        if (draft.place.isAdmin()) {
-          this.settings.close();
-          draft.browser.close();
-          this.connectMachine.start();
-        }
-      },
+    return solidContent(PaletteSessionSettingsView, {
+      view: this.settings.view({
+        draft,
+        context: this.read().context,
+        preferences: this.preferences,
+        onAgentPickerOpen: (open) => {
+          this.agentPickerOpen = open;
+          this.host.requestUpdate();
+        },
+        onChange: () => this.preferences.changed(),
+        onConnectMachine: () => {
+          if (draft.place.isAdmin()) {
+            this.settings.close();
+            draft.browser.close();
+            this.connectMachine.start();
+          }
+        },
+      }),
     });
   }
 
@@ -415,12 +419,12 @@ export class PaletteSessionDraft implements ReactiveController {
   }
 
   renderAuxiliary() {
-    return this.connectMachine.render(
-      this.read().open && (this.draft?.place.isAdmin() ?? false),
-      () => {
+    return solidContent(
+      ConnectMachineDialog,
+      this.connectMachine.view(this.read().open && (this.draft?.place.isAdmin() ?? false), () => {
         this.callbacks.onClose();
         this.read().context?.navigate("devices");
-      },
+      }),
     );
   }
 

@@ -7,12 +7,6 @@ import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import { t } from "../../i18n/index.ts";
 import { registerNewSessionSetupEnglish } from "../../i18n/locales/en-new-session-setup.ts";
 import { registerSessionPlacementEnglish } from "../../i18n/locales/en-session-placement.ts";
-import { solidContent } from "../../lit/solid-content.tsx";
-import {
-  LegacySessionMenuItem,
-  CloudProfileMenuItems,
-  CloudChoiceMenuItems,
-} from "./cloud-target-view.tsx";
 import type { DraftCloudProfile, DraftEnvironment } from "./discovery.ts";
 import { readDraftCloudProfiles, readDraftEnvironments } from "./discovery.ts";
 
@@ -99,16 +93,4 @@ export function machineShapeText(machine: WorkerMachineOption): string | undefin
     return t("newSession.machineCpu", { cpu });
   }
   return memory ? t("newSession.machineMemory", { memory }) : undefined;
-}
-
-export function renderSessionMenuItem(item: SessionMenuItemOptions, submitting: boolean) {
-  return solidContent(LegacySessionMenuItem, { item, submitting });
-}
-
-export function renderCloudProfileMenuItems(params: CloudProfileMenuItemsOptions) {
-  return solidContent(CloudProfileMenuItems, { params });
-}
-
-export function renderCloudChoiceMenuItems(params: CloudChoiceMenuItemsOptions) {
-  return solidContent(CloudChoiceMenuItems, { params });
 }

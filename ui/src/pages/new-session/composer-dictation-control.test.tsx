@@ -73,7 +73,8 @@ vi.mock("../chat/composer-dictation.ts", async (importOriginal) => ({
   },
 }));
 
-vi.mock("../chat/composer-microphone-picker.ts", () => ({
+vi.mock("../chat/composer-microphone-picker.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../chat/composer-microphone-picker.ts")>()),
   ComposerMicrophonePicker: class {
     devices = [];
     loading = false;

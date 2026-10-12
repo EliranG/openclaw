@@ -9,7 +9,7 @@ import type WaTab from "@awesome.me/webawesome/dist/components/tab/tab.js";
 import type { JSX } from "@solidjs/web";
 import type { ControlUiSurfaceProps } from "../../../src/plugin-sdk/control-ui.js";
 import type { ClawHubRecommendation } from "../../../src/shared/clawhub-recommendations.js";
-import type { LobsterPetProps } from "../components/lobster-pet-controller.ts";
+import type { LobsterPetProps } from "../components/lobster-pet-contract.ts";
 import type { MascotMood } from "../components/mascot-pose.ts";
 import type { MessageActionDetails } from "../pages/chat/components/chat-message-markdown.types.ts";
 export type { JSX } from "@solidjs/web";

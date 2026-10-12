@@ -6,8 +6,6 @@ import {
   type DevicePairJoinSetup,
 } from "../../lib/device-pair-setup.ts";
 import { formatUiError } from "../../lib/format-error.ts";
-import { solidContent } from "../../lit/solid-content.tsx";
-import { ConnectMachineDialog } from "./connect-machine-dialog-view.tsx";
 
 registerNewSessionSetupEnglish();
 
@@ -58,10 +56,6 @@ export class ConnectMachineSetupState {
       onRefresh: () => void this.refresh(),
       onManageDevices,
     };
-  }
-
-  render(enabled: boolean, onManageDevices: () => void) {
-    return solidContent(ConnectMachineDialog, this.view(enabled, onManageDevices));
   }
 
   async refresh(): Promise<void> {

@@ -4,7 +4,6 @@ import { t } from "../../i18n/index.ts";
 import { registerCommandPaletteEnglish } from "../../i18n/locales/en-command-palette.ts";
 import { registerNewSessionSetupEnglish } from "../../i18n/locales/en-new-session-setup.ts";
 import { pathDisplayName } from "../../lib/path-display.ts";
-import { solidContent } from "../../lit/solid-content.tsx";
 import type { NewSessionDraftController } from "./draft-controller.ts";
 import {
   environmentPlacementRuntime,
@@ -12,7 +11,6 @@ import {
   environmentCloudDisabledReason,
 } from "./hosted-environments.ts";
 import type { PaletteSessionPreferences } from "./palette-session-preferences.ts";
-import { PaletteSessionSettingsView } from "./palette-session-settings-view.tsx";
 import { resolveProjectChip } from "./project-chip.ts";
 import { resolveWhereChip } from "./where-chip.ts";
 import "../../styles/palette-session-settings.css";
@@ -283,9 +281,5 @@ export class PaletteSessionSettings {
         this.host.requestUpdate();
       },
     };
-  }
-
-  render(options: SettingsOptions) {
-    return solidContent(PaletteSessionSettingsView, { view: this.view(options) });
   }
 }
