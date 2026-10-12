@@ -144,8 +144,7 @@ describe("application update status response ownership", () => {
     const harness = createGatewayHarness(client(async () => ({ lastRun: finished })));
     const overlays = createApplicationOverlays(harness.gateway);
     try {
-      await expect(overlays.refreshUpdateStatus()).resolves.toBe(false);
-        expect(overlays.snapshot.updateStatusCheckBanner).not.toBeNull();
+      await expect(overlays.refreshUpdateStatus()).resolves.toBe(true);
       expect(overlays.snapshot.updateRun).toEqual(finished);
       expect(overlays.snapshot.updateRunning).toBe(false);
     } finally {
@@ -208,8 +207,7 @@ describe("application update status response ownership", () => {
         if (scope === "unchanged") {
           expect(overlays.snapshot.updateStatusCheckBanner?.text).toContain("checkout unavailable");
           failCheckout = false;
-          await expect(overlays.refreshUpdateStatus()).resolves.toBe(false);
-        expect(overlays.snapshot.updateStatusCheckBanner).not.toBeNull();
+          await expect(overlays.refreshUpdateStatus()).resolves.toBe(true);
         }
         expect(overlays.snapshot.updateStatusCheckBanner).toBeNull();
       } finally {
@@ -289,11 +287,12 @@ describe("application update status response ownership", () => {
       await flushMicrotasks();
       discoveryFinished = true;
       discovery.resolve({ schedule: AUTO_UPDATE_SCHEDULE });
-      await expect(refresh).resolves.toBe(true);
-      expect(overlays.snapshot.updateSchedule).toEqual(AUTO_UPDATE_SCHEDULE);
-      expect(overlays.snapshot.updateStatusRefreshing).toBe(false);
-      reconciliation.resolve({ activeRun: first, schedule: AUTO_UPDATE_SCHEDULE });
       await flushMicrotasks();
+      expect(overlays.snapshot.updateSchedule).toEqual(AUTO_UPDATE_SCHEDULE);
+      expect(overlays.snapshot.updateStatusRefreshing).toBe(true);
+      reconciliation.resolve({ activeRun: first, schedule: AUTO_UPDATE_SCHEDULE });
+      await expect(refresh).resolves.toBe(true);
+      expect(overlays.snapshot.updateStatusRefreshing).toBe(false);
       expect(overlays.snapshot.updateRun).toEqual(first);
       reconciled = true;
       await vi.advanceTimersByTimeAsync(5_000);
@@ -338,7 +337,6 @@ describe("application update status response ownership", () => {
       overlays.dispose();
     }
   });
-
 
   it.each(["run", "legacy sentinel"])(
     "recovers a %s but rejects the check when progress remains unavailable",

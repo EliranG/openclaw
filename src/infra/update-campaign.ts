@@ -279,11 +279,14 @@ export class UpdateCampaignController {
           this.clear();
         }
       };
-      void trackAsyncWork(() => announcement.apply({ forced, target: announcement.target })).then((outcome) => {
-        if (outcome === "failed") {
-          clearIfCurrent();
-        }
-      }, clearIfCurrent);
+      void trackAsyncWork(() => announcement.apply({ forced, target: announcement.target })).then(
+        (outcome) => {
+          if (outcome === "failed") {
+            clearIfCurrent();
+          }
+        },
+        clearIfCurrent,
+      );
     }
   }
 
