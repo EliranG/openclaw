@@ -263,7 +263,7 @@ it.each(["missing", "session", "lifecycle", "writer"] as const)(
         current!.activeWriterRunId = "successor-writer";
       }
       publishRetainedSessionEntryChange(
-        `file:${source.databaseIdentity}`,
+        source.databaseIdentity,
         target.sessionKey,
         current ? projectSessionSharingEntry(current) : undefined,
         undefined,

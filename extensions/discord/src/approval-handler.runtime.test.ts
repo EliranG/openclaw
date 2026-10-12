@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import {
-  createChannelApprovalHandlerFromCapability,
-  createLazyChannelApprovalNativeRuntimeAdapterAsync,
-} from "openclaw/plugin-sdk/approval-handler-runtime";
+import { createLazyChannelApprovalNativeRuntimeAdapterAsync } from "openclaw/plugin-sdk/approval-handler-adapter-runtime";
+import { createChannelApprovalHandlerFromCapability } from "openclaw/plugin-sdk/approval-handler-runtime";
 import { describe, expect, it, vi } from "vitest";
 import { parseExecApprovalData } from "./approval-custom-id.js";
 import { discordApprovalNativeRuntime } from "./approval-handler.runtime.js";

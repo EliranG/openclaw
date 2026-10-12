@@ -61,7 +61,14 @@ describe("worker placement move destination owner", () => {
         executionMode: "remote-exec",
       });
       const sourceBefore = JSON.stringify(source);
-      const entry = { sessionId: source.sessionId, worktree: { id: "worktree-recovery" } };
+      const entry = {
+        sessionId: source.sessionId,
+        worktree: {
+          id: "worktree-recovery",
+          branch: "recovery",
+          repoRoot: "/gateway/workspace",
+        },
+      };
       const config = {
         session: { store: state.path("sessions.sqlite") },
         cloudWorkers: {

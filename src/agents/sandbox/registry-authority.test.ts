@@ -139,7 +139,8 @@ it("retains local-workspace authority through browser transaction and commit gra
   released![Symbol.dispose]();
   expect(() => released!.assertCurrent()).toThrow("Local sandbox workspace authority changed");
   using closed = await resolveLocalWorkspaceOwner(ownerParams);
+  expect(sql.queries).toEqual([]);
+  // Explicit teardown seals the database and releases its lease on the host.
   await closeOpenClawAgentDatabasesAsync();
   expect(() => closed!.assertCurrent()).toThrow("Local sandbox workspace authority changed");
-  expect(sql.queries).toEqual([]);
 });

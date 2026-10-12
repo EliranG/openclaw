@@ -28,6 +28,7 @@ import {
 import { resolveSpawnAdmission } from "../../spawn-plan.js";
 import { maybeWakeRequesterAfterAllChildrenSettled } from "../announce/subagent-announce.requester-settle-wake.js";
 import { blockSubagentCompletionDelivery } from "../completion/subagent-completion-admission.store.js";
+import { withPreparedSessionCapabilityRead } from "../spawn/subagent-session-store.js";
 import {
   activateSwarmRun,
   isSwarmRunWaitingForCapacity,
@@ -118,15 +119,17 @@ it("admits new work at the child cap when finished descendants have suspended de
     });
   }
   const admission = () =>
-    resolveSpawnAdmission({
-      cfg: { agents: { defaults: { subagents: { maxChildrenPerAgent: 5 } } } },
-      requesterSessionKey: parent,
-      requesterAgentId: "main",
-      targetAgentId: "main",
-      configuredAgentIds: ["main"],
-    });
+    withPreparedSessionCapabilityRead(() =>
+      resolveSpawnAdmission({
+        cfg: { agents: { defaults: { subagents: { maxChildrenPerAgent: 5 } } } },
+        requesterSessionKey: parent,
+        requesterAgentId: "main",
+        targetAgentId: "main",
+        configuredAgentIds: ["main"],
+      }),
+    );
 
-  expect(admission().ok).toBe(true);
+  expect((await admission()).ok).toBe(true);
   expect(countActiveRunsForSession(parent)).toBe(0);
   expect(subagentRuns.size).toBe(10);
 
@@ -140,7 +143,7 @@ it("admits new work at the child cap when finished descendants have suspended de
       execution: { status: "running", startedAt: now },
     });
   }
-  expect(admission()).toMatchObject({
+  expect(await admission()).toMatchObject({
     ok: false,
     governingCap: "subagents.maxChildrenPerAgent",
   });
@@ -190,13 +193,17 @@ it("retains quiet admitted execution in listing, admission count, and requester 
     expect(getAgentRunContext(entry.runId)).toBeDefined();
     expect
       .soft(
-        resolveSpawnAdmission({
-          cfg: { agents: { defaults: { subagents: { maxChildrenPerAgent: 1 } } } },
-          requesterSessionKey: parent,
-          requesterAgentId: "main",
-          targetAgentId: "main",
-          configuredAgentIds: ["main"],
-        }).ok,
+        (
+          await withPreparedSessionCapabilityRead(() =>
+            resolveSpawnAdmission({
+              cfg: { agents: { defaults: { subagents: { maxChildrenPerAgent: 1 } } } },
+              requesterSessionKey: parent,
+              requesterAgentId: "main",
+              targetAgentId: "main",
+              configuredAgentIds: ["main"],
+            }),
+          )
+        ).ok,
       )
       .toBe(false);
     expect.soft(countActiveRunsForSession(parent)).toBe(1);

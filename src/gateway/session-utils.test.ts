@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { expectDefined } from "@openclaw/normalization-core";
 import { afterAll, beforeEach, describe, expect, onTestFinished, test, vi } from "vitest";
-import { resolveExecDefaults } from "../agents/exec-defaults.js";
+import { resolveExecDefaultsAsync } from "../agents/exec-defaults.js";
 import { resolveLegacyInheritedAuthAgentId } from "../agents/legacy-inherited-auth-dir.js";
 import { SESSION_PERMISSION_BY_EXEC_MODE } from "../agents/session-permission-exec-mode.js";
 import { resetConfigRuntimeState, setRuntimeConfigSnapshot } from "../config/config.js";
@@ -1804,7 +1804,7 @@ describe("gateway session utils", () => {
         expect(agent).toHaveProperty("defaultPermissionMode", expected);
       }
       for (const sessionKey of ["agent:main:main", "agent:main:other"]) {
-        const resolved = resolveExecDefaults({ cfg, agentId: "main", sessionKey });
+        const resolved = await resolveExecDefaultsAsync({ cfg, agentId: "main", sessionKey });
         expect([undefined, SESSION_PERMISSION_BY_EXEC_MODE[resolved.mode]]).toContain(
           agent?.defaultPermissionMode,
         );

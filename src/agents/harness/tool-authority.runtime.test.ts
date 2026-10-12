@@ -9,10 +9,8 @@ import {
   replyRunRegistry,
 } from "../../auto-reply/reply/reply-run-registry.js";
 import { testing as replyTesting } from "../../auto-reply/reply/reply-run-registry.test-support.js";
-import {
-  prepareReplyToolAuthority,
-  resolveFollowupRunToolAuthorityFingerprintAsync,
-} from "../../auto-reply/reply/reply-tool-authority.js";
+import { prepareReplyToolAuthority } from "../../auto-reply/reply/reply-tool-authority.js";
+import { resolveFollowupRunToolAuthorityFingerprintAsync } from "../../auto-reply/reply/reply-tool-authority.test-support.js";
 import type { OpenClawConfig } from "../../config/types.js";
 import { rotateAgentEventLifecycleGeneration } from "../../infra/agent-events.js";
 import { controlRealtimeVoiceAgentRun } from "../../talk/agent-run-control.js";

@@ -123,8 +123,8 @@ vi.mock("../runtime/remote.js", () => ({
   getRemoteSkillEligibility: () => ({}),
 }));
 
-vi.mock("../../agents/exec-defaults.js", () => ({
-  resolveNodeExecEligibility: resolveNodeExecEligibilityMock,
+vi.mock("../../agents/exec-defaults.legacy.js", () => ({
+  resolveNodeExecEligibilityLegacy: resolveNodeExecEligibilityMock,
 }));
 
 vi.mock("./agent-filter.js", () => ({

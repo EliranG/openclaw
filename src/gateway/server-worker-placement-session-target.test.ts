@@ -77,13 +77,13 @@ test("guards a durable workspace with committed facts and no host session SQL", 
         sql.restore();
       }
       await patchSessionEntryCore(identity, () => ({ label: "unrelated" }));
-      expect(() => resolved.assertCurrent()).not.toThrow();
+      expect(resolved.assertCurrent).not.toThrow();
       await patchSessionEntryCore(identity, () => ({
         worktree: { id: "replacement", branch: "synthetic", repoRoot: "/synthetic" },
       }));
       const effectSql = observeHostDataSql();
       try {
-        expect(() => resolved.assertCurrent()).toThrow("placement source changed");
+        expect(resolved.assertCurrent).toThrow("placement source changed");
         expect(effectSql.queries).toEqual([]);
       } finally {
         effectSql.restore();

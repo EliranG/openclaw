@@ -47,8 +47,8 @@ it.each(
         },
       };
       const operation = createReplyOperation({ sessionKey, sessionId, resetTriggered: false });
-      operation.bindToolAuthoritySnapshot(prepareReplyToolAuthority(owner));
-      const fingerprint = operation.bindToolAuthorityRoute({
+      await operation.bindToolAuthoritySnapshotAsync(prepareReplyToolAuthority(owner));
+      const fingerprint = await operation.bindToolAuthorityRouteAsync({
         provider: owner.run.provider,
         model: owner.run.model,
       });

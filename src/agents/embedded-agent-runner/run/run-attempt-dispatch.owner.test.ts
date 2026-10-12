@@ -499,6 +499,7 @@ it.each(dispatchCases)(
               .mockImplementation(async (request) => ({
                 ...(await prepareSessionPlacementSandbox(request)),
                 workspace: {
+                  [Symbol.dispose]: () => projectedSandbox[Symbol.dispose]?.(),
                   effectiveCwd: projection,
                   effectiveWorkspace: projection,
                   resolvedWorkspace: workspaceDir,

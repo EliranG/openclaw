@@ -457,7 +457,7 @@ describe("worker placement session maintenance ownership", () => {
         }));
         const sql = observeHostDataSql();
         try {
-          expect(currentManifestRefs()).toBeNull();
+          expect(currentManifestRefs()).toEqual([originalManifest]);
           expect(sql.queries).toEqual([]);
         } finally {
           sql.restore();

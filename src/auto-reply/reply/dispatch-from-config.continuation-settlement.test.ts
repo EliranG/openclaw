@@ -17,12 +17,12 @@ import {
   PlatformMessageNotDispatchedError,
 } from "../../infra/outbound/deliver-types.js";
 import { withReplyDispatcher } from "../dispatch-dispatcher.js";
-import { setReplyPayloadMetadata } from "../reply-payload.js";
+import { getReplyPayloadMetadata, setReplyPayloadMetadata } from "../reply-payload.js";
 import type { ReplyPayload } from "../types.js";
 import { appendUsageLine } from "./agent-runner-usage-line.js";
 import { markCommandSessionMetadataChanged } from "./command-session-metadata.js";
 import { createReplyDispatcher } from "./reply-dispatcher.js";
-import { assertReplyPayloadSessionWriterDeliveryAuthorized } from "./session-writer-delivery-authority.js";
+import { assertSessionWriterDeliveryAuthorized } from "./session-writer-delivery-authority.js";
 
 let dispatchReplyFromConfig: typeof import("./dispatch-from-config.js").dispatchReplyFromConfig;
 let resetInboundDedupe: typeof import("./inbound-dedupe.js").resetInboundDedupe;
@@ -549,7 +549,10 @@ describe("accepted continuation status delivery", () => {
     };
     const settle = vi.fn(async () => {});
     const dispatcher = createReplyDispatcher({
-      deliver: async (payload) => assertReplyPayloadSessionWriterDeliveryAuthorized(payload),
+      deliver: async (payload) =>
+        assertSessionWriterDeliveryAuthorized(
+          getReplyPayloadMetadata(payload)?.sessionWriterDeliveryAuthority,
+        ),
     });
 
     await withReplyDispatcher({

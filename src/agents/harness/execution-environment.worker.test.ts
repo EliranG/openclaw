@@ -40,7 +40,10 @@ it("reads native consent in the worker and observes a committed revocation", asy
     } finally {
       calls.restore();
     }
-    await upsertSessionEntryCore(scope, { sandboxMode: "all", nativeRuntimeConsent: undefined });
+    await upsertSessionEntryCore(scope, {
+      sandboxMode: undefined,
+      nativeRuntimeConsent: undefined,
+    });
     const revokedCalls = observeMainThreadSql();
     try {
       await expect(assertAgentHarnessExecutionEnvironment(harness, params)).rejects.toThrow(

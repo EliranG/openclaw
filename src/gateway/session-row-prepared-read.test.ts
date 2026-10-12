@@ -308,7 +308,13 @@ it("rechecks scopes after startup admission and refuses unprepared writes", asyn
     ).resolves.toMatchObject({ error: null });
     await expect(
       authorizeGatewayRequestPreDispatch({ ...request, method: "sessions.patch" }),
-    ).rejects.toMatchObject({ refusal: { code: "agent-database-inspection-pending" } });
+    ).resolves.toMatchObject({
+      error: {
+        code: "UNAVAILABLE",
+        retryable: true,
+        details: { code: "agent-database-inspection-pending" },
+      },
+    });
     client.connect.scopes = [];
     complete();
     await expect(read).resolves.toMatchObject({ error: { code: "FORBIDDEN" } });
@@ -391,7 +397,7 @@ it("preserves the admin dispatch shortcut without preparing private rows", async
 it.each(["dispatch scopes", "private access"] as const)(
   "rechecks %s after canonical description readiness",
   async (boundary) => {
-    const { projection, context, client, request } = describeFixture();
+    const { projection, context, client } = describeFixture();
     const database = pendingDatabase("/synthetic/parent.sqlite");
     vi.spyOn(projection, "withPreparedExactRows").mockResolvedValueOnce({
       kind: "pending",
@@ -413,9 +419,25 @@ it.each(["dispatch scopes", "private access"] as const)(
       }
     });
     if (boundary === "dispatch scopes") {
-      await expect(authorizeGatewayRequestPreDispatch(request)).resolves.toMatchObject({
-        error: { code: "FORBIDDEN", details: { code: "MISSING_SCOPE" } },
+      const respond = vi.fn();
+      await handleGatewayRequest({
+        req: {
+          type: "req",
+          id: "revoked-description",
+          method: "sessions.describe",
+          params: { key: query.key },
+        },
+        context,
+        client,
+        respond,
+        isWebchatConnect: () => false,
+        extraHandlers: sessionByKeyReadHandlers,
       });
+      expect(respond).toHaveBeenCalledExactlyOnceWith(
+        false,
+        undefined,
+        expect.objectContaining({ code: "FORBIDDEN" }),
+      );
     } else {
       const respond = vi.fn();
       await sessionByKeyReadHandlers["sessions.describe"]!({

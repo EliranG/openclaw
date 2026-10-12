@@ -46,7 +46,7 @@ import { registerChatAbortController } from "../../chat-abort.js";
 import { createChatRunState } from "../../server-chat-state.js";
 import { handleGatewayRequest } from "../../server-methods.js";
 import type { GatewayRequestContext, GatewayRequestHandlers } from "../../server-methods/types.js";
-import { resolveSessionMutationAuthorization } from "../../session-sharing.js";
+import { resolveSessionMutationAuthorizationAsync } from "../../session-sharing-authorization-async.js";
 import { sharingPolicyClient } from "../../session-sharing.test-utils.js";
 import { closeTalkClientGatewayControlSession } from "../client-gateway-control.js";
 import { drainingRelaySessions } from "../relay/state.js";
@@ -406,7 +406,7 @@ it("rechecks RPC sharing authorization after the control runtime import", async 
     visibility: "shared",
   });
   const { registration, abort } = registerOwnedEmbeddedRun("acl-run", "acl-session");
-  const authorization = resolveSessionMutationAuthorization({
+  const authorization = await resolveSessionMutationAuthorizationAsync({
     client,
     method: "talk.client.steer",
     requestParams: { sessionKey: "main" },
@@ -440,6 +440,7 @@ it("rechecks RPC sharing authorization after the control runtime import", async 
     });
     expect(abort).not.toHaveBeenCalled();
   } finally {
+    authorization.authorization?.release?.();
     registration.cleanup();
   }
 });

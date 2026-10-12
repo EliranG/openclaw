@@ -113,7 +113,11 @@ it("reads subagent lifecycle and policy metadata without decoding unrelated sess
           depth: 2,
           canSpawn: true,
         });
-        expect(resolvePersistedSubagentToolPolicyEnvelope(childSessionKey, options)).toMatchObject({
+        expect(
+          await withPreparedSessionCapabilityRead(() =>
+            resolvePersistedSubagentToolPolicyEnvelope(childSessionKey, options),
+          ),
+        ).toMatchObject({
           spawnedBy: "agent:main:main",
           inheritedToolAllow: ["read"],
           inheritedToolDeny: ["exec"],

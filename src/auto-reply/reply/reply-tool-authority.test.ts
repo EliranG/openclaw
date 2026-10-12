@@ -21,10 +21,8 @@ import {
   queueCurrentReplyRunMessage,
 } from "./reply-run-registry.test-helpers.js";
 import { testing } from "./reply-run-registry.test-support.js";
-import {
-  prepareReplyToolAuthority,
-  resolveFollowupRunToolAuthorityFingerprintAsync,
-} from "./reply-tool-authority.js";
+import { prepareReplyToolAuthority } from "./reply-tool-authority.js";
+import { resolveFollowupRunToolAuthorityFingerprintAsync } from "./reply-tool-authority.test-support.js";
 
 function toolAuthorityOverlay(
   run: ReturnType<typeof createQueueTestRun>,

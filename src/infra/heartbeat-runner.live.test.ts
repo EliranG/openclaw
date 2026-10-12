@@ -8,7 +8,7 @@ import { createOpenClawTestInstance } from "../../test/helpers/openclaw-test-ins
 import { isLiveTestEnabled } from "../agents/live-test-helpers.js";
 import { mergeWorkspaceSetupState } from "../agents/workspace-state-store.js";
 import { ensureAgentWorkspace } from "../agents/workspace.js";
-import { getRuntimeConfig, type OpenClawConfig } from "../config/config.js";
+import type { OpenClawConfig } from "../config/config.js";
 import type { GatewayClient } from "../gateway/client.js";
 import {
   connectTestGatewayClient,
@@ -23,9 +23,9 @@ const describeLive = enabled ? describe : describe.skip;
 const TURN_TIMEOUT_MS = 180_000;
 const MODEL = "openai/gpt-5.6-luna";
 
-async function readMessages(sessionKey: string): Promise<unknown[]> {
+async function readMessages(config: OpenClawConfig, sessionKey: string): Promise<unknown[]> {
   const { storePath, entry } = await loadGatewaySessionEntryReadOnlyInWorker({
-    cfg: getRuntimeConfig(),
+    cfg: config,
     key: sessionKey,
   });
   if (!entry?.sessionId) {
@@ -209,7 +209,7 @@ describeLive("session event wake through a live Gateway", () => {
         expect(
           (
             await loadGatewaySessionEntryReadOnlyInWorker({
-              cfg: getRuntimeConfig(),
+              cfg: config,
               key: sessionKey,
             })
           ).entry,
@@ -220,7 +220,7 @@ describeLive("session event wake through a live Gateway", () => {
         expect(await fs.readFile(path.join(workspace, "completion-started"), "utf8")).toBe(
           "started",
         );
-        const foregroundMessages = await readMessages(sessionKey);
+        const foregroundMessages = await readMessages(config, sessionKey);
         expect(messagesWithRole(foregroundMessages, "assistant")).toContain(startedReply);
         expect(messagesWithRole(foregroundMessages, "assistant")).not.toContain(completionReply);
         await expect(fs.access(path.join(workspace, "completion-completed"))).rejects.toThrow();
@@ -263,7 +263,9 @@ describeLive("session event wake through a live Gateway", () => {
         await vi.waitFor(
           async () => {
             expect(instance.logs()).not.toContain("Async work scope is closed");
-            const continued = (await readMessages(sessionKey)).slice(foregroundMessages.length);
+            const continued = (await readMessages(config, sessionKey)).slice(
+              foregroundMessages.length,
+            );
             expect(continued).toEqual(
               expect.arrayContaining([
                 expect.objectContaining({
@@ -279,7 +281,7 @@ describeLive("session event wake through a live Gateway", () => {
           },
           { timeout: TURN_TIMEOUT_MS, interval: 1_000 },
         );
-        const completedMessages = await readMessages(sessionKey);
+        const completedMessages = await readMessages(config, sessionKey);
         const completionUsers = messagesWithRole(
           completedMessages.slice(foregroundMessages.length),
           "user",
@@ -291,20 +293,20 @@ describeLive("session event wake through a live Gateway", () => {
         expect(await fs.readFile(path.join(workspace, "completion-completed"), "utf8")).toBe(
           "completed",
         );
-        expect(await readMessages(mainSessionKey)).toEqual([]);
+        expect(await readMessages(config, mainSessionKey)).toEqual([]);
 
         if (siblingRun) {
           expect(siblingSettled).toBe(false);
           await expect(fs.access(path.join(workspace, "sibling-completed"))).rejects.toThrow();
-          expect(messagesWithRole(await readMessages(siblingSessionKey), "user")).not.toContain(
-            completionReply,
-          );
+          expect(
+            messagesWithRole(await readMessages(config, siblingSessionKey), "user"),
+          ).not.toContain(completionReply);
           await fs.writeFile(siblingGatePath, "release");
           const siblingResponse = await siblingRun;
           expect(siblingResponse.status).toBe("ok");
-          expect(messagesWithRole(await readMessages(siblingSessionKey), "assistant")).toContain(
-            siblingReply,
-          );
+          expect(
+            messagesWithRole(await readMessages(config, siblingSessionKey), "assistant"),
+          ).toContain(siblingReply);
         }
 
         // The silent-success case also exercises scheduled monitoring; target:last
@@ -330,14 +332,14 @@ describeLive("session event wake through a live Gateway", () => {
           expect(forced.ok).toBe(true);
           await vi.waitFor(
             async () => {
-              const mainMessages = await readMessages(mainSessionKey);
+              const mainMessages = await readMessages(config, mainSessionKey);
               expect(messagesWithRole(mainMessages, "user")).toContain("[OpenClaw heartbeat poll]");
               expect(messagesWithRole(mainMessages, "assistant")).toContain(monitorReply);
             },
             { timeout: TURN_TIMEOUT_MS, interval: 1_000 },
           );
         }
-        expect(await readMessages(sessionKey)).toEqual(completedMessages);
+        expect(await readMessages(config, sessionKey)).toEqual(completedMessages);
         expect(instance.logs()).not.toContain("Async work scope is closed");
       } finally {
         try {

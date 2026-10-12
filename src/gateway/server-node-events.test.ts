@@ -583,7 +583,7 @@ describe("voice transcript events", () => {
 
 describe("notifications changed events", () => {
   it("does not enqueue a notification when pairing changes during session lookup", async () => {
-    const lookupStarted = createDeferred<void>();
+    const lookupStarted = createDeferred();
     const lookup = createDeferred<ReturnType<typeof buildSessionLookup>>();
     let connectionCurrent = true;
     vi.mocked(loadGatewaySessionEntryReadOnlyInWorker).mockImplementationOnce(async () => {

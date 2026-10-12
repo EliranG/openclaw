@@ -12,7 +12,10 @@ import { setActivePluginRegistry } from "../plugins/runtime.js";
 import { createTestRegistry } from "../test-utils/channel-plugins.js";
 import { useSessionStoreTempDirs } from "../test-utils/session-state-cleanup.js";
 import { INTERNAL_MESSAGE_CHANNEL } from "../utils/message-channel.js";
-import { resolveConversationCapabilityProfile } from "./conversation-capability-profile.js";
+import {
+  prepareConversationCapabilityProfile,
+  resolveConversationCapabilityProfile,
+} from "./conversation-capability-profile.js";
 import { projectConversationToolNames } from "./conversation-tool-policy-pipeline.js";
 import { preparePluginHarnessPolicyToolsAllow } from "./harness/execution-environment.js";
 import type { ScheduledToolPolicyContext } from "./scheduled-tool-policy.js";
@@ -293,7 +296,7 @@ describe("resolveConversationCapabilityProfile", () => {
       inheritedToolAllow: ["image_generate"],
     } as SessionEntry);
 
-    const profile = resolveConversationCapabilityProfile({
+    const profile = await prepareConversationCapabilityProfile({
       config: { session: { store: storePath } },
       sessionKey,
       agentId: "main",

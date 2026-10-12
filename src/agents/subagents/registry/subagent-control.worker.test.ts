@@ -29,10 +29,11 @@ import { withEnvAsync } from "../../../test-utils/env.js";
 import { observeMainThreadSql } from "../../../test-utils/main-thread-sql-spies.test-support.js";
 import { clearActiveEmbeddedRun, setActiveEmbeddedRun } from "../../embedded-agent-runner/runs.js";
 import { createEmbeddedRunHandle } from "../../embedded-agent-runner/runs.test-support.js";
-import { createOpenClawTools } from "../../openclaw-tools.js";
+import { createOpenClawToolsAsync } from "../../openclaw-tools.js";
 import { loadAgentRuntimePluginRegistryHandle } from "../../runtime-plugins.js";
 import { isSubagentRegistryWriteCommand } from "../../subagent-test-fixtures.test-helpers.js";
 import { resolveStoredSubagentCapabilities } from "../spawn/subagent-capabilities.js";
+import { withPreparedSessionCapabilityRead } from "../spawn/subagent-session-store.js";
 import { holdQueuedSwarmRun, releaseSwarmRun, reserveSwarmRun } from "../swarm/swarm-scheduler.js";
 import { subagentRuns } from "./subagent-registry-memory.js";
 import { restoreSubagentRunsFromDisk } from "./subagent-registry-persistence.js";
@@ -96,12 +97,14 @@ it.each(["caller admission", "session generation"] as const)(
         options,
       ),
     );
-    const tool = createOpenClawTools({
-      config: getRuntimeConfig(),
-      agentSessionKey: "agent:main:main",
-      workspaceDir: fixture.stateDir,
-      disableMessageTool: true,
-    }).find((candidate) => candidate.name === "subagents");
+    const tool = (
+      await createOpenClawToolsAsync({
+        config: getRuntimeConfig(),
+        agentSessionKey: "agent:main:main",
+        workspaceDir: fixture.stateDir,
+        disableMessageTool: true,
+      })
+    ).find((candidate) => candidate.name === "subagents");
     if (!tool) {
       throw new Error("Missing registered subagents tool");
     }
@@ -174,12 +177,14 @@ it.each(["same-ID replacement", "cold hydration"] as const)(
       if (kind === "cold hydration") {
         subagentRuns.clear();
       }
-      const tool = createOpenClawTools({
-        config: getRuntimeConfig(),
-        agentSessionKey: "agent:main:main",
-        workspaceDir: fixture.stateDir,
-        disableMessageTool: true,
-      }).find((candidate) => candidate.name === "subagents");
+      const tool = (
+        await createOpenClawToolsAsync({
+          config: getRuntimeConfig(),
+          agentSessionKey: "agent:main:main",
+          workspaceDir: fixture.stateDir,
+          disableMessageTool: true,
+        })
+      ).find((candidate) => candidate.name === "subagents");
       if (!tool) {
         throw new Error("Missing registered subagents tool");
       }
@@ -319,7 +324,9 @@ it.each([
         );
       }
       expect(
-        resolveStoredSubagentCapabilities(requester, { cfg: config, agentId: "main" }),
+        await withPreparedSessionCapabilityRead(() =>
+          resolveStoredSubagentCapabilities(requester, { cfg: config, agentId: "main" }),
+        ),
       ).toMatchObject({ controlScope: "children" });
     }
     const terminalEntered = createDeferred();
@@ -403,12 +410,14 @@ it.each([
         setActiveEmbeddedRun(sessionId, handle, key(id));
         return { id, sessionId, handle, abort };
       });
-    const tool = createOpenClawTools({
-      config,
-      agentSessionKey: requester,
-      workspaceDir: fixture.stateDir,
-      disableMessageTool: true,
-    }).find((candidate) => candidate.name === "subagents");
+    const tool = (
+      await createOpenClawToolsAsync({
+        config,
+        agentSessionKey: requester,
+        workspaceDir: fixture.stateDir,
+        disableMessageTool: true,
+      })
+    ).find((candidate) => candidate.name === "subagents");
     expect(tool, "core must register the native subagents tool").toBeDefined();
     if (!tool) {
       throw new Error("Missing registered subagents tool");
