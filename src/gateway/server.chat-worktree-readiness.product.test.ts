@@ -9,6 +9,7 @@ import {
   createDeferred,
   withinTest,
 } from "../../test/helpers/promise.js";
+import { waitForEmbeddedAgentRunEnd } from "../agents/embedded-agent-runner/active-run-projections.js";
 import * as workspaceReadiness from "../agents/workspace-readiness.js";
 import { requireGit } from "../agents/worktrees/git.js";
 import { ManagedWorktreeService } from "../agents/worktrees/service.js";
@@ -36,7 +37,7 @@ const fileContents = "WORKTREE_TOOL_MARKER: the complete checkout is ready.\n";
 const userMessage = "Read src/remaining.txt and report its marker.";
 const partial = "I can start while the workspace finishes.";
 
-function finishWithRead(response: ServerResponse) {
+function finishWithTool(response: ServerResponse, name: string, args: Record<string, unknown>) {
   const message = {
     type: "message",
     id: "msg_readiness",
@@ -48,8 +49,8 @@ function finishWithRead(response: ServerResponse) {
     type: "function_call",
     id: "fc_read_remaining",
     call_id: "call_read_remaining",
-    name: "read",
-    arguments: JSON.stringify({ path: "src/remaining.txt" }),
+    name,
+    arguments: JSON.stringify(args),
     status: "completed",
   };
   for (const event of [
@@ -84,6 +85,67 @@ function finishWithRead(response: ServerResponse) {
   response.end("data: [DONE]\n\n");
 }
 
+async function writeRecordingChannel(root: string, captureUrl: string) {
+  const id = "readiness-chat";
+  await fs.mkdir(root, { recursive: true });
+  await fs.writeFile(
+    path.join(root, "package.json"),
+    JSON.stringify({
+      name: id,
+      version: "1.0.0",
+      openclaw: { extensions: ["./index.cjs"] },
+    }),
+  );
+  await fs.writeFile(
+    path.join(root, "openclaw.plugin.json"),
+    JSON.stringify({
+      id,
+      channels: [id],
+      activation: { onStartup: true },
+      channelConfigs: {
+        [id]: {
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: { enabled: { type: "boolean" } },
+          },
+        },
+      },
+      configSchema: { type: "object", additionalProperties: false },
+    }),
+  );
+  await fs.writeFile(
+    path.join(root, "index.cjs"),
+    `
+const id = "readiness-chat";
+async function send(ctx) {
+  const bytes = ctx.mediaUrl ? await ctx.mediaReadFile(ctx.mediaUrl) : Buffer.alloc(0);
+  ctx.signal?.throwIfAborted();
+  await ctx.onPlatformSendDispatch?.();
+  ctx.assertDirectAdapterHandoff?.();
+  const response = await fetch(${JSON.stringify(captureUrl)}, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ to: ctx.to, text: ctx.text, contents: bytes.toString("utf8") }),
+    signal: ctx.signal,
+  });
+  if (!response.ok) throw new Error("Synthetic capture refused delivery");
+  await response.text();
+  return { channel: id, messageId: ctx.to };
+}
+module.exports = { id, register(api) {
+  api.registerChannel({ plugin: {
+    id, meta: { id, label: id, selectionLabel: id, docsPath: "/channels", blurb: "Synthetic recording channel" },
+    capabilities: { chatTypes: ["direct"], media: true },
+    config: { listAccountIds: () => ["default"], resolveAccount: () => ({ accountId: "default", enabled: true }), isConfigured: () => true },
+    messaging: { normalizeTarget: (raw) => raw.trim(), targetResolver: { looksLikeId: (raw) => raw.trim().length > 0 } },
+    outbound: { deliveryMode: "direct", resolveTarget: ({to}) => ({ ok: true, to }), sendText: send, sendMedia: send },
+  } });
+} };
+`,
+  );
+  return root;
+}
+
 function promptPrefix(
   body: Record<string, unknown>,
   workspace: string,
@@ -111,7 +173,7 @@ function promptPrefix(
 }
 
 it(
-  "starts inference before checkout, gates workspace reads, and preserves the prepared prompt",
+  "starts inference before checkout, preserves the prompt, and fences revoked workspace effects",
   { timeout: 90_000 },
   async ({ signal }) => {
     const state = await createOpenClawTestState({
@@ -131,6 +193,7 @@ it(
     });
     const repo = state.workspaceDir;
     const calls: ProviderCall[] = [];
+    const deliveries: Array<Record<string, unknown>> = [];
     const failures: unknown[] = [];
     const terminals: Array<{ sessionKey?: string; state?: string; errorMessage?: string }> = [];
     let nextCall = createDeferred<ProviderCall>();
@@ -214,6 +277,11 @@ it(
         if (!isRecord(body)) {
           throw new Error("Synthetic provider received an invalid request");
         }
+        if (request.url === "/capture") {
+          deliveries.push(body);
+          response.writeHead(200).end("captured");
+          return;
+        }
         const call = { body, response };
         calls.push(call);
         nextCall.resolve(call);
@@ -246,6 +314,10 @@ it(
         `http://127.0.0.1:${address.port}/v1`,
         "worktree-proof",
       );
+      const channelPath = await writeRecordingChannel(
+        state.path("recording-channel"),
+        `http://127.0.0.1:${address.port}/capture`,
+      );
       const cfg = {
         agents: {
           defaults: {
@@ -268,8 +340,18 @@ it(
             [provider.providerId]: { ...provider.config, request: { allowPrivateNetwork: true } },
           },
         },
-        plugins: { slots: { memory: "none" } },
-        tools: { profile: "coding", allow: ["read"], codeMode: false, toolSearch: false },
+        plugins: {
+          allow: ["readiness-chat"],
+          load: { paths: [channelPath] },
+          slots: { memory: "none" },
+        },
+        channels: { "readiness-chat": { enabled: true } },
+        tools: {
+          profile: "full",
+          allow: ["read", "write", "message"],
+          codeMode: false,
+          toolSearch: false,
+        },
         worktreeAcceleration: false,
         gateway: { auth: { mode: "token", token: "worktree-proof" } },
       } satisfies OpenClawConfig;
@@ -361,7 +443,7 @@ it(
       checkpoint = "first text delta";
       await withinTest(firstDelta.promise, signal);
       nextCall = createDeferred<ProviderCall>();
-      finishWithRead(initial.response);
+      finishWithTool(initial.response, "read", { path: "src/remaining.txt" });
       checkpoint = "workspace tool readiness wait";
       await withinTest(activeGate.toolWaiting.promise, signal);
       expect(calls).toHaveLength(1);
@@ -426,6 +508,94 @@ it(
       expect(
         await gateway.client.request("agent.wait", { runId: normalRun.runId, timeoutMs: 60_000 }),
       ).toMatchObject({ status: "ok" });
+
+      for (const toolName of ["write", "message"] as const) {
+        for (const revoked of [false, true]) {
+          const name = `readiness-${toolName}-${revoked ? "aborted" : "allowed"}`;
+          checkpoint = name;
+          const gate = makeGate(`agent:main:${name}`);
+          activeGate = gate;
+          nextCall = createDeferred<ProviderCall>();
+          const started = await gateway.client.request<{ runId: string; sessionId: string }>(
+            "sessions.create",
+            {
+              key: gate.key,
+              agentId: "main",
+              displayName: name,
+              worktree: true,
+              worktreeName: name,
+              worktreeBaseRef: "HEAD",
+              message:
+                toolName === "write"
+                  ? "Write a workspace canary."
+                  : "Send the workspace marker attachment.",
+            },
+          );
+          await withinTest(gate.entered.promise, signal);
+          const request = await withinTest(nextCall.promise, signal);
+          // Checkout rollback must not erase evidence of an unauthorized effect.
+          const canary = state.path(`effects/${name}.txt`);
+          nextCall = createDeferred<ProviderCall>();
+          request.response.writeHead(200, { "content-type": "text/event-stream" });
+          finishWithTool(
+            request.response,
+            toolName,
+            toolName === "write"
+              ? { path: canary, content: "workspace write canary" }
+              : {
+                  action: "send",
+                  channel: "readiness-chat",
+                  target: name,
+                  message: name,
+                  media: path.join(repo, "src/remaining.txt"),
+                },
+          );
+          await withinTest(
+            awaitGateBeforeSettlement(
+              gate.toolWaiting.promise,
+              nextCall.promise,
+              `${name}: tool finished without waiting for checkout`,
+            ),
+            signal,
+          );
+          expect(deliveries.filter((delivery) => delivery.to === name)).toEqual([]);
+          await expect(fs.access(canary)).rejects.toMatchObject({ code: "ENOENT" });
+          const runEnded = waitForEmbeddedAgentRunEnd(started.sessionId, null);
+          if (revoked) {
+            expect(
+              await gateway.client.request("chat.abort", {
+                sessionKey: gate.key,
+                runId: started.runId,
+              }),
+            ).toMatchObject({ aborted: true, runIds: [started.runId] });
+          }
+          gate.release.resolve();
+          await withinTest(gate.settled.promise, signal);
+          if (!revoked) {
+            const completedTool = await withinTest(nextCall.promise, signal);
+            if (toolName === "write") {
+              expect(await fs.readFile(canary, "utf8")).toBe("workspace write canary");
+            } else {
+              expect(deliveries.filter((delivery) => delivery.to === name)).toEqual([
+                { to: name, text: name, contents: fileContents },
+              ]);
+            }
+            writeOpenAiResponsesText(completedTool.response, {
+              text: "Effect completed.",
+              messageId: `msg_${name}`,
+              responseId: `resp_${name}`,
+            });
+          }
+          expect(await withinTest(runEnded, signal)).toBe(true);
+          expect(
+            await gateway.client.request("agent.wait", { runId: started.runId, timeoutMs: 60_000 }),
+          ).toMatchObject({ status: revoked ? "error" : "ok" });
+          if (revoked) {
+            await expect(fs.access(canary)).rejects.toMatchObject({ code: "ENOENT" });
+            expect(deliveries.filter((delivery) => delivery.to === name)).toEqual([]);
+          }
+        }
+      }
 
       const preparationError = new Error("Synthetic checkout failed; retry the session.");
       checkpoint = "preparation failure";

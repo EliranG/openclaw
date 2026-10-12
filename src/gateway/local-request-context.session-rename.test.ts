@@ -22,6 +22,7 @@ import { resolveGatewayScopedTools } from "./tool-resolution.js";
 
 vi.mock("../agents/openclaw-plugin-tools.js", () => ({
   resolveOpenClawPluginToolsForOptions: () => [],
+  resolveOpenClawPluginToolsForOptionsAsync: async () => [],
 }));
 
 afterEach(drainSessionToolsFixture);
