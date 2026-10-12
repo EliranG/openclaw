@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { selectChatLayoutAction } from "../test-helpers/chat-layout-menu.ts";
 import {
   type createControlUiE2eSuite,
   holdModuleResponse,
@@ -68,7 +69,7 @@ export function defineTypographyModuleBoundaryTests(
         expect(report.text).toBe(applePlatform ? "⌘⇧," : "Ctrl+Shift+,");
 
         await page.keyboard.press("Escape");
-        await page.locator(".chat-side-panel-toggle").click();
+        await selectChatLayoutAction(page, /^(Side panel|Minimize side panel)$/);
         const panelSelector = page.locator(".side-panel-empty--selector");
         const panelShortcuts = panelSelector.locator(".side-panel-type-option__shortcut");
         await panelSelector.waitFor();
