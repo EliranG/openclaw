@@ -242,13 +242,15 @@ export function createChatSendDispatchErrorLifecycle(params: {
       return;
     }
 
-    // Capture terminal ownership before durable cleanup yields: an explicit
-    // abort has both its signal and canonical marker, but a restart may abort
-    // only the signal and must retain its real dispatch-failure outcome.
-    const terminationFields = resolveAgentRunErrorLifecycleFields(
-      err,
-      activeRunAbort.controller.signal,
+    // Capture ownership before cleanup yields. Preparation also aborts this
+    // controller, so only typed reasons establish cancellation, not its failures.
+    const signalTermination = resolveAgentRunErrorLifecycleFields(
+      activeRunAbort.controller.signal.reason,
+      undefined,
     );
+    const terminationFields = signalTermination.stopReason
+      ? signalTermination
+      : resolveAgentRunErrorLifecycleFields(err, undefined);
     const abortedAtDispatchReject = activeRunAbort.controller.signal.aborted;
     const abortMarkerAtDispatchReject = context.chatRunState.runs.get(clientRunId)?.abortMarker;
     const agentTerminalOwnedAtDispatchReject =
