@@ -30,6 +30,8 @@ import { prepareQualifiedSessionEntryTarget } from "../../config/sessions/sessio
 import type { QualifiedSessionEntryAccessTarget } from "../../config/sessions/session-accessor.types.js";
 import { buildSessionCreationStamp } from "../../config/sessions/session-entry-provenance.js";
 import type { CapturedSessionEntryReadSource } from "../../config/sessions/session-entry-read-source.types.js";
+import { isSessionTranscriptProjectionUnavailableError } from "../../config/sessions/session-transcript-projection-error.js";
+import { startSessionTranscriptIndexReconcile } from "../../config/sessions/session-transcript-reconcile.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { measureDiagnosticsTimelineSpan } from "../../infra/diagnostics-timeline.js";
@@ -515,6 +517,16 @@ export function withCurrentChatSendSession<T>(params: {
         : undefined,
     consume,
     assertConfigCurrent,
+  }).catch((error: unknown) => {
+    if (isSessionTranscriptProjectionUnavailableError(error)) {
+      // Read workers report readiness; the host owns deferred repair and retry.
+      startSessionTranscriptIndexReconcile({
+        agentId: session.agentId,
+        path: session.sessionTarget.storePath,
+        preferredSessionId: error.sessionId,
+      });
+    }
+    throw error;
   });
 }
 

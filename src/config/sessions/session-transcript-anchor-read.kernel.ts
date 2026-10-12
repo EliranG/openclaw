@@ -3,7 +3,6 @@ import { runSqliteDeferredTransactionSync } from "../../infra/sqlite-transaction
 import { readSessionTranscriptRunId } from "../../sessions/transcript-events.js";
 import type { UserTurnTranscriptAdmissionReceipt } from "../../sessions/user-turn-transcript.types.js";
 import type { OpenClawAgentDatabase } from "../../state/openclaw-agent-db.js";
-import { readActivePathEntryRelationFromProjection } from "./session-accessor.sqlite-active-events.js";
 import type { SessionTranscriptWriteScope } from "./session-accessor.sqlite-contract.js";
 import {
   readExactSessionEntryRow,
@@ -17,6 +16,7 @@ import {
 } from "./session-accessor.sqlite-projection-read.js";
 import type { ResolvedTranscriptScope } from "./session-accessor.sqlite-scope.js";
 import {
+  readActivePathEntryRelationFromProjection,
   readActiveTranscriptEntryAnchorFromProjection,
   readActiveTranscriptEntryAnchorInTransaction,
 } from "./session-accessor.sqlite-transcript-anchor.js";
