@@ -1,8 +1,12 @@
+import type { BoardGetParams } from "@openclaw/gateway-protocol";
+
 type SessionHeaderLink = { url: string; label: string };
+// Current hosts pass only BoardGetParams; `session` stays optional so 2026.10.1
+// callers still type-check against today's session-header accessory mount.
 type SessionHeaderLinkContext = {
   signal: AbortSignal;
   presented: boolean;
-  props: { session?: { conversationLink?: SessionHeaderLink } };
+  props: BoardGetParams & { session?: { conversationLink?: SessionHeaderLink } };
 };
 type SessionHeaderLinkMount = (
   container: HTMLElement,
