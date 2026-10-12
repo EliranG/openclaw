@@ -55,6 +55,8 @@ vi.mock("../../../state/openclaw-state-worker-store.js", { spy: true });
 
 vi.mock("./subagent-registry-lifecycle-announce-cleanup.js", { spy: true });
 
+vi.mock("./subagent-registry-persistence.js", { spy: true });
+
 vi.mock("../../../plugins/hook-runner-global.js", { spy: true });
 
 const fixture = useSubagentControlFixture();
@@ -77,6 +79,10 @@ async function updateRun(
 const nativeCleanup = await vi.importActual<typeof announceCleanup>(
   "./subagent-registry-lifecycle-announce-cleanup.js",
 );
+
+const nativePersistence = await vi.importActual<
+  typeof import("./subagent-registry-persistence.js")
+>("./subagent-registry-persistence.js");
 
 async function registerCompletion(
   runId: string,
@@ -203,6 +209,14 @@ it.each(["not-committed", "unknown", "successor"] as const)(
     };
     const ready = createDeferredCore();
     const release = createDeferredCore();
+    const successorQueued = createDeferredCore();
+    const mutation = vi.mocked(mutateSubagentRuns).mockImplementation((runIds, plan, options) => {
+      const pending = nativePersistence.mutateSubagentRuns(runIds, plan, options);
+      if (runIds.includes(`${run.runId}-successor`)) {
+        successorQueued.resolve();
+      }
+      return pending;
+    });
     let intercepted = false;
     let committedBeforeLoss = false;
     let cleanupContext:
@@ -287,6 +301,7 @@ it.each(["not-committed", "unknown", "successor"] as const)(
           cleanup: "keep",
           expectsCompletionMessage: false,
         });
+        await successorQueued.promise;
       }
       release.resolve();
       await registration;
@@ -336,6 +351,7 @@ it.each(["not-committed", "unknown", "successor"] as const)(
       }
     } finally {
       release.resolve();
+      mutation.mockRestore();
       worker.mockRestore();
       start.mockRestore();
       await registration;
