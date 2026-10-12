@@ -35,7 +35,7 @@ separate implementations:
   in Codex's in-process V8 Code Mode runtime.
 - OpenClaw Code Mode runs in the generic OpenClaw agent runtime and is
   enabled through global, agent, or model activation settings. Its `exec`
-  tool takes a JSON `{ code }` payload, executed by the selected Node or
+  tool takes a JSON `{ title, code }` payload, executed by the selected Node or
   QuickJS executor.
 
 Both are JavaScript execution surfaces, not shell-command surfaces. Treat them
@@ -81,7 +81,9 @@ job. Open the page that matches your task.
   the fallback. Input hints retain integer and numeric bounds as comments, such
   as `offset?: number /* integer, >= 1 */`. Other validation details remain in
   the full schema available through `describe()`. These hints do not change
-  tool validation or output contracts.
+  tool validation or output contracts. Core file and shell tool signatures stay
+  first in the bounded index, followed by tools with declared output hints, so
+  catalog growth does not hide their input argument names.
 - Guest code calls globals directly or searches the hidden catalog for callable
   handles. A handle exposes bounded metadata and `describe()`, but never the
   exact internal catalog id. Calls use the same execution path as normal agent
@@ -113,7 +115,7 @@ behavior, or model selection.
   transform a tool result in one `exec`. Unknown outputs remain raw-first.
 - Provider neutral: works for OpenClaw, plugin, MCP, and client tools without
   depending on provider-native code execution.
-- Fails closed: if Code Mode is enabled but the selected executor is
+- No fallback: if Code Mode is enabled but the selected executor is
   unavailable, the run fails instead of silently falling back to broad direct
   tool exposure.
 

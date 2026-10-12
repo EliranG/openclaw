@@ -12,6 +12,7 @@ import {
   createControlUiE2eContextOptions,
   createControlUiE2eSuite,
 } from "./control-ui-e2e-suite.test-support.ts";
+import { openHomeFullPage } from "./sidebar-navigation.test-support.ts";
 
 const suite = createControlUiE2eSuite({
   name: "active turn recovery",
@@ -263,7 +264,9 @@ async function assertSteeredRecoveryOrder(
     await expect(thread.getByText(text, { exact: true })).toHaveCount(1, { timeout: 10_000 });
   }
   await expect(page.locator(".chat-working-indicator")).toHaveCount(1, { timeout: 10_000 });
-  await expect(page.locator(".chat-working-indicator__preamble")).toHaveText(texts.latest);
+  await expect(thread.locator(".chat-text").filter({ hasText: texts.latest })).toHaveText(
+    texts.latest,
+  );
 
   const order = await thread.evaluate((element, expected) => {
     const visibleText = Array.from(element.querySelectorAll<HTMLElement>(".chat-bubble"));
@@ -274,6 +277,7 @@ async function assertSteeredRecoveryOrder(
     const steer = bubbleWithText(expected.steer);
     const tool = element.querySelector<HTMLElement>(".chat-tool-row--running");
     const afterSteer = bubbleWithText(expected.afterSteer);
+    const latest = bubbleWithText(expected.latest);
     const precedes = (upper: Element | undefined | null, lower: Element | undefined | null) =>
       Boolean(
         upper && lower && upper.compareDocumentPosition(lower) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -283,6 +287,8 @@ async function assertSteeredRecoveryOrder(
       commentaryBeforeSteer: precedes(beforeSteer, steer),
       steerBeforeTool: precedes(steer, tool),
       toolBeforeLaterCommentary: precedes(tool, afterSteer),
+      laterCommentaryBeforeLatest: precedes(afterSteer, latest),
+      steerBeforeLatest: precedes(steer, latest),
     };
   }, texts);
   expect(order).toEqual({
@@ -290,6 +296,8 @@ async function assertSteeredRecoveryOrder(
     commentaryBeforeSteer: true,
     steerBeforeTool: true,
     toolBeforeLaterCommentary: true,
+    laterCommentaryBeforeLatest: true,
+    steerBeforeLatest: true,
   });
 }
 
@@ -310,7 +318,7 @@ suite.define(() => {
         .locator('wa-dropdown.sidebar-identity-menu wa-dropdown-item[value="command:usage"]')
         .click();
       await waitForControlUiRoute(page, { pathname: "/usage", routeId: "usage" });
-      await sidebar.getByRole("link", { name: "Home" }).click();
+      await openHomeFullPage(page);
       await waitForControlUiRoute(page, { pathname: "/chat/main", routeId: "chat" });
       await assertActiveTurnVisible(page, streamText);
       await expect.poll(() => readWorkingStartedAts(page)).toContain(startedAt);
@@ -599,7 +607,7 @@ suite.define(() => {
     }
   });
 
-  it("preserves pre-steer commentary order through a full reload", async () => {
+  it("preserves accepted steer order through a full reload", async () => {
     const runId = "run-steer-refresh";
     const texts = {
       original: "Review the fixture.",
@@ -627,6 +635,7 @@ suite.define(() => {
             id: "fixture-steering-user",
             idempotencyKey: "fixture-steer:user",
             seq: 2,
+            steerTargetRunId: runId,
           },
           content: [{ text: texts.steer, type: "text" }],
           role: "user",
