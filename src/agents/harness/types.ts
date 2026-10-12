@@ -413,7 +413,8 @@ export type AgentHarnessSessionDeletionParams = {
 export type AgentHarnessSessionDeletionMutation = {
   /**
    * @deprecated Opaque callbacks run after durable session commit. Use
-   * createNativeSessionCommitFinalizer for cleanup or a native binding participant for atomic storage.
+   * createNativeSessionBindingLifecycleV2 for stored bindings or
+   * createNativeSessionCommitFinalizer for cleanup.
    */
   commit: () => void;
   /** @deprecated Opaque callbacks no longer run before commit, so their rollback is unused. */

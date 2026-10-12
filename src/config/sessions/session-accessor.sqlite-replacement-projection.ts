@@ -22,11 +22,11 @@ import type { SessionCreationSnapshot } from "./session-accessor.sqlite-creation
 import {
   captureNativeSessionWorkerDeletion,
   preparedSessionDeletionRequiresNativeTransaction,
-  runPreparedSqliteSessionWrite,
   runSqliteSessionDeletionTransaction as runOpenClawAgentWriteTransaction,
 } from "./session-accessor.sqlite-deletion.js";
 import { prepareSessionIdentityPublication } from "./session-accessor.sqlite-identity.js";
 import { finalizeSessionEntryMaintenancePlansAfterWriterReleaseBestEffort } from "./session-accessor.sqlite-maintenance.js";
+import { runPreparedSqliteSessionWrite } from "./session-accessor.sqlite-prepared-write.js";
 import {
   readSessionEntryReplacementState,
   type SessionEntryReplacementState,

@@ -216,7 +216,7 @@ it.each([false, true])(
 );
 
 it.each([false, true])(
-  "consumes initializer rollback only after acknowledged worker deletion (binding: %s)",
+  "retains rollback authority until acknowledged worker deletion (binding: %s)",
   async (withBinding) => {
     await withNativeBindingFixture("agentsapi", async (fixture) => {
       if (!withBinding) {
@@ -225,24 +225,65 @@ it.each([false, true])(
       const entry = fixture.readEntry();
       assert(entry);
       let refuse = true;
-      probe.admission(admission, (request, grant, callback) => {
-        const facts = isRecord(request.facts) ? request.facts.publication : undefined;
-        if (
-          refuse &&
-          request.stage === "commit" &&
-          isRecord(facts) &&
-          facts.kind === "session-native-binding"
-        ) {
-          throw new Error("injected initializer delete failure");
-        }
-        callback(request, grant);
-      });
+      let grantDatabasePath: string | undefined;
+      let agentGrants = 0;
+      let authorityReads = 0;
+      let revoked = true;
+      const refusal = new Error("synthetic rollback authority revoked");
+      const create = admission.createSqliteWorkerOperationAdmission;
+      vi.spyOn(admission, "createSqliteWorkerOperationAdmission").mockImplementation(
+        (callback, attachment) => {
+          let databasePath: string | undefined;
+          const owned = create((request, grant) => {
+            const previous = grantDatabasePath;
+            const identity = isRecord(request.facts) ? request.facts.identity : undefined;
+            grantDatabasePath =
+              isRecord(identity) && typeof identity.nativeLocation === "string"
+                ? identity.nativeLocation
+                : databasePath;
+            if (grantDatabasePath === fixture.database.path) {
+              agentGrants++;
+            }
+            try {
+              const facts = isRecord(request.facts) ? request.facts.publication : undefined;
+              if (
+                refuse &&
+                request.stage === "commit" &&
+                isRecord(facts) &&
+                facts.kind === "session-native-binding"
+              ) {
+                throw new Error("injected initializer delete failure");
+              }
+              callback(request, grant);
+            } finally {
+              grantDatabasePath = previous;
+            }
+          }, attachment);
+          const bind = owned.bindDatabaseAuthority.bind(owned);
+          owned.bindDatabaseAuthority = (authority) => {
+            databasePath = authority.databasePath;
+            bind(authority);
+          };
+          return owned;
+        },
+      );
       const initializer = createSessionInitialization(
         { ...fixture.scope, lifecycleRevision: entry.lifecycleRevision },
-        () => {},
+        () => {
+          expect(grantDatabasePath).not.toBe(fixture.database.path);
+          fixture.readEntry();
+          authorityReads++;
+          if (revoked) {
+            throw refusal;
+          }
+        },
         { config: {}, agentId: fixture.scope.agentId, entry },
       );
       try {
+        await expect(initializer.rollback(() => fixture.remove())).rejects.toBe(refusal);
+        expect(fixture.readEntry()).toEqual(entry);
+        expect(fixture.readBinding()).toBeDefined();
+        revoked = false;
         await expect(initializer.rollback(() => fixture.remove())).rejects.toThrow(
           "injected initializer delete failure",
         );
@@ -257,12 +298,16 @@ it.each([false, true])(
           });
           expect(
             sql.queries.filter((query) =>
-              /\b(?:session_nodes|session_windows|transcript_events)\b/i.test(query),
+              /\b(?:delete\s+from|insert\s+into|update)\s+"?(?:session_nodes|session_windows|transcript_events)\b/i.test(
+                query,
+              ),
             ),
           ).toEqual([]);
         } finally {
           sql.restore();
         }
+        expect(authorityReads).toBeGreaterThan(0);
+        expect(agentGrants).toBeGreaterThan(0);
         expect(fixture.readEntry()).toBeUndefined();
         expect(() => initializer.handle.assertCurrent()).toThrow(
           "Session initialization is rolling back",
