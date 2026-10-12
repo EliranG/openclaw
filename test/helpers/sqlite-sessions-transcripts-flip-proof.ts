@@ -1719,15 +1719,21 @@ async function waitForAgentRunOk(client: GatewayClient, runId: string): Promise<
 }
 
 async function waitForAgentRunSettled(client: GatewayClient, runId: string): Promise<void> {
-  const result: { endedAt?: number; status?: string; stopReason?: string } = await client.request(
-    "agent.wait",
-    { runId, timeoutMs: 60_000 },
-    { timeoutMs: 65_000 },
-  );
+  const result: { endedAt?: number; status?: string; stopReason?: string; error?: unknown } =
+    await client.request("agent.wait", { runId, timeoutMs: 60_000 }, { timeoutMs: 65_000 });
   if (typeof result?.status !== "string") {
     throw new Error(`agent.wait returned no status for ${runId}: ${JSON.stringify(result)}`);
   }
   if (result.status === "ok") {
+    return;
+  }
+  // Deletion can cancel pending admission before a chat abort marker exists.
+  if (
+    result.status === "error" &&
+    result.stopReason === undefined &&
+    result.error === "AbortError: agent run aborted" &&
+    typeof result.endedAt === "number"
+  ) {
     return;
   }
   // Deletion can settle with its action or an admission/runtime abort reason.
