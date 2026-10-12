@@ -342,6 +342,20 @@ suite.define(() => {
         )
         .toBe(true);
 
+      const patchCount = (await gateway.getRequests("sessions.patch")).length;
+      await gateway.deferNext("sessions.patch");
+      await webSearch.click();
+      await gateway.waitForRequest("sessions.patch", { after: patchCount });
+      await gateway.rejectDeferred("sessions.patch", {
+        code: "UNAVAILABLE",
+        message: "Web search preference could not be saved",
+      });
+      await page.getByText("Web search preference could not be saved", { exact: true }).waitFor();
+      await expect.poll(() => webSearch.isDisabled()).toBe(false);
+      expect(
+        await webSearch.evaluate((node) => (node as HTMLElement & { checked: boolean }).checked),
+      ).toBe(true);
+
       const themeBackgrounds: string[] = [];
       for (const mode of ["dark", "light"] as const) {
         themeBackgrounds.push(
