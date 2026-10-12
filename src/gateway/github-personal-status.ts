@@ -5,7 +5,6 @@ import type {
 import { preparePersonalGitHubPublicationIdentity } from "../agents/github-tool-identity.js";
 import {
   prepareUserGitHubConnection,
-  readUserGitHubConnection,
   type UserGitHubConnection,
   type UserGitHubDevice,
 } from "../state/user-github-connections.js";
@@ -23,16 +22,6 @@ export function projectPending(pending: UserGitHubDevice): UsersGitHubAuthorizeS
 }
 
 const statusAuthorities = new WeakMap<PersonalGitHubStatus, () => void>();
-
-export function personalGitHubStatus(action: PersonalGitHubAction): PersonalGitHubStatus {
-  action.assertCurrent();
-  try {
-    return projectPersonalGitHubStatus(readUserGitHubConnection(action.owner));
-  } catch {
-    action.assertCurrent();
-    return unavailablePersonalGitHubStatus();
-  }
-}
 
 function unavailablePersonalGitHubStatus(): PersonalGitHubStatus {
   return {
