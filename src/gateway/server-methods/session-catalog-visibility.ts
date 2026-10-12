@@ -13,14 +13,11 @@ import { isIncognitoSessionKey } from "../../routing/session-key.js";
 import { readUserProfileAliases } from "../../state/user-profile-list.js";
 import { hasMultipleSessionSharingIdentities } from "../../state/user-profiles.js";
 import { ADMIN_SCOPE, authorizeOperatorScopesForRequiredScope } from "../method-scopes.js";
-import { operatorSessionCap } from "../operator-role-policy.js";
+import { operatorSessionCap, resolveGatewayOperatorRoleActor } from "../operator-role-policy.js";
 import { prepareSessionCreatorProfile } from "../session-creator.js";
 import { requireSessionRowProjection } from "../session-row-projection-access.js";
-import { withSessionSharingTarget } from "../session-sharing-policy.js";
-import {
-  prepareProjectedSessionSharing,
-  prepareSessionSharingProfiles,
-} from "../session-sharing-read.js";
+import { sharingIdentity } from "../session-sharing-policy.js";
+import { resolveSessionSharingRole, resolveSessionSharingTargetAsync } from "../session-sharing.js";
 import { createSessionCatalogRequestEntrySnapshot } from "./session-catalog-entry-snapshot.js";
 import type { GatewayClient, GatewayRequestContext } from "./types.js";
 
@@ -230,23 +227,25 @@ export async function resolveSessionCatalogThreadVisibility(params: {
       ) {
         return { visibility, source: { sessionKey: session.sessionKey, entry: visibleEntry } };
       }
-      const profiles = await prepareSessionSharingProfiles(params.client);
-      return withSessionSharingTarget(
-        { cfg: config, sessionKey: session.sessionKey },
-        ({ target, members, assertCurrent }) => {
-          assertCurrent();
-          const sharing = prepareProjectedSessionSharing({
-            cfg: params.context.getRuntimeConfig(),
-            client: params.client,
-            profiles,
-            isMember: (_target, identityId) =>
-              members.some((member) => member.identityId === identityId),
-          });
-          return target !== null && sharing.roleForTarget(target) === "member"
-            ? { visibility, source: { sessionKey: target.canonicalKey, entry: visibleEntry } }
-            : null;
-        },
+      const target = await resolveSessionSharingTargetAsync({
+        cfg: config,
+        sessionKey: session.sessionKey,
+      });
+      const identity = sharingIdentity(
+        params.client,
+        resolveGatewayOperatorRoleActor(params.client),
       );
+      return target !== null &&
+        resolveSessionSharingRole({
+          cfg: params.context.getRuntimeConfig(),
+          client: params.client,
+          target,
+          isMember: Boolean(
+            identity && projection.hasMembership(target.storePath, target.storeKey, identity.id),
+          ),
+        }) === "member"
+        ? { visibility, source: { sessionKey: target.canonicalKey, entry: visibleEntry } }
+        : null;
     }
     const nextCursor = host.nextCursor;
     if (!nextCursor || seenCursors.has(nextCursor)) {

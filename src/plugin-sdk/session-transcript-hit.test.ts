@@ -12,18 +12,25 @@ import {
   resolveTranscriptStemToSessionKeys,
 } from "./session-transcript-hit.js";
 
-const loadGatewaySessionStore = vi.hoisted(() => vi.fn());
+const { loadGatewaySessionStore, loadGatewaySessionStoreAsync } = vi.hoisted(() => ({
+  loadGatewaySessionStore: vi.fn(),
+  loadGatewaySessionStoreAsync: vi.fn(),
+}));
 vi.mock("../config/sessions/combined-store-gateway.js", () => ({
   loadCombinedSessionStoreForGatewayCore: loadGatewaySessionStore,
 }));
+// mock-isolation: SDK projection tests supply synthetic snapshots without loading database owners.
 vi.mock("../config/sessions/combined-store-gateway-read.js", () => ({
-  loadCombinedSessionStoreForGatewayCoreAsync: loadGatewaySessionStore,
+  loadCombinedSessionStoreForGatewayCoreAsync: loadGatewaySessionStoreAsync,
 }));
 
-it.each([loadCombinedSessionStoreForGateway, loadCombinedSessionStoreForGatewayAsync])(
-  "filters incognito rows from the plugin cross-session store view (%#)",
-  async (load) => {
-    loadGatewaySessionStore.mockReturnValue({
+it.each([
+  ["synchronous compatibility", loadCombinedSessionStoreForGateway],
+  ["async", loadCombinedSessionStoreForGatewayAsync],
+] as const)(
+  "filters incognito rows from the %s plugin cross-session view",
+  async (_label, load) => {
+    const snapshot = {
       storePath: "(multiple)",
       store: {
         "agent:main:dashboard:visible": { sessionId: "visible", updatedAt: 1 },
@@ -33,7 +40,9 @@ it.each([loadCombinedSessionStoreForGateway, loadCombinedSessionStoreForGatewayA
           updatedAt: 2,
         },
       },
-    });
+    };
+    loadGatewaySessionStore.mockReturnValue(snapshot);
+    loadGatewaySessionStoreAsync.mockResolvedValue(snapshot);
 
     expect((await load({})).store).toEqual({
       "agent:main:dashboard:visible": { sessionId: "visible", updatedAt: 1 },

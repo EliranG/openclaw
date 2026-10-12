@@ -312,7 +312,7 @@ vi.mock("../gateway/session-utils-store-worker.js", () => ({
     cfg: unknown;
     agentId?: string;
     includeStoreChildEntries?: boolean;
-  }) => Promise.resolve(loadSessionEntryMock(key, opts)),
+  }) => Promise.resolve(loadSessionEntryMock(key, Object.keys(opts).length ? opts : undefined)),
   resolveGatewaySessionStoreTargetInWorker: async ({
     key,
     agentId,
@@ -1239,10 +1239,10 @@ describe("EmbeddedTuiBackend", () => {
       } finally {
         await backend.stop();
       }
-      expect(loadSessionEntryMock).toHaveBeenCalledWith(
-        input.sessionKey,
-        input.agentId ? { agentId: input.agentId } : undefined,
-      );
+      expect(loadSessionEntryMock).toHaveBeenCalledWith(input.sessionKey, {
+        ...(input.agentId ? { agentId: input.agentId } : {}),
+        includeStoreChildEntries: true,
+      });
       expect(readChatHistoryPageMock).toHaveBeenCalledWith(
         expect.objectContaining({ canonicalKey: "global", sessionAgentId: owner, entry }),
       );

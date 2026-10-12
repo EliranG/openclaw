@@ -55,7 +55,6 @@ import {
 } from "./session-typing-state.js";
 import { sharingExpectedEntry } from "./sessions-sharing-authority.js";
 import {
-  authorizeSessionSuggestionMutation,
   createSessionSuggestionMutation,
   suggestionScope,
   requireSuggestionTarget,
@@ -127,15 +126,8 @@ export const sessionSuggestionHandlers: GatewayRequestHandlers = {
     validateSessionSuggestionsAddParams,
     async ({ params, respond, client, context, signal, sessionMutationAuthorization }) => {
       const target = await requireSuggestionTarget({ context, ...params, respond });
-      const cfg = context.getCommittedRuntimeConfig?.() ?? context.getRuntimeConfig();
       const author = gatewayClientSessionCreator(client);
-      if (
-        !target ||
-        !authorizeSessionSuggestionMutation(
-          { client, cfg, sessionKey: params.sessionKey, target, respond },
-          "add",
-        )
-      ) {
+      if (!target) {
         return;
       }
       if (!author) {
@@ -325,20 +317,11 @@ export const sessionSuggestionHandlers: GatewayRequestHandlers = {
       sessionMutationAuthorization,
     }) => {
       const target = await requireSuggestionTarget({ context, ...params, respond });
-      const cfg = context.getCommittedRuntimeConfig?.() ?? context.getRuntimeConfig();
       if (!target) {
         return;
       }
       const resolution = params.resolution;
       const dispatching = resolution === "send" || resolution === "queue";
-      if (
-        !authorizeSessionSuggestionMutation(
-          { client, cfg, sessionKey: params.sessionKey, target, respond },
-          resolution,
-        )
-      ) {
-        return;
-      }
       if (dispatching && !client) {
         respond(
           false,
