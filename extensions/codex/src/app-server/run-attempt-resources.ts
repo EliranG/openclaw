@@ -238,6 +238,7 @@ export function prepareCodexAttemptResources(prompt: CodexAttemptPrompt) {
     await nativeSubagentMonitorSettlement;
   };
   const registerNativeSubagentMonitor = async (parentThreadId: string) => {
+    const requestCustody = params.hostCapabilities.captureRequestCustody?.();
     const { client, thread, nativeHookRelay, turnRoute } = state;
     const sessionKey = params.sessionTarget?.sessionKey ?? params.sessionKey;
     const storePath = params.sessionTarget?.storePath;
@@ -335,6 +336,8 @@ export function prepareCodexAttemptResources(prompt: CodexAttemptPrompt) {
         unqualifiedModelExecution: modelSource && !configurationQualification ? true : undefined,
         onUnqualifiedModelCancelled: connection.abortExplicitly,
         requesterSessionKey: params.sessionKey,
+        requesterTurnRunId: params.runId,
+        requestCustody,
         completionScope: params.agentHarnessCompletionScope,
         historyOwner,
         submissionStore,

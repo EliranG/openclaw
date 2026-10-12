@@ -40,6 +40,7 @@ import { resolveSessionStoreKey } from "../session-utils.js";
 import type { WorkerInferenceCancellation } from "../worker-environments/inference-control-internal.js";
 import {
   canRequesterAbortChatRun,
+  captureSessionAbortRequestFilter,
   resolveAuthorizedPreRegisteredRunsForSessionKeys,
   resolveAuthorizedRunsForSessionKeys,
   resolveAuthorizedQueuedTurnsForSession,
@@ -291,11 +292,7 @@ function prepareChatSessionAbort(
     defaultAgentId: params.defaultAgentId,
     requester: params.requester,
   };
-  const acceptsRequest: SubagentRequestSessionOrigin["acceptsRequest"] = (identity) =>
-    canRequesterAbortChatRun(identity, params.requester) &&
-    (params.includeProtectedRuns === true ||
-      (identity.controlUiVisible !== false &&
-        !(params.preserveSideRuns && identity.turnKind === "btw")));
+  const acceptsRequest = captureSessionAbortRequestFilter(params);
   const commands = captureExecRequestCancellation(
     {
       sessionKey: params.sessionKey,
@@ -689,6 +686,9 @@ export async function abortChatRunsForSessionKeyWithPartials(
         sessionKey: params.sessionKey,
         agentId: params.agentId,
         sessionId: params.sessionId,
+        lifecycleRevision: params.session?.ok
+          ? params.session.value.entry?.lifecycleRevision
+          : undefined,
         execCancellation: plan.commands,
         sessionOrigin: plan.sessionOrigin,
         assertCurrent: params.assertCurrent,

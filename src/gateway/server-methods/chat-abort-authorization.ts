@@ -3,6 +3,7 @@ import {
   normalizeTrimmedStringList,
   uniqueStrings,
 } from "@openclaw/normalization-core/string-normalization";
+import type { SubagentRequestSessionOrigin } from "../../agents/subagents/registry/subagent-exec-request-ownership.js";
 import { composeSessionSourceAssertion } from "../../config/sessions/session-source-authority.js";
 import { buildAbortedAgentPayload } from "../agent-turn/agent-dedupe.js";
 import { setGatewayDedupeEntry } from "../agent-turn/agent-job.js";
@@ -20,6 +21,7 @@ import {
   PENDING_CHAT_SEND_DEDUPE_PREFIX,
   type DedupeEntry,
 } from "../server-shared.js";
+import type { ChatSessionAbortParams } from "./chat-abort-runtime.types.js";
 import type {
   GatewayRequestContext,
   GatewayRequestHandlerOptions,
@@ -36,6 +38,16 @@ export type ChatAbortRequester = {
     assertCurrent: () => void;
   };
 };
+
+export function captureSessionAbortRequestFilter(
+  params: Pick<ChatSessionAbortParams, "requester" | "includeProtectedRuns" | "preserveSideRuns">,
+): SubagentRequestSessionOrigin["acceptsRequest"] {
+  return (identity) =>
+    canRequesterAbortChatRun(identity, params.requester) &&
+    (params.includeProtectedRuns === true ||
+      (identity.controlUiVisible !== false &&
+        !(params.preserveSideRuns && identity.turnKind === "btw")));
+}
 
 type PreRegisteredAgentDedupePayload = {
   goalFingerprint?: unknown;

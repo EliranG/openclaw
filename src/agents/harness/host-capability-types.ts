@@ -40,6 +40,10 @@ export type AgentHarnessHostCapabilities = Readonly<{
   version: 1;
   /** Fails closed unless this exact admitted run capability remains active. */
   assertActive: () => void;
+  /** Capture admitted request ancestry for descendants that outlive this foreground turn. */
+  captureRequestCustody?: () =>
+    | import("../../infra/exec-request-context.js").ExecRequestCustody
+    | undefined;
   /** Native delegation without person selection must remain unambiguous at admission. */
   assertNativeSubagentSpawnAllowed?: () => void;
   /** Binds the actual native model; returns undefined only for runs without an operator source. */

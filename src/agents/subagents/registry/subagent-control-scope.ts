@@ -55,7 +55,7 @@ export function resolveSubagentControllerIdentity(params: {
   cfg: OpenClawConfig;
   agentSessionKey?: string;
   agentId?: string;
-}): Omit<ResolvedSubagentController, "controlScope"> {
+}): Omit<ResolvedSubagentController, "controlScope"> & { controllerAgentId: string } {
   const { alias } = resolveMainSessionAlias(params.cfg);
   const callerRaw = params.agentSessionKey?.trim() || alias;
   const callerSessionKey = resolveInternalSessionKey({ key: callerRaw, alias });
@@ -77,7 +77,7 @@ export function resolveSubagentController(params: {
   agentSessionKey?: string;
   agentId?: string;
   capabilityStore?: SessionCapabilityLookup;
-}): ResolvedSubagentController {
+}): ResolvedSubagentController & { controllerAgentId: string } {
   const identity = resolveSubagentControllerIdentity(params);
   if (!identity.callerIsSubagent) {
     return { ...identity, controlScope: "children" };
