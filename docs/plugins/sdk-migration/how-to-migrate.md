@@ -1426,6 +1426,9 @@ Keep the same arguments and await the replacement's result:
 | `agent-sessions`                         | `AuthStorage.reload`                          | `AuthStorage.reloadAsync`                            |
 | `agent-sessions`                         | `AuthStorage.set`                             | `AuthStorage.setAsync`                               |
 | `agent-sessions`                         | `AuthStorage.remove`, `AuthStorage.logout`    | `AuthStorage.removeAsync`, `AuthStorage.logoutAsync` |
+| `agent-sessions`                         | `ModelRegistry.create`                        | `ModelRegistry.createAsync`                          |
+| `agent-sessions`                         | `ModelRegistry.refresh`                       | `ModelRegistry.refreshAsync`                         |
+| `agent-sessions`                         | `ModelRegistry.unregisterProvider`            | `ModelRegistry.unregisterProviderAsync`              |
 
 The deprecated broad `agent-runtime` subpath also exposes
 `ensureAuthProfileStoreAsync`; use the focused `provider-auth` subpath for new imports.
@@ -1486,6 +1489,15 @@ available on instances created through the deprecated synchronous factory;
 an async instance rejects them with the required async method name. Migrate
 `AuthStorage.create(path)` by passing the path's agent directory to
 `AuthStorage.forAgentAsync`.
+
+Await `ModelRegistry.createAsync(authStorage, modelsJsonPath, options)` and
+`refreshAsync()` for disk-backed catalogs. If the owner already captured plugin
+catalogs, use `ModelRegistry.fromCapturedSources` with `options.pluginCatalogs`
+to build the registry synchronously without opening their store. Await
+`unregisterProviderAsync(name)` when removing a provider from a disk-backed
+registry. Captured session forks keep their immediate in-memory behavior.
+The synchronous disk-backed methods remain deprecated and warn on native reads
+through the current Plugin SDK major.
 
 Image, music, video, speech, realtime voice, and realtime transcription provider
 plugins should implement
