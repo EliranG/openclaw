@@ -10,6 +10,7 @@ export {
   readTranscriptStatsBatchReadOnlySync,
   sessionPathForFile,
   sessionPathForSessionIdentity,
+  statSessionEntry,
   statSessionEntrySync,
   type SessionFileEntry,
   type SessionFileState,

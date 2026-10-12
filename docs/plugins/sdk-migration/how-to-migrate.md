@@ -597,6 +597,15 @@ released signatures until the next Plugin SDK major. Legacy calls on the main
 thread emit a shared session-store deprecation warning; kernels already running
 inside database workers can keep their synchronous reads without a warning.
 
+Use `await statSessionEntry(path, options)` from
+`openclaw/plugin-sdk/memory-core-host-engine-sessions` to read transcript file
+metadata through the worker. `statSessionEntrySync` remains available until the
+next Plugin SDK major; passing already prepared transcript statistics to it
+only projects those values and does not query SQLite. `buildSessionEntry`
+also reads durable snapshots in the worker when an `onTranscriptMessage`
+observer is supplied, then invokes the observer on the caller with the original
+messages and timestamps.
+
 ## Prepare session entry changes
 
 Use `prepareSessionEntryPatch` or `applySessionEntryPatch` from

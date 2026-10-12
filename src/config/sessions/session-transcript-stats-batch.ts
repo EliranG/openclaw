@@ -8,23 +8,23 @@ import {
   isNativeSessionEntryRead,
 } from "./session-entry-read-request.js";
 import { withSessionStoreReaderInWorker } from "./session-entry-read-runtime.js";
+import type { SessionStoreWorkerReadInput } from "./session-entry-read-runtime.types.js";
 import { captureIncognitoSessionSource } from "./session-incognito-binding.js";
 import { resolveSessionStorePathForScope } from "./session-store-path.js";
 import { readTranscriptStatsAsync } from "./session-transcript-stats.js";
+
+type TranscriptStatsBatch = {
+  scope: SessionStoreWorkerReadInput & { env: NodeJS.ProcessEnv };
+  sessionIds: string[];
+  indexes: number[];
+};
 
 /** Preserve input order while reading each durable store in one worker request. */
 export async function readTranscriptStatsBatchReadOnlyAsync(
   scopes: readonly SessionTranscriptReadScope[],
 ): Promise<Array<SessionTranscriptStats | null>> {
   const results: Array<SessionTranscriptStats | null> = scopes.map(() => null);
-  const groups = new Map<
-    string,
-    {
-      scope: SessionTranscriptReadScope & { storePath: string; env: NodeJS.ProcessEnv };
-      sessionIds: string[];
-      indexes: number[];
-    }
-  >();
+  const groups = new Map<string, TranscriptStatsBatch>();
   for (const [index, input] of scopes.entries()) {
     if (captureIncognitoSessionSource(input)) {
       results[index] = await readTranscriptStatsAsync(input);
@@ -41,7 +41,11 @@ export async function readTranscriptStatsBatchReadOnlyAsync(
     const storePath = resolveSessionStorePathForScope(scope);
     const captured = { ...scope, agentId, storePath };
     const key = JSON.stringify([agentId, storePath, captured.env]);
-    const group = groups.get(key) ?? { scope: captured, sessionIds: [], indexes: [] };
+    const group: TranscriptStatsBatch = groups.get(key) ?? {
+      scope: captured,
+      sessionIds: [],
+      indexes: [],
+    };
     group.sessionIds.push(input.sessionId);
     group.indexes.push(index);
     groups.set(key, group);

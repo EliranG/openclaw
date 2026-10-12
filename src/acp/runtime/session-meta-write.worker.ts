@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { mergeSessionEntry, type SessionEntry } from "../../config/sessions/types.js";
+import {
+  mergeSessionEntry,
+  type InternalSessionEntry as SessionEntry,
+} from "../../config/sessions/types.js";
 import {
   legacyAcpMigrationBindingMatches,
   recordLegacyAcpMigrationCompletion,

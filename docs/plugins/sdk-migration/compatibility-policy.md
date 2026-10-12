@@ -543,8 +543,10 @@ per plugin. Batch transcript statistics now offer
 `readTranscriptStatsAsync` for individual transcripts. Their synchronous
 predecessors retain their signatures until the next Plugin SDK major and warn
 on main-thread use. Worker-local statistics kernels remain synchronous.
-`statSessionEntrySync` and synchronous archive and selector readers retain their
-existing native/offline contracts. Explicitly
+Use `statSessionEntry` for awaited file or transcript metadata. The deprecated
+`statSessionEntrySync` warns when it reads SQLite on the host; supplying prepared
+transcript statistics remains a synchronous projection without database access.
+Synchronous archive and selector readers retain their native/offline contracts. Explicitly
 bound actor calls refuse synchronous database access with
 `IncognitoSessionSyncAccessError`: await `resolveMemorySessionTargetsAsync`,
 `loadArchivedSessionsAsync`, or `buildSessionEntry` as named by the error.

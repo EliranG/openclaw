@@ -629,6 +629,11 @@ serveOwnedWorkerTasks(
               await import("../../../packages/memory-host-sdk/src/host/session-reset-recall-read.js");
             return { cutoff: readSessionResetRecallCutoffInProcess(request.scope) };
           }
+          if (request.mode === "snapshot") {
+            const { readSessionEntrySnapshotRequest } =
+              await import("./session-transcript-hydration-read.worker.js");
+            return readSessionEntrySnapshotRequest(request);
+          }
           const { buildSessionEntryInProcess, readSessionEntryResetRecallCutoff } =
             await import("../../../packages/memory-host-sdk/src/host/session-files.js");
           const { createSensitiveTextRedactor } = await import("../../logging/redact.js");

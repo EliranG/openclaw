@@ -52,6 +52,7 @@ export {
   readTranscriptStatsBatchReadOnlySync,
   sessionPathForFile,
   sessionPathForSessionIdentity,
+  statSessionEntry,
   statSessionEntrySync,
 } from "../../packages/memory-host-sdk/src/engine-sessions.js";
 

@@ -19,6 +19,8 @@ import { warnPluginSdkDeprecation } from "../../../../src/plugins/sdk-deprecatio
 import { IncognitoSessionSyncAccessError } from "../../../../src/state/incognito-session-error.js";
 
 export { readAccessorTranscriptStatsSync as readTranscriptStatsSync };
+export { readTranscriptStatsAsync } from "../../../../src/config/sessions/session-transcript-stats.js";
+export { warnPluginSdkDeprecation };
 export { readTranscriptExportSnapshotReadOnlySync };
 export { readRestoredSessionTranscript } from "../../../../src/config/sessions/session-cold-storage-read.js";
 export { readTranscriptStatsBatchReadOnlyAsync } from "../../../../src/config/sessions/session-transcript-stats-batch.js";
@@ -393,6 +395,16 @@ export async function prepareSessionEntryInWorker(
   const { prepareSessionEntryInWorker: prepare } =
     await import("../../../../src/config/sessions/session-transcript-read-worker-runtime.js");
   return prepare(...args);
+}
+
+export async function readSessionEntrySnapshotInWorker(
+  ...args: Parameters<
+    typeof import("../../../../src/config/sessions/session-transcript-read-worker-runtime.js").readSessionEntrySnapshotInWorker
+  >
+) {
+  const { readSessionEntrySnapshotInWorker: read } =
+    await import("../../../../src/config/sessions/session-transcript-read-worker-runtime.js");
+  return read(...args);
 }
 
 export async function readSessionTranscriptCorpusInWorker(

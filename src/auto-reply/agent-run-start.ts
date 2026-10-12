@@ -20,6 +20,7 @@ export function notifyPreparedAgentRunStart(
       start.transcriptStart,
     );
   }
+  return undefined;
 }
 
 export function warnLegacyAgentRunStart(): void {
@@ -47,6 +48,7 @@ export function observeAgentRunStart(
         warnLegacyAgentRunStart();
         return options.onAgentRunStart(...args);
       }
+      return undefined;
     },
   };
 }
