@@ -112,6 +112,11 @@ export type SessionExactEntriesWorkerRequest = SessionExactEntriesWorkerSelectio
   replacementSelection?: SessionEntryReplacementSelection;
   creationLabel?: string;
   continuation?: CanonicalSessionReaderContinuation;
+  transcript?: Omit<SessionTranscriptAnchorSelection, "afterSeq" | "includeMessagesForRunId"> & {
+    sessionKey: string;
+    /** Captured logical owner; the executor still selects the physical database. */
+    agentId?: string;
+  };
 };
 
 /** Bounded foreground facts read through an already admitted session executor. */
@@ -122,6 +127,7 @@ export type SessionEntryCohortRequest = Pick<
   | "includeMembers"
   | "includeParticipantRecords"
   | "lifecycleSessionKey"
+  | "transcript"
 > & {
   sessionKeys: readonly string[];
   includeAuthProfileSource?: boolean;
@@ -135,11 +141,6 @@ export type SessionEntryCohortRequest = Pick<
       sessionId: string;
       lifecycleRevision: string | undefined;
     }[];
-  };
-  transcript?: Omit<SessionTranscriptAnchorSelection, "afterSeq" | "includeMessagesForRunId"> & {
-    sessionKey: string;
-    /** Captured logical owner; the executor still selects the physical database. */
-    agentId?: string;
   };
 };
 

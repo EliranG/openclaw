@@ -69,6 +69,7 @@ import type { SessionRowDatabaseFacts } from "./session-row-facts.types.js";
 import { listSessionMembersInDatabase } from "./session-sharing-store.kernel.js";
 import { readSessionSourceValidation } from "./session-source-predicate.worker.js";
 import type { SessionStoreProjectionWorkerInput } from "./session-store-projection.types.js";
+import { readSessionTranscriptAnchorFactsInDatabase } from "./session-transcript-anchor-read.kernel.js";
 import { runWithSessionTranscriptReadFence } from "./session-transcript-read-fence.js";
 import {
   MAX_SESSION_ROW_FACTS_KEYS,
@@ -279,6 +280,7 @@ export function readExactSessionEntriesWithLifecycle(
       request.projection === "exact") &&
     !request.manualCompact &&
     !request.replyInitializationSessionKey &&
+    !request.transcript &&
     request.sessionKeys.length <= MAX_SESSION_ROW_FACTS_KEYS
   ) {
     const result = readDatabase(
@@ -321,7 +323,10 @@ export function readExactSessionEntriesWithLifecycle(
     }
     return { kind: "session-exact-entries", entries: [], lifecycleTimestamps: {} };
   }
-  if (request.projection === "exact" || request.projection === "worktree") {
+  if (
+    (request.projection === "exact" || request.projection === "worktree") &&
+    !request.transcript
+  ) {
     // Logical accessors validate only their candidates; unrelated rows are not listing admission.
     let source: SessionExactEntriesWorkerResult["source"];
     const read = readDatabase(
@@ -564,6 +569,38 @@ export function readExactSessionEntriesWithLifecycle(
               const entry = selected.value.find(
                 ({ sessionKey }) => sessionKey === request.lifecycleSessionKey,
               )?.entry;
+              const selection = request.transcript;
+              const transcriptEntry = selection
+                ? selected.value.find((row) => row.sessionKey === selection.sessionKey)?.entry
+                : undefined;
+              const transcript = selection
+                ? transcriptEntry
+                  ? readSessionTranscriptAnchorFactsInDatabase(
+                      database,
+                      {
+                        agentId: selection.agentId ?? database.agentId,
+                        sessionId: transcriptEntry.sessionId,
+                        sessionKey: selection.sessionKey,
+                        path: database.path,
+                        env: request.env,
+                      },
+                      selection,
+                      undefined,
+                      undefined,
+                      transcriptEntry,
+                    )
+                  : {
+                      anchors: [],
+                      ...(selection.activePathEntryId !== undefined
+                        ? {
+                            activePathRelation:
+                              selection.activePathEntryId === null
+                                ? ("exact" as const)
+                                : ("off-path" as const),
+                          }
+                        : {}),
+                    }
+                : undefined;
               const identity = request.includeAuthorization
                 ? readOpenClawAgentDatabaseIdentity(database)
                 : undefined;
@@ -600,6 +637,7 @@ export function readExactSessionEntriesWithLifecycle(
                   : {}),
                 kind: "session-exact-entries" as const,
                 entries: selected.value,
+                ...(transcript ? { transcript } : {}),
                 ...(request.projection === "lifecycle"
                   ? { pendingArchives: hasPendingSessionTranscriptArchives(database) }
                   : {}),
