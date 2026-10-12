@@ -551,10 +551,28 @@ describe("interrupted requester-settle continuation ownership", () => {
   it.each([
     { backoff: 0, privateCompletion: false, physicalLocator: false, quiet: false, legacy: false },
     { backoff: 0, privateCompletion: false, physicalLocator: true, quiet: false, legacy: false },
-    { backoff: 120_000, privateCompletion: false, physicalLocator: false, quiet: false, legacy: false },
-    { backoff: 120_000, privateCompletion: true, physicalLocator: false, quiet: false, legacy: false },
+    {
+      backoff: 120_000,
+      privateCompletion: false,
+      physicalLocator: false,
+      quiet: false,
+      legacy: false,
+    },
+    {
+      backoff: 120_000,
+      privateCompletion: true,
+      physicalLocator: false,
+      quiet: false,
+      legacy: false,
+    },
     { backoff: 0, privateCompletion: true, physicalLocator: true, quiet: true, legacy: false },
-    { backoff: 120_000, privateCompletion: true, physicalLocator: false, quiet: true, legacy: false },
+    {
+      backoff: 120_000,
+      privateCompletion: true,
+      physicalLocator: false,
+      quiet: true,
+      legacy: false,
+    },
     { backoff: 0, privateCompletion: false, physicalLocator: false, quiet: false, legacy: true },
   ])(
     "keeps the exact saved wake owned before admission (backoff $backoff, private $privateCompletion, physical locator $physicalLocator, quiet $quiet, legacy $legacy)",

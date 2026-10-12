@@ -189,7 +189,11 @@ export function createSubagentRegistryRestorer(config: {
         assertCurrent();
       }
       const selected = getCurrentSubagentRunOwner(runs, snapshot);
-      if (!selected || selected.runId !== runId || resolveSubagentChildAuthority(selected).status === "mismatch") {
+      if (
+        !selected ||
+        selected.runId !== runId ||
+        resolveSubagentChildAuthority(selected).status === "mismatch"
+      ) {
         continue;
       }
       assertReadCurrent();

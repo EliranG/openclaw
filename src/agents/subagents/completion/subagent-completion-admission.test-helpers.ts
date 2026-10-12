@@ -244,9 +244,3 @@ export async function reopenCompletionFixtureOwners() {
 export function currentCompletionRun(input: { subagent: SubagentRunRecord }): SubagentRunRecord {
   return expectDefined(subagentRuns.get(input.subagent.runId), "published completion run");
 }
-
-export function readCompletionSystemEvents(database: OpenClawStateDatabase) {
-  return database.db
-    .prepare("SELECT id FROM delivery_queue_entries WHERE entry_kind = 'systemEvent'")
-    .all();
-}

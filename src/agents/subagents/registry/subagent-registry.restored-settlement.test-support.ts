@@ -533,5 +533,4 @@ export function registerRestoredLegacyAuthorityTests({
       expect(mocks.entries[entry.childSessionKey]?.sessionId).toBe("legacy-queued-session");
     },
   );
-
 }
