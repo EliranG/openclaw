@@ -1,6 +1,6 @@
 import { getQueriesForElement } from "@solidjs/testing-library";
 /* @vitest-environment jsdom */
-import { flush } from "solid-js";
+import { createRoot, flush } from "solid-js";
 import { afterEach, expect, it, vi } from "vitest";
 import type { GatewaySessionRow } from "../api/types.ts";
 import { updatePersonActivityCard } from "./person-activity-card.tsx";
@@ -64,7 +64,12 @@ it("retains the open card's recent selection and focused link while fresh roster
     });
   show();
   expect(container.querySelectorAll(".person-activity-card__session")).toHaveLength(0);
-  show(data(initial));
+  // A portal retains its card after the caller's render scope is replaced.
+  const disposeCaller = createRoot((dispose) => {
+    updatePersonActivityCard(container);
+    show(data(initial));
+    return dispose;
+  });
   flush();
   const links = () => [
     ...container.querySelectorAll<HTMLAnchorElement>(".person-activity-card__session"),
@@ -76,6 +81,7 @@ it("retains the open card's recent selection and focused link while fresh roster
   ]);
   const focused = links()[1]!;
   focused.focus();
+  disposeCaller();
   show(data([{ ...initial[1]!, label: "two updated", updatedAt: 4 }, initial[2]!, initial[3]!]));
   flush();
   expect(links()).toHaveLength(2);

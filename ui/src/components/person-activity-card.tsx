@@ -1,5 +1,5 @@
 import { render } from "@solidjs/web";
-import { createMemo, createSignal, For, onCleanup, onSettled, Show } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, onSettled, runWithOwner, Show } from "solid-js";
 import type { GatewaySessionRow } from "../api/types.ts";
 import { i18n } from "../i18n/index.ts";
 import { HoverMarqueeController } from "../lib/hover-marquee-controller.ts";
@@ -356,28 +356,31 @@ export function updatePersonActivityCard(container: HTMLElement, input?: CardVal
     existing.update(input);
   } else {
     const initial: CardValue = input;
-    const dispose = render(() => {
-      const [value, setValue] = createSignal<CardValue>(initial, { ownedWrite: true });
-      cards.set(container, { update: setValue, dispose: () => dispose() });
-      onCleanup(() => cards.delete(container));
-      return (
-        <Show
-          when={(() => {
-            const current = value();
-            return typeof current === "object" ? current : undefined;
-          })()}
-          fallback={
-            <div class="person-reference__status" role="status">
-              {(() => {
-                const current = value();
-                return typeof current === "string" ? current : "";
-              })()}
-            </div>
-          }
-        >
-          {(current) => <PersonActivityCard input={current()} />}
-        </Show>
-      );
-    }, container);
+    // The portal outlives the caller’s transient render scope.
+    const dispose = runWithOwner(null, () =>
+      render(() => {
+        const [value, setValue] = createSignal<CardValue>(initial, { ownedWrite: true });
+        cards.set(container, { update: setValue, dispose: () => dispose() });
+        onCleanup(() => cards.delete(container));
+        return (
+          <Show
+            when={(() => {
+              const current = value();
+              return typeof current === "object" ? current : undefined;
+            })()}
+            fallback={
+              <div class="person-reference__status" role="status">
+                {(() => {
+                  const current = value();
+                  return typeof current === "string" ? current : "";
+                })()}
+              </div>
+            }
+          >
+            {(current) => <PersonActivityCard input={current()} />}
+          </Show>
+        );
+      }, container),
+    );
   }
 }

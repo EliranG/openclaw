@@ -36,14 +36,15 @@ export class PortaledHovercardController {
     }
   };
   private readonly handleCardFocusIn = (event: FocusEvent) => {
-    if (event.currentTarget === this.card) {
+    // A nested Solid root rewrites currentTarget while dispatching delegated focus events.
+    if (this.card && event.composedPath().includes(this.card)) {
       this.cardFocusInside = true;
       this.clearClose();
     }
   };
   private readonly handleCardFocusOut = (event: FocusEvent) => {
     const card = this.card;
-    if (!card || event.currentTarget !== this.card) {
+    if (!card || !event.composedPath().includes(card)) {
       return;
     }
     if (event.relatedTarget instanceof Node && card.contains(event.relatedTarget)) {
