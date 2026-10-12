@@ -525,7 +525,7 @@ async function patchSqliteSessionEntrySnapshot(
         // transcript SDK bypasses async queues. Revisit at the next SDK major.
         await source.release?.();
       }
-      const patchNative = () =>
+      const patchNative = async () =>
         withDatabase(async () => {
           const database = openOpenClawAgentDatabase(databaseOptions);
           assertCapturedSource(database);
