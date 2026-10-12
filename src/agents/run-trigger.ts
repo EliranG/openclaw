@@ -3,13 +3,7 @@ import type { InputProvenance } from "../sessions/input-provenance.js";
 import type { BootstrapContextRunKind } from "./bootstrap-mode.js";
 import type { TrustedSubagentCompletionHandoff } from "./subagents/announce/subagent-announce-handoff.js";
 
-export type EmbeddedRunTrigger =
-  | "cron"
-  | "event"
-  | "manual"
-  | "memory"
-  | "overflow"
-  | "user";
+export type EmbeddedRunTrigger = "cron" | "event" | "manual" | "memory" | "overflow" | "user";
 
 export type ModelCallUrgency = "foreground" | "normal" | "background";
 
@@ -21,11 +15,8 @@ export function resolveModelCallUrgency(provenance: {
   spawnedBy?: string | null;
   trustedInternalHandoff?: boolean | TrustedSubagentCompletionHandoff;
 }): ModelCallUrgency {
-  const backgroundRunKind =
-    provenance.bootstrapContextRunKind === "cron";
-  const backgroundTrigger =
-    provenance.trigger === "cron" ||
-    provenance.trigger === "memory";
+  const backgroundRunKind = provenance.bootstrapContextRunKind === "cron";
+  const backgroundTrigger = provenance.trigger === "cron" || provenance.trigger === "memory";
   if (backgroundRunKind || backgroundTrigger) {
     return "background";
   }
