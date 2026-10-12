@@ -96,7 +96,9 @@ describe("chat sidebar region", () => {
       expanded: true,
       expandedSide: true,
     });
-    const tab = root(region).querySelector<HTMLElement>('wa-tab[panel="workspace"]')!;
+    const tab = root(region).querySelector<HTMLElement>(
+      '.tabstrip-tab[data-tab-value="workspace"]',
+    )!;
     tab.click();
     tab.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     tab.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));

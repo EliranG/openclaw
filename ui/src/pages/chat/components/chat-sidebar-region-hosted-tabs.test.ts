@@ -100,10 +100,12 @@ describe("chat sidebar hosted tabs", () => {
     region.layout = { ...region.layout, expanded: true, expandedSide: true };
     await region.updateComplete;
     shell
-      .querySelector<HTMLElement>('wa-tab[panel="hosted:browser:remote:page:1"]')!
+      .querySelector<HTMLElement>('.tabstrip-tab[data-tab-value="hosted:browser:remote:page:1"]')!
       .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     expect(region.callbacks?.togglePanelExpanded).toHaveBeenCalledExactlyOnceWith("browser");
-    shell.querySelector<HTMLElement>('wa-tab[panel="hosted:browser:native:page:2"]')!.click();
+    shell
+      .querySelector<HTMLElement>('.tabstrip-tab[data-tab-value="hosted:browser:native:page:2"]')!
+      .click();
     expect(region.callbacks?.togglePanelExpanded).toHaveBeenCalledTimes(1);
   });
 
