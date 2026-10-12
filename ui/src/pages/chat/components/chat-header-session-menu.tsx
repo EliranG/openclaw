@@ -1,3 +1,4 @@
+import { html, nothing } from "lit";
 import { createSignal, onSettled, For, Show } from "solid-js";
 import type { UiSettings } from "../../../app/settings.ts";
 import { renderBoardGrantedCapabilities } from "../../../components/board/board-widget-capabilities.ts";
@@ -27,7 +28,6 @@ import { defineSolidBridge, type SolidBridgeElement } from "../../../lit/solid-b
 import type { LegacyTemplateResult as TemplateResult } from "../../../lit/solid-content.tsx";
 import { LitContent } from "../../../lit/solid-content.tsx";
 import { isChatBubbleMode, setChatBubbleMode } from "../chat-bubble-mode.ts";
-import { renderHeaderTerminalAction } from "./chat-header-session-menu.ts";
 import { ChatSessionSharing } from "./chat-session-sharing.solid.tsx";
 import {
   canManageChatSessionSharing,
@@ -71,6 +71,19 @@ const COMPACT_MENU_VIEW_BY_VALUE: Record<string, CompactMenuView> = {
   "compact:open-sharing": "sharing",
   "compact:open-view": "view",
 };
+
+// SessionMenuActions still consumes a Lit template for its shared Open in submenu.
+function renderHeaderTerminalAction(inline: boolean, disabledReason?: string) {
+  return html`<wa-dropdown-item
+    slot=${inline ? nothing : "submenu"}
+    class="session-menu__item"
+    value="continue-in-terminal"
+    ?disabled=${Boolean(disabledReason)}
+    title=${disabledReason ?? nothing}
+    ><span slot="icon" class="session-menu__icon" aria-hidden="true">${icons.terminal}</span>
+    <span class="session-menu__text">${t("chat.sessionHeader.continueInTerminal.action")}</span>
+  </wa-dropdown-item>`;
+}
 
 export type ChatHeaderSessionMenuProps = {
   session: SessionMenuData;
