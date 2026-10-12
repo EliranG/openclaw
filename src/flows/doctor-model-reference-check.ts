@@ -1,13 +1,14 @@
+/** Doctor checks configured references against known provider and catalog facts. */
 import { resolveKnownModelRefMigrationTarget } from "../commands/doctor/shared/codex-route-warnings.js";
-/** Doctor check for configured model references that have no installed provider owner. */
 import { readModelCatalogWarnings } from "../commands/models/catalog-warnings.js";
+import { hasActiveGatewayExecCredential } from "./doctor-gateway-exec-credential.js";
 import type { HealthCheck, HealthFinding } from "./health-checks.js";
 
 export function createModelReferenceCheck(): HealthCheck {
   return {
     id: "core/doctor/model-references",
     kind: "core",
-    description: "Configured model references have installed or configured provider owners.",
+    description: "Configured model references have known providers and server catalog diagnostics.",
     source: "doctor",
     async detect(ctx) {
       const { inspectConfiguredModelReferences } =
@@ -62,6 +63,20 @@ export function createModelReferenceCheck(): HealthCheck {
           },
         ];
       });
+      if (
+        ctx.allowExecSecretRefs !== true &&
+        (await hasActiveGatewayExecCredential({ cfg: ctx.cfg, env: ctx.env }))
+      ) {
+        findings.push({
+          checkId: "core/doctor/model-references",
+          severity: "info",
+          source: "doctor",
+          message:
+            "Server catalog inspection skipped because the selected Gateway uses an exec SecretRef.",
+          fixHint: "Run openclaw doctor --allow-exec to permit configured secret execution.",
+        });
+        return findings;
+      }
       for (const warning of await readModelCatalogWarnings(ctx.cfg)) {
         findings.push({
           checkId: "core/doctor/model-references",

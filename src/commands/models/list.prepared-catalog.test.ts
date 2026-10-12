@@ -157,6 +157,13 @@ describe("models list published transport", () => {
       await list({ json: true });
       expect(runtime.writeJson).toHaveBeenCalledWith(
         expect.objectContaining({
+          providerOutcomes: [
+            {
+              provider: "catalog-provider",
+              status,
+              ...(status === "ready" ? { unlistedConfiguredModelIds: ["Reader", "Absent"] } : {}),
+            },
+          ],
           models: [
             expect.objectContaining({
               key: "catalog-provider/Reader",

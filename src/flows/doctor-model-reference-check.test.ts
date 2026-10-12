@@ -43,8 +43,36 @@ it.each([false, true])(
     expect(call).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         method: "models.list",
+        sharedStateMode: "read-only",
         params: { view: "all", includeDetails: true, preparedOnly: true },
       }),
     );
   },
 );
+
+it("does not execute Gateway secret providers without Doctor's allow-exec opt-in", async () => {
+  vi.spyOn(gateway, "isImplicitLocalGatewayTarget").mockResolvedValue(true);
+  vi.spyOn(gatewayLock, "readActiveGatewayLockIdentity").mockResolvedValue({
+    pid: 123,
+    port: 19568,
+    createdAt: "fixture",
+  });
+  const call = vi.spyOn(gateway, "callGateway").mockResolvedValue({ models: [] });
+  const findings = await createModelReferenceCheck().detect({
+    mode: "lint",
+    env: {},
+    cfg: {
+      gateway: {
+        auth: {
+          mode: "token",
+          token: { source: "exec", provider: "fixture", id: "gateway-token" },
+        },
+      },
+    },
+    runtime: { log: vi.fn(), error: vi.fn(), exit: vi.fn() },
+  });
+  expect(call).not.toHaveBeenCalled();
+  expect(findings).toContainEqual(
+    expect.objectContaining({ severity: "info", fixHint: expect.stringContaining("--allow-exec") }),
+  );
+});

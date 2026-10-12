@@ -26,6 +26,7 @@ export async function readSelectedGatewayModelCatalog(
   return callGateway<ModelsListResult>({
     config,
     method: "models.list",
+    ...(params.preparedOnly ? { sharedStateMode: "read-only" as const } : {}),
     ...(timeoutMs ? { timeoutMs } : {}),
     requiredCapabilities: [GATEWAY_SERVER_CAPS.PUBLISHED_MODEL_CATALOG],
     ...(owner ? { localPortOverride: owner.port } : {}),

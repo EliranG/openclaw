@@ -53,7 +53,6 @@ import {
   shouldUseLmstudioApiKeyPlaceholder,
 } from "./provider-auth.js";
 import {
-  LmstudioConfigResolutionError,
   resolveLmstudioConfiguredApiKey,
   resolveLmstudioProviderHeaders,
   resolveLmstudioRequestContext,
