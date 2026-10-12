@@ -459,6 +459,41 @@ describe("service definition backup receipts", () => {
       expect(started).toEqual(original);
     },
   );
+  it.each([false, true])(
+    "restores a released numeric service receipt without replacing a newer file (replaced=%s)",
+    async (replaced) => {
+      const f = await fixture("linux", true);
+      await f.install();
+      // v2026.10.2 stored numeric dev/ino in every retained service file state.
+      const serialized = JSON.stringify(await f.capture.finish(), (key, value: unknown) => {
+        if ((key === "dev" || key === "ino") && typeof value === "string") {
+          const numeric = Number(value);
+          expect(Number.isSafeInteger(numeric)).toBe(true);
+          return numeric;
+        }
+        return value;
+      });
+      const receipt = GatewayServiceDefinitionBackupReceiptSchema.parse(JSON.parse(serialized));
+      const candidate = await fs.readFile(f.sourcePath);
+      if (replaced) {
+        const replacement = `${f.sourcePath}.operator`;
+        await fs.writeFile(replacement, candidate, { mode: 0o600 });
+        await fs.rename(replacement, f.sourcePath);
+        await expect(restoreGatewayServiceDefinitionBackup({ ...f, receipt })).rejects.toThrow(
+          "Service definition changed",
+        );
+        expect(await fs.readFile(f.sourcePath)).toEqual(candidate);
+        return;
+      }
+      await restoreGatewayServiceDefinitionBackup({ ...f, receipt });
+      expect(await fs.readFile(f.sourcePath)).toEqual(f.original);
+      expect((await fs.stat(f.sourcePath)).mode & 0o777).toBe(0o600);
+      for (const file of f.files.slice(1)) {
+        expect(await fs.readFile(file, "utf8")).toBe("OPERATOR_SETTING=old-value\n");
+      }
+    },
+  );
+
   it.each([
     { platform: "linux", ancillary: false },
     { platform: "darwin", ancillary: false },

@@ -1437,6 +1437,50 @@ describe("agents.delete", () => {
     expect(mocks.beginAgentDeletionFinish).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { encoding: "released numeric", savedIno: 123, replaced: false },
+    { encoding: "released numeric", savedIno: 123, replaced: true },
+    { encoding: "exact full-width", savedIno: "9007199254740992", replaced: false },
+    { encoding: "exact full-width", savedIno: "9007199254740992", replaced: true },
+  ])(
+    "resumes $encoding cleanup through the deletion handler (replaced=$replaced)",
+    async ({ savedIno, replaced }) => {
+      const workspaceDir = "/journal/workspace";
+      // v2026.10.2 persisted the prepared numeric identity in cleanup_paths_json.
+      const journal = deletionJournal({
+        workspaceDir,
+        cleanupPaths: [cleanupPath(workspaceDir, { dev: 42, ino: savedIno })],
+      });
+      mocks.loadConfigReturn = { agents: { entries: { main: {} } } };
+      mocks.readAgentDeletionJournal.mockReturnValue(journal);
+      const observedIno = BigInt(savedIno) + (replaced ? 1n : 0n);
+      mocks.fsLstat.mockResolvedValue(makeCleanupStat({ dev: 42n, ino: observedIno }));
+      if (typeof savedIno === "string") {
+        // Adjacent large native IDs are indistinguishable as JS numbers.
+        expect(Number(BigInt(savedIno) + 1n)).toBe(Number(BigInt(savedIno)));
+      }
+
+      const respond = await call("agents.delete", { agentId: "test-agent" });
+
+      expectRespondOk(respond, { ok: true, failed: [] });
+      const retainedPath = expectDefined(
+        journal.cleanupPaths.find((entry) => entry.path === workspaceDir),
+        "workspace cleanup path",
+      );
+      expect(retainedPath).toMatchObject({ done: true });
+      if (replaced) {
+        expectNotTrashed(workspaceDir);
+        expect(retainedPath).toMatchObject({
+          note: "cleanup path identity changed before deletion",
+        });
+      } else {
+        expectTrashedWithinParent(workspaceDir);
+        expect(retainedPath).not.toHaveProperty("note");
+      }
+      expect(mocks.beginAgentDeletionFinish).toHaveBeenCalledOnce();
+    },
+  );
+
   it("reclaims durable journal ownership after a process restart", async () => {
     const directoryOwners = new Map<string, string>();
     mocks.loadConfigReturn = { agents: { entries: { main: {} } } };
