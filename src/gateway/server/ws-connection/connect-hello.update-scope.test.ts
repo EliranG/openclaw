@@ -470,6 +470,7 @@ describe("sendGatewayHello update detail scope", () => {
       includeUpdateDetails: false,
     });
     expectRedactedHelloSnapshot(context);
+    expect(helloPayload(context)?.features.capabilities).toContain("node-permission-errors");
   });
 
   it("includes update details for an operator.read client", async () => {
