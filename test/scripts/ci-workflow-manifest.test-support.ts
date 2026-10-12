@@ -434,7 +434,7 @@ export function runCiManifestFixture(options: {
         path.join(scriptsDir, "ci-changed-node-test-plan.mts"),
         options.changedPlannerSource ??
           `
-          export { hasQaSmokeAffectingChange } from ${JSON.stringify(pathToFileURL(path.resolve("scripts/lib/ci-changed-node-test-plan.mts")).href)};
+          export { hasQaSmokeAffectingChange } from ${JSON.stringify(pathToFileURL(path.resolve("scripts/lib/ci-qa-smoke-scope.mts")).href)};
           export const createChangedNodeTestShards = (changedPaths, options = {}) => {
             console.log("changed-node-plan-options:" + JSON.stringify(options));
             if (options.releaseFastLane && changedPaths.includes("scripts/lib/ci-node-test-plan.mts")) {
