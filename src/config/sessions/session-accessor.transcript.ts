@@ -45,6 +45,10 @@ export {
 export { hasSessionTranscriptMessage } from "./session-transcript-message-presence.js";
 export { loadTranscriptEvents } from "./session-transcript-events.js";
 export {
+  loadTranscriptSuffixEventsBoundedSync,
+  readPreviousIndexedTranscriptEventSync,
+} from "./session-accessor.sqlite-suffix-read.js";
+export {
   rewritePreparedAssistantTranscriptMessageForRun as rewriteAssistantTranscriptMessageForRun,
   rewritePreparedTranscriptMessageAtAnchor as rewriteTranscriptMessageAtAnchor,
 } from "./session-message-rewrite.js";

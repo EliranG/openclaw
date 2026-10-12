@@ -245,7 +245,6 @@ export {
   readLatestTranscriptAssistantText,
   readTranscriptEventAtSeqSync,
   readTranscriptIdentityByEventId,
-  readSessionTranscriptMessageByEventId,
   readTranscriptRawDelta,
   readTranscriptMutationAtSync,
   readTranscriptMutationStateSync,
