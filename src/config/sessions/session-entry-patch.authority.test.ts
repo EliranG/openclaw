@@ -38,9 +38,7 @@ it("transfers an ordinary patch candidate with its final authority grant", async
           ) {
             transfers.push(publication.kind);
             if (request.stage === "commit") {
-              const entry = f.read();
-              expect(entry).toBeDefined();
-              expect(entry?.label).not.toBe("committed candidate");
+              expect(f.read()).toMatchObject({ label: "initial" });
               expect(publication.transfer).toMatchObject({
                 frames: [{ recordDone: true }, { done: true }],
               });
