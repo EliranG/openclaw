@@ -27,6 +27,10 @@ import {
 } from "./session-accessor.sqlite-transcript-metadata-read.js";
 import { readSessionTranscriptWatermarkInDatabase } from "./session-accessor.sqlite-transcript-watermark.js";
 import type {
+  SessionExactEntriesWorkerRequest,
+  SessionExactEntriesWorkerResult,
+} from "./session-entry-read.types.js";
+import type {
   SessionTranscriptAnchorEntry,
   SessionTranscriptAnchorFacts,
 } from "./session-transcript-anchor-read.types.js";
@@ -59,6 +63,44 @@ export type SessionTranscriptAnchorSelection = {
 };
 
 type AnchorMessageReader = (projection: CurrentTranscriptProjection, entryId: string) => unknown;
+
+export function readSessionEntryTranscriptFacts(
+  database: Pick<OpenClawAgentDatabase, "agentId" | "db" | "path">,
+  request: Pick<SessionExactEntriesWorkerRequest, "transcript" | "env">,
+  entries: SessionExactEntriesWorkerResult["entries"],
+): Pick<SessionExactEntriesWorkerResult, "transcript"> {
+  const selection = request.transcript;
+  if (!selection) {
+    return {};
+  }
+  const entry = entries.find((row) => row.sessionKey === selection.sessionKey)?.entry;
+  if (!entry) {
+    return {
+      transcript: {
+        anchors: [],
+        ...(selection.activePathEntryId !== undefined
+          ? { activePathRelation: selection.activePathEntryId === null ? "exact" : "off-path" }
+          : {}),
+      },
+    };
+  }
+  return {
+    transcript: readSessionTranscriptAnchorFactsInDatabase(
+      database,
+      {
+        agentId: selection.agentId ?? database.agentId,
+        sessionId: entry.sessionId,
+        sessionKey: selection.sessionKey,
+        path: database.path,
+        env: request.env,
+      },
+      selection,
+      undefined,
+      undefined,
+      entry,
+    ),
+  };
+}
 
 /** Load display policy before entering the synchronous anchor snapshot. */
 export async function prepareSessionTranscriptAnchorMessageReader(
