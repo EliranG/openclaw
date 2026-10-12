@@ -1,4 +1,3 @@
-import type { JSX } from "@solidjs/web";
 import { createMemo } from "solid-js";
 import type {
   PluginsSkillsReadParams,
@@ -216,10 +215,6 @@ export function PluginSkillPreview(props: {
       )}
     </>
   );
-}
-
-export function renderPluginSkillPreview(controller: PluginPreviewController): JSX.Element {
-  return <PluginSkillPreview controller={controller} state={controller.state} />;
 }
 
 export function renderPluginSkillsSection(

@@ -19,6 +19,7 @@ import {
   boundSessionEntryReplacementPublication,
   prepareSessionEntryReplacementPublication,
 } from "./session-accessor.sqlite-replacement-state.js";
+import { prepareSessionActorEntryPatch } from "./session-actor-entry-publication.worker.js";
 import { assertCanonicalSqliteSessionKeysCurrent } from "./session-canonical-key.js";
 import { readSessionEntryPatchPredicate } from "./session-entry-patch-guard.js";
 import { projectSessionEntryPatch } from "./session-entry-patch-operation.js";
@@ -113,7 +114,7 @@ export function commitSessionEntryPatch(
     );
     if (!predicate.matches) {
       // A false predicate precedes CAS and the throwing guard, including for a null patch.
-      result = { kind: "session-entry-patch", entry: null };
+      result = { kind: "session-entry-patch", entry: null, applied: false };
     } else {
       const publishRetention =
         "operation" in input || input.next
@@ -127,7 +128,7 @@ export function commitSessionEntryPatch(
           const validation = readSessionSourceValidation(database, input.sources);
           const { refusedSource } = validation;
           if (refusedSource) {
-            result = { kind: "session-entry-patch", entry: null, refusedSource };
+            result = { kind: "session-entry-patch", entry: null, applied: false, refusedSource };
             transferSessionEntryWorkerCandidate(database, admit, result);
             throw new Error("Session source refusal was not rejected");
           }
@@ -138,6 +139,7 @@ export function commitSessionEntryPatch(
           });
         },
       };
+      const publishActor = prepareSessionActorEntryPatch(database, input.sessionKey);
       let mutation;
       if ("operation" in input) {
         if (input.validateCanonicalKeys) {
@@ -174,6 +176,7 @@ export function commitSessionEntryPatch(
           result = {
             kind: "session-entry-patch",
             entry: null,
+            applied: false,
           };
           return transferSessionEntryWorkerCandidate(database, admit, result);
         }
@@ -213,9 +216,13 @@ export function commitSessionEntryPatch(
       if (mutation.identity) {
         publishRetention?.();
       }
+      if (publication && mutation.postimages) {
+        publishActor?.(mutation.postimages, publication);
+      }
       result = {
         kind: "session-entry-patch",
         entry: mutation.entry,
+        applied: mutation.applied,
         publication,
         transcriptPredicate:
           mutation.entry.sessionId === predicate.transcriptPredicate?.sessionId

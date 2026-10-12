@@ -49,6 +49,7 @@ type StreamMessageOptions = Pick<
   | "sessionKey"
   | "presented"
   | "boardProvider"
+  | "widgetLayout"
   | "agentId"
   | "runActive"
   | "asyncQuestions"
@@ -87,7 +88,6 @@ export type StreamGroupOptions = StreamMessageOptions & {
   waitingSubagents?: ChatSubagentWait;
   runningSubagents?: number;
   subagentActivity?: LegacyTemplateResult;
-  onOpenSubagent?: (key: string) => void;
   onOpenSubagents?: () => void;
   runOutputTokens?: number | null;
   questionPrompts?: ReadonlyMap<string, QuestionPrompt>;
@@ -191,7 +191,6 @@ function NonstreamPart(props: {
           props.part.waitingOn === "subagents" ? props.options.waitingSubagents : undefined,
         runningSubagents: props.options.runningSubagents,
         subagentActivity: props.options.subagentActivity,
-        onOpenSubagent: props.options.onOpenSubagent,
         onOpenSubagents: props.options.onOpenSubagents,
         startupLabel: props.options.startupLabel,
         outputTokens: props.options.runOutputTokens,
