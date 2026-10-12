@@ -1,14 +1,25 @@
 import { captureSessionWorkRunInterruptions } from "../../../sessions/session-lifecycle-admission.js";
 import { createAgentRunDirectAbortError } from "../../run-termination.js";
+import { resolveSubagentChildAuthority } from "./subagent-child-owner-match.js";
 import type { captureSubagentCommands } from "./subagent-control-commands.js";
 import type { createSubagentKillAcceptance } from "./subagent-control-kill-acceptance.js";
 import type { SubagentKillSession } from "./subagent-control-session.js";
 import {
   captureSubagentEmbeddedExecution,
   captureSubagentExecution,
-  type captureSubagentReplyExecution,
+  captureSubagentReplyExecution,
 } from "./subagent-registry-execution-cleanup.js";
 import type { SubagentRunRecord } from "./subagent-registry.types.js";
+
+/** Legacy-unverified runs capture their exact embedded and reply executions before Stop. */
+export async function prepareLegacySubagentKill(entry: SubagentRunRecord) {
+  const legacy = resolveSubagentChildAuthority(entry).status === "legacy-unverified";
+  return {
+    legacy,
+    embeddedExecution: legacy ? captureSubagentEmbeddedExecution(entry) : undefined,
+    replyExecution: legacy ? await captureSubagentReplyExecution(entry) : undefined,
+  };
+}
 
 export async function interruptLegacySubagentRun(params: {
   entry: SubagentRunRecord;

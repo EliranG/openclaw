@@ -9,24 +9,23 @@ import {
 } from "../../../sessions/session-lifecycle-admission.js";
 import type { OpenClawStateWorkerContext } from "../../../state/openclaw-state-worker-context.types.js";
 import { createAgentRunDirectAbortError } from "../../run-termination.js";
-import { resolveSubagentChildAuthority } from "./subagent-child-owner-match.js";
 import { captureSubagentCommands } from "./subagent-control-commands.js";
 import { createSubagentKillAcceptance } from "./subagent-control-kill-acceptance.js";
 import { matchesSubagentKillIntent } from "./subagent-control-kill-intent.js";
-import { interruptLegacySubagentRun } from "./subagent-control-legacy-interruption.js";
+import {
+  interruptLegacySubagentRun,
+  prepareLegacySubagentKill,
+} from "./subagent-control-legacy-interruption.js";
 import type { SubagentKillSession } from "./subagent-control-session.js";
 import * as runtime from "./subagent-control.runtime.js";
 import type {
   SubagentCancellationControl,
   SubagentKillTargetState,
+  SubagentRunKillResult,
 } from "./subagent-control.types.js";
 import { SUBAGENT_ENDED_REASON_KILLED } from "./subagent-lifecycle-events.js";
 import { resolveSubagentKillTargetState } from "./subagent-registry-completion.js";
-import {
-  captureSubagentEmbeddedExecution,
-  captureSubagentExecution,
-  captureSubagentReplyExecution,
-} from "./subagent-registry-execution-cleanup.js";
+import type { captureSubagentExecution } from "./subagent-registry-execution-cleanup.js";
 import { getCurrentSubagentRunOwner, subagentRuns } from "./subagent-registry-memory.js";
 import {
   assertSubagentRegistryWriteOutcomeKnown,
@@ -63,15 +62,7 @@ export async function mutateSubagentRunForKill(
   },
   captureExecution: () => ReturnType<typeof captureSubagentExecution>,
   stopAcceptance: { accepted: boolean },
-): Promise<{
-  killed: boolean;
-  continuationRetired?: true;
-  superseded?: boolean;
-  declined?: true;
-  targetState?: SubagentKillTargetState;
-  error?: string;
-  completedCleanupError?: string;
-}> {
+): Promise<SubagentRunKillResult> {
   const { stateContext } = params;
   const currentEntry = () => getCurrentSubagentRunOwner(subagentRuns, params.entry);
   const assertKnownOutcome = () => {
@@ -171,9 +162,7 @@ export async function mutateSubagentRunForKill(
   }
   const childSessionKey = params.entry.childSessionKey;
   const resolved = params.session;
-  const legacy = resolveSubagentChildAuthority(initial).status === "legacy-unverified";
-  const embeddedExecution = legacy ? captureSubagentEmbeddedExecution(initial) : undefined;
-  const replyExecution = legacy ? await captureSubagentReplyExecution(initial) : undefined;
+  const { legacy, embeddedExecution, replyExecution } = await prepareLegacySubagentKill(initial);
   assertSelectedRun();
   const sessionId = resolved.entry?.sessionId;
   const commands = params.commands ?? captureSubagentCommands(initial, resolved);
