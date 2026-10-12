@@ -2,12 +2,9 @@ import { expectDefined, safeParseJsonRecord } from "@openclaw/normalization-core
 import { describe, expect, it, vi } from "vitest";
 import { createDeferred } from "../../../test/helpers/promise.js";
 import { getPreparedModelRuntimeAuthStore } from "../../agents/prepared-model-runtime-auth.js";
-import { loadSessionEntry, patchSessionEntryCore } from "../../config/sessions/session-accessor.js";
+import { loadSessionEntry } from "../../config/sessions/session-accessor.js";
+import { replaceSessionEntrySync } from "../../config/sessions/session-accessor.sqlite-entry.js";
 import { createFallbackSessionEntry } from "../../config/sessions/session-accessor.sqlite-normalize.js";
-import {
-  resolveSqliteScope,
-  toDatabaseOptions,
-} from "../../config/sessions/session-accessor.sqlite-scope.js";
 import {
   projectionLane,
   rotateDatabaseWorkers,
@@ -49,15 +46,13 @@ import { modelsHandlers } from "./models.js";
 import type { GatewayRequestHandlerOptions, RespondFn } from "./types.js";
 
 function writeSessionFixture(
-  scope: Parameters<typeof patchSessionEntryCore>[0],
+  scope: Parameters<typeof replaceSessionEntrySync>[0],
   patch: Partial<SessionEntry>,
 ) {
-  openOpenClawAgentDatabase(toDatabaseOptions(resolveSqliteScope(scope)));
-  return patchSessionEntryCore(scope, () => patch, {
-    skipMaintenance: true,
-    fallbackEntry: createFallbackSessionEntry(patch),
-    // Native fixture writes isolate request-reader lifetimes; worker writes have owner coverage.
-    assertCommitAllowed: () => {},
+  // Keep fixture writes independent of the request resources checked below.
+  replaceSessionEntrySync(scope, {
+    ...(loadSessionEntry(scope) ?? createFallbackSessionEntry(patch)),
+    ...patch,
   });
 }
 
@@ -178,7 +173,7 @@ describe("direct session model catalogs", () => {
       const f = fixture();
       await state.writeConfig(f.config);
       const scope = { agentId: "main", sessionKey: "agent:main:catalog-revision" };
-      await writeSessionFixture(scope, {
+      writeSessionFixture(scope, {
         sessionId: "catalog-revision-session",
         updatedAt: 1,
         createdActor: { type: "human", source: "profile", id: f.person.id },
@@ -194,7 +189,7 @@ describe("direct session model catalogs", () => {
         [{ agentRuntimeOverride: "openclaw" }, true],
         [{ lifecycleRevision: "replacement" }, true],
       ] satisfies Array<[Partial<SessionEntry>, boolean]>) {
-        await writeSessionFixture(scope, patch);
+        writeSessionFixture(scope, patch);
         const respond = await f.request({ sessionKey: scope.sessionKey, view: "configured" });
         const result = respond.mock.calls[0]?.[1];
         expect(respond.mock.calls[0]?.[0]).toBe(true);
@@ -231,7 +226,7 @@ describe("direct session model catalogs", () => {
         const f = fixture();
         await state.writeConfig(f.config);
         const sessionKey = "agent:main:hidden-catalog";
-        await writeSessionFixture(
+        writeSessionFixture(
           { agentId: "main", sessionKey },
           {
             sessionId: "hidden-catalog-session",
@@ -266,7 +261,7 @@ describe("direct session model catalogs", () => {
       const f = fixture();
       await state.writeConfig(f.config);
       const scope = { agentId: "main", sessionKey: "agent:main:catalog-read-marker" };
-      await writeSessionFixture(scope, {
+      writeSessionFixture(scope, {
         sessionId: "catalog-read-marker-session",
         lifecycleRevision: "catalog-read-marker-lifecycle",
         updatedAt: 1,
@@ -316,12 +311,7 @@ describe("direct session model catalogs", () => {
             throw new Error("Model catalog completed before the preparation hold");
           }),
         ]);
-        await patchSessionEntryCore(scope, () => ({ lastReadAt: 2 }), {
-          preserveActivity: true,
-          skipMaintenance: true,
-          // Keep the pending reader's lifetime independent of an idle writer generation.
-          assertCommitAllowed: () => {},
-        });
+        writeSessionFixture(scope, { lastReadAt: 2 });
         expect(loadSessionEntry(scope)).toEqual({ ...before, lastReadAt: 2 });
         expect(readRow()).toEqual({
           ...beforeRow,
@@ -354,7 +344,7 @@ describe("direct session model catalogs", () => {
       const f = fixture();
       await state.writeConfig(f.config);
       const scope = { agentId: "main", sessionKey: "agent:main:held-saved" };
-      await writeSessionFixture(scope, {
+      writeSessionFixture(scope, {
         sessionId: "original",
         updatedAt: 1,
         createdActor: { type: "human", source: "profile", id: f.person.id },
@@ -374,9 +364,9 @@ describe("direct session model catalogs", () => {
         await Promise.race([entered.promise, pending]);
         expect(f.readPrepared).toHaveBeenCalledOnce();
         if (change === "selected patch") {
-          await writeSessionFixture(scope, { label: "changed" });
+          writeSessionFixture(scope, { label: "changed" });
         } else if (change === "selected reset") {
-          await writeSessionFixture(scope, {
+          writeSessionFixture(scope, {
             sessionId: "replacement",
             lifecycleRevision: "replacement",
           });
@@ -441,12 +431,12 @@ describe("direct session model catalogs", () => {
         await state.writeConfig(f.config);
         const selected = { agentId: "main", sessionKey: "agent:main:metadata-selected" };
         const other = { ...selected, sessionKey: "agent:main:metadata-other" };
-        await writeSessionFixture(selected, {
+        writeSessionFixture(selected, {
           sessionId: "selected",
           updatedAt: 1,
           createdActor: { type: "human", source: "profile", id: f.person.id },
         });
-        await writeSessionFixture(other, {
+        writeSessionFixture(other, {
           sessionId: "other",
           updatedAt: 1,
           createdActor: { type: "human", source: "profile", id: f.person.id },
@@ -471,7 +461,7 @@ describe("direct session model catalogs", () => {
         void pending.catch(() => {});
         try {
           await Promise.race([entered.promise, pending]);
-          await writeSessionFixture(changeSelected ? selected : other, {
+          writeSessionFixture(changeSelected ? selected : other, {
             modelOverride: "replacement",
           });
         } finally {
@@ -504,7 +494,7 @@ describe("direct session model catalogs", () => {
       };
       await state.writeConfig(f.config);
       const sessionKey = "agent:main:saved";
-      await writeSessionFixture(
+      writeSessionFixture(
         { agentId: "main", sessionKey },
         {
           sessionId: "saved-catalog-session",
@@ -554,7 +544,7 @@ describe("direct session model catalogs", () => {
       await state.writeConfig(f.config);
       clearUserProfileAuthLink({ profileId: f.person.id, provider: "openai" });
       const sessionKey = "agent:main:harness:catalog-native:saved";
-      await writeSessionFixture(
+      writeSessionFixture(
         { agentId: "main", sessionKey },
         {
           sessionId: "catalog-native-session",

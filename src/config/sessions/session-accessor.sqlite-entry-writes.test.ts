@@ -1,5 +1,9 @@
 import { expect, it, vi } from "vitest";
-import { trackSqliteStatementExecutions } from "../../../test/helpers/sqlite-statement-execution-counter.js";
+import {
+  isSessionEntryDataSql,
+  observeHostDataSql,
+  trackSqliteStatementExecutions,
+} from "../../../test/helpers/sqlite-statement-execution-counter.js";
 import { ensureOpenClawAgentBoardSchemaInTransaction } from "../../state/openclaw-agent-board-schema.js";
 import {
   openOpenClawAgentDatabase,
@@ -35,77 +39,75 @@ it("skips unchanged entry and snapshot writes while retaining current transcript
     );
     const assertCommitAllowed = vi.fn();
     const onCommitted = vi.fn();
-    const patch = (fields: Partial<SessionEntry>) =>
-      patchSessionEntryCore(scope, () => fields, {
-        assertCommitAllowed,
-        onCommitted,
-        preserveActivity: true,
-        skipMaintenance: true,
-      });
+    const patch = async (fields: Partial<SessionEntry>) => {
+      const hostSql = observeHostDataSql();
+      try {
+        const result = await patchSessionEntryCore(scope, () => fields, {
+          assertCommitAllowed,
+          onCommitted,
+          preserveActivity: true,
+          skipMaintenance: true,
+        });
+        expect(hostSql.queries.filter(isSessionEntryDataSql)).toEqual([]);
+        return result;
+      } finally {
+        hostSql.restore();
+      }
+    };
     // Settle the initial transcript observation before measuring unchanged rows.
     await patch({});
-    const sql = trackSqliteStatementExecutions(
-      database.db,
-      ["nodes", "windows", "snapshots"],
-      (query) => {
-        const table = /^(?:insert into|update|delete from) "([^"]+)"/iu.exec(query)?.[1];
-        return table === "session_nodes"
-          ? "nodes"
-          : table === "session_windows"
-            ? "windows"
-            : table === "session_entry_snapshots"
-              ? "snapshots"
-              : null;
-      },
-    );
-    try {
-      assertCommitAllowed.mockClear();
-      onCommitted.mockClear();
-      await expect(
-        patch({ skillsSnapshot: structuredClone(skillsSnapshot) }),
-      ).resolves.toMatchObject({
+    const readSnapshots = () =>
+      database.db
+        .prepare(
+          "SELECT field, value_json FROM session_entry_snapshots WHERE session_key = ? ORDER BY field",
+        )
+        .all(scope.sessionKey);
+    const snapshots = readSnapshots();
+    assertCommitAllowed.mockClear();
+    onCommitted.mockClear();
+    await expect(patch({ skillsSnapshot: structuredClone(skillsSnapshot) })).resolves.toMatchObject(
+      {
         updatedAt: 10,
         skillsSnapshot,
-      });
-      expect(sql.counts).toEqual({ nodes: 0, windows: 0, snapshots: 0 });
-      expect(assertCommitAllowed).toHaveBeenCalled();
-      expect(onCommitted).not.toHaveBeenCalled();
+      },
+    );
+    expect(assertCommitAllowed).toHaveBeenCalled();
+    expect(onCommitted).not.toHaveBeenCalled();
+    expect(readSnapshots()).toEqual(snapshots);
 
-      await patch({
-        lastRunError: "retained error",
-        skillsSnapshot: structuredClone(skillsSnapshot),
-      });
-      expect(sql.counts).toEqual({ nodes: 1, windows: 0, snapshots: 0 });
-      expect(loadExactSessionEntry(scope)?.entry).toMatchObject({
-        lastRunError: "retained error",
-        skillsSnapshot,
-      });
+    await patch({
+      lastRunError: "retained error",
+      skillsSnapshot: structuredClone(skillsSnapshot),
+    });
+    expect(onCommitted).toHaveBeenCalledOnce();
+    expect(loadExactSessionEntry(scope)?.entry).toMatchObject({
+      lastRunError: "retained error",
+      skillsSnapshot,
+    });
+    expect(readSnapshots()).toEqual(snapshots);
 
-      expect(
-        appendTranscriptMessageSync(
-          { ...scope, sessionId: "entry-noop" },
-          { message: { role: "user", content: "new transcript content" } },
-        ).ok,
-      ).toBe(true);
-      const before = { ...sql.counts };
-      const watermark = () =>
-        database.db
-          .prepare(
-            "SELECT transcript_observed_at, transcript_updated_at FROM session_windows WHERE session_id = ?",
-          )
-          .get("entry-noop");
-      const unobserved = watermark();
-      expect(unobserved?.transcript_observed_at).not.toBe(unobserved?.transcript_updated_at);
-      await patch({ skillsSnapshot: structuredClone(skillsSnapshot) });
-      expect(sql.counts).toEqual({ ...before, windows: before.windows + 1 });
-      const observed = watermark();
-      expect(observed?.transcript_observed_at).toBe(observed?.transcript_updated_at);
-      const settled = { ...sql.counts };
-      await patch({});
-      expect(sql.counts).toEqual(settled);
-    } finally {
-      sql.restore();
-    }
+    expect(
+      appendTranscriptMessageSync(
+        { ...scope, sessionId: "entry-noop" },
+        { message: { role: "user", content: "new transcript content" } },
+      ).ok,
+    ).toBe(true);
+    const watermark = () =>
+      database.db
+        .prepare(
+          "SELECT transcript_observed_at, transcript_updated_at FROM session_windows WHERE session_id = ?",
+        )
+        .get("entry-noop");
+    const unobserved = watermark();
+    expect(unobserved?.transcript_observed_at).not.toBe(unobserved?.transcript_updated_at);
+    await patch({ skillsSnapshot: structuredClone(skillsSnapshot) });
+    const observed = watermark();
+    expect(observed?.transcript_observed_at).toBe(observed?.transcript_updated_at);
+    onCommitted.mockClear();
+    await patch({});
+    expect(onCommitted).not.toHaveBeenCalled();
+    expect(watermark()).toEqual(observed);
+    expect(readSnapshots()).toEqual(snapshots);
   });
 });
 

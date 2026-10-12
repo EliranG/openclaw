@@ -8,10 +8,10 @@ import {
   listSessionEntriesCore,
   listSessionParticipantsReadOnly,
   loadSessionEntry,
-  patchSessionEntryCore,
   upsertSessionEntryCore,
 } from "../../config/sessions/session-accessor.js";
 import { writeSessionEntry } from "../../config/sessions/session-accessor.sqlite-entry-store.js";
+import { replaceSessionEntrySync } from "../../config/sessions/session-accessor.sqlite-entry.js";
 import { recordSessionParticipant } from "../../config/sessions/session-accessor.sqlite-participants.native.js";
 import { appendTranscriptEventSync } from "../../config/sessions/session-accessor.sqlite-transcript-write.test-support.js";
 import {
@@ -603,12 +603,8 @@ it.each([
         );
         try {
           if (changeEntry && scenario.allowed) {
-            await patchSessionEntryCore(selected, () => ({ lastReadAt: 2 }), {
-              preserveActivity: true,
-              skipMaintenance: true,
-              // Native fixture writes isolate request-reader lifetimes; worker writes have owner coverage.
-              assertCommitAllowed: () => {},
-            });
+            // Keep fixture writes independent of the request resources checked below.
+            replaceSessionEntrySync(selected, { ...before, lastReadAt: 2 });
           } else if (changeEntry && scenario.committed) {
             runOpenClawAgentWriteTransaction((current) => {
               writeSessionEntry(current, selected.sessionKey, {
