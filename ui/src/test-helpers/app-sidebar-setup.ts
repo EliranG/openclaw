@@ -13,10 +13,38 @@ export function setupSidebarTest() {
   let layoutGlobals: Array<[string, PropertyDescriptor | undefined]>;
 
   beforeEach(() => {
-    layoutGlobals = ["matchMedia", "ResizeObserver", "IntersectionObserver"].map((name) => [
-      name,
-      Object.getOwnPropertyDescriptor(globalThis, name),
-    ]);
+    layoutGlobals = [
+      "matchMedia",
+      "ResizeObserver",
+      "IntersectionObserver",
+      "requestAnimationFrame",
+      "cancelAnimationFrame",
+    ].map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]);
+    // JSDOM has no paint cycle. Keep ordinary sidebar settlement deterministic;
+    // frame-sensitive cases replace this scheduler with their controlled clock.
+    if (navigator.userAgent.includes("jsdom")) {
+      let nextFrame = 0;
+      const frames = new Map<number, FrameRequestCallback>();
+      Object.defineProperty(globalThis, "requestAnimationFrame", {
+        configurable: true,
+        writable: true,
+        value: (callback: FrameRequestCallback) => {
+          const id = ++nextFrame;
+          frames.set(id, callback);
+          queueMicrotask(() => {
+            if (frames.delete(id)) {
+              callback(performance.now());
+            }
+          });
+          return id;
+        },
+      });
+      Object.defineProperty(globalThis, "cancelAnimationFrame", {
+        configurable: true,
+        writable: true,
+        value: (id: number) => frames.delete(id),
+      });
+    }
     // JSDOM has no media queries or layout observation. Real browser tests keep
     // their native implementations and own the layout and motion assertions.
     if (typeof matchMedia === "undefined") {
