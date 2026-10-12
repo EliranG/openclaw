@@ -338,7 +338,7 @@ async function readCatalogPageFromEntry(
 }
 
 /** Legacy SDK title contract; bundled callers use the worker-backed async replacement. */
-export function readSessionTranscriptCatalogTitle(params: {
+export function readLegacySessionTranscriptCatalogTitle(params: {
   agentId: string;
   sessionKey: string;
   storePath?: string;
@@ -377,7 +377,7 @@ export function readSessionTranscriptCatalogTitle(params: {
 
 /** Matches title precedence without opening SQLite on the Gateway thread. */
 export async function readSessionTranscriptCatalogTitleAsync(
-  params: Parameters<typeof readSessionTranscriptCatalogTitle>[0],
+  params: Parameters<typeof readLegacySessionTranscriptCatalogTitle>[0],
 ): Promise<string | undefined> {
   const title = deriveSessionTitle(params.entry);
   if (title) {

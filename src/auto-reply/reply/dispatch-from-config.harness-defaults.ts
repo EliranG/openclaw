@@ -9,8 +9,8 @@ import {
 import { resolveSessionRuntimeOverrideForProvider } from "../../agents/session-runtime-compat.js";
 import { resolveChannelModelOverride } from "../../channels/model-overrides.js";
 import { resolveSessionStorePathCore } from "../../config/sessions/paths.js";
-import { loadSessionEntryReadOnly } from "../../config/sessions/session-accessor.js";
-import { captureSessionEntryReadScope } from "../../config/sessions/session-entry-read-request.js";
+import { resolveSqliteSessionKey } from "../../config/sessions/session-accessor.sqlite-scope-helpers.js";
+import { readRetainedSessionEntryFacts } from "../../config/sessions/session-entry-read-facts.js";
 import { readSessionEntryReadOnlyInWorker } from "../../config/sessions/session-entry-read-runtime.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
@@ -43,32 +43,21 @@ export function createShouldEmitVerboseProgress(params: {
   assertCurrent?: () => void;
 }) {
   let runVerbosity: ReplyRunVerbosity | undefined;
-  const scope =
-    params.sessionKey && params.storePath
-      ? captureSessionEntryReadScope({
-          agentId: params.agentId,
-          storePath: params.storePath,
-          sessionKey: params.sessionKey,
-          readConsistency: "latest",
-          clone: false,
-        }).scope
-      : undefined;
-  const resolveCurrentExplicitLevel = () => {
-    if (params.sessionKey && params.storePath) {
-      try {
-        const entry = loadSessionEntryReadOnly({
-          ...(params.agentId ? { agentId: params.agentId } : {}),
-          storePath: params.storePath,
-          sessionKey: params.sessionKey,
-          readConsistency: "latest",
-          clone: false,
-        });
-        return normalizeVerboseLevel(entry?.verboseLevel ?? "");
-      } catch {
-        // Ignore transient store read failures and fall back to the current dispatch snapshot.
-      }
-    }
-    return normalizeVerboseLevel(params.initialExplicitLevel ?? "");
+  const readVerboseLevel = () => {
+    const facts =
+      params.agentId && params.storePath && params.sessionKey
+        ? readRetainedSessionEntryFacts(
+            { agentId: params.agentId, path: params.storePath },
+            {
+              sessionKeys: [resolveSqliteSessionKey(params.sessionKey, params.agentId)],
+              projection: "exact",
+              snapshotFields: [],
+            },
+          )
+        : undefined;
+    return normalizeVerboseLevel(
+      (facts ? facts.entries[0]?.entry.verboseLevel : params.initialExplicitLevel) ?? "",
+    );
   };
   const resolveLevel = (explicit: () => VerboseLevel | undefined) =>
     runVerbosity?.verboseLevelOverride ??
@@ -76,23 +65,9 @@ export function createShouldEmitVerboseProgress(params: {
     runVerbosity?.resolvedVerboseLevel ??
     normalizeVerboseLevel(params.fallbackLevel) ??
     "off";
-  const resolveLevelAsync = async () => {
-    params.assertCurrent?.();
-    let explicit = normalizeVerboseLevel(params.initialExplicitLevel ?? "");
-    if (scope) {
-      try {
-        const entry = await readSessionEntryReadOnlyInWorker(scope, params.assertCurrent);
-        explicit = normalizeVerboseLevel(entry?.verboseLevel ?? "");
-      } catch {
-        // Preserve the dispatch fallback on read failure, never on lost caller authority.
-      }
-    }
-    params.assertCurrent?.();
-    return resolveLevel(() => explicit);
-  };
   const shouldEmitAsync = async (full: boolean) => {
-    const level = await resolveLevelAsync();
     params.assertCurrent?.();
+    const level = resolveLevel(readVerboseLevel);
     return full ? level === "full" : level !== "off";
   };
   return {
@@ -100,8 +75,8 @@ export function createShouldEmitVerboseProgress(params: {
       // A reused queued dispatcher must clear the previous turn's explicit choice.
       runVerbosity = settings;
     },
-    shouldEmit: () => resolveLevel(resolveCurrentExplicitLevel) !== "off",
-    shouldEmitFull: () => resolveLevel(resolveCurrentExplicitLevel) === "full",
+    shouldEmit: () => resolveLevel(readVerboseLevel) !== "off",
+    shouldEmitFull: () => resolveLevel(readVerboseLevel) === "full",
     shouldEmitAsync: () => shouldEmitAsync(false),
     shouldEmitFullAsync: () => shouldEmitAsync(true),
   };
