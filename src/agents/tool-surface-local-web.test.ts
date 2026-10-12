@@ -59,6 +59,7 @@ it("does not restore withheld tools or expose an MCP lookalike, and honors promp
   const lookalike = createStubTool("web_fetch");
   setPluginToolMeta(lookalike, {
     pluginId: "bundle-mcp",
+    optional: true,
     mcp: {
       serverName: "fixture",
       safeServerName: "fixture",
