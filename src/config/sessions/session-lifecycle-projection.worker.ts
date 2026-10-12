@@ -9,10 +9,7 @@ import { readOpenClawAgentDatabaseIdentity } from "../../state/openclaw-agent-db
 import { getOpenClawAgentDatabaseIfOpen } from "../../state/openclaw-agent-db.js";
 import type { AgentWorkerOperationContext } from "../../state/openclaw-agent-operation-context.js";
 import { hasPendingSessionTranscriptArchives } from "./session-accessor.sqlite-archive-store-kernel.js";
-import {
-  readSessionEntryCount,
-  readSessionEntryStore,
-} from "./session-accessor.sqlite-entry-store.js";
+import { readSessionEntryStore } from "./session-accessor.sqlite-entry-store.js";
 import { collectLifecycleIdentityChanges } from "./session-accessor.sqlite-identity.js";
 import {
   finishProjectedLifecycleRemovalPlans,
@@ -111,7 +108,6 @@ type LifecycleProjectionPreparation = {
 };
 
 export type SessionLifecyclePlanningOperations = {
-  count: { input: undefined; output: number };
   prepare: {
     input: LifecycleRemovalProjectionInput & { upsertSessionKeys: string[] };
     output: LifecycleProjectionPreparation;
@@ -148,9 +144,6 @@ export function bindSqliteWorkerBackend(
   return {
     execute(command) {
       assertOpen();
-      if (command.type === "count") {
-        return readSessionEntryCount(database);
-      }
       const prepare = () => {
         if (command.type === "prepare") {
           const input = command.input;
