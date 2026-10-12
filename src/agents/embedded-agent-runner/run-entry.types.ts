@@ -90,6 +90,8 @@ export type EmbeddedAgentRunEntryParams<T extends EmbeddedAgentRunResult> = {
     agentId: string;
     sessionId: string;
     sessionKey?: string;
+    /** Original session owner revision; null means the owner had no revision. */
+    sessionLifecycleRevision?: string | null;
     lane?: string;
   };
   harness: {
