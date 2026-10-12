@@ -9,6 +9,21 @@ sidebarTitle: "How to migrate"
 
 The ordered migration steps. Work through them in order; each step is self-contained. Part of the [Plugin SDK migration](/plugins/sdk-migration) guide.
 
+## Await durable session persistence
+
+Use the asynchronous `SessionManager` methods for durable sessions on the
+Gateway main thread, including
+`openAsync`, `openModelContextAsync`, `readSessionContextAsync`, and
+`appendMessageAsync`. Deprecated synchronous SDK methods remain compatible until
+the next SDK major. Replace
+`readCodexSessionContext` with the reader from `createCodexSessionContextReader`.
+
+Opaque `AgentHarnessSessionDeletionMutation.commit` callbacks are deprecated.
+Use `createNativeSessionBindingLifecycleV2` for stored native bindings or
+`createNativeSessionCommitFinalizer` for effects that only run after commit.
+These existing participants let session deletion stay in the database worker;
+opaque callbacks retain the synchronous compatibility adapter until removal.
+
 ## Await GitHub publication operations
 
 The Gateway context's `githubPublicationService` provides versioned requests and
@@ -349,10 +364,13 @@ their existing owners and settle before Gateway worker shutdown.
 The shipped synchronous signatures remain deprecated until the next Plugin SDK
 major, but their native persistence adapters have been retired. `list` and
 `dismiss` return `UNAVAILABLE` with the awaited replacement in the message;
-`recordCommittedInput` and `invalidate` throw migration-directed errors. Each
+`invalidate` throws a migration-directed error. Legacy `recordCommittedInput`
+queues the worker operation after any enclosing transaction commits; rollback
+discards it. Await `recordCommittedInputAsync` for completion. Each
 emits a `DEP_SESSION_PERSISTENCE` warning once per plugin and capability family
-per process; unscoped calls share one SDK-level family warning. Rejected calls do
-not schedule work in the background.
+per process; unscoped calls share one SDK-level family warning. Rejected reads, dismissals, and invalidations do not schedule background work.
+Queued legacy recording drains on orderly shutdown; an abrupt process exit can
+lose a queued submission.
 
 Move recording outside any synchronous SQLite transaction and await it after
 the source message commits. The awaited Inbox writer owns its own transaction

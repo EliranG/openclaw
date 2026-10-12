@@ -18,6 +18,7 @@ import {
   hasPendingPublication,
   prepareCachedPlacementPreservationRead,
   preparePlacementRead,
+  projectCachedLocalPlacementTurnClaim,
   readCachedPlacementProjection,
   retainProjection,
   retainSessionPlacementRead,
@@ -274,6 +275,13 @@ export async function readPlacementProjection(
     sessionId,
     read,
   );
+}
+
+export function projectLocalPlacementTurnClaim(
+  identity: DatabasePathIdentity,
+  placement: WorkerSessionPlacementRecord,
+): WorkerSessionPlacementReadResult["projection"] | undefined {
+  return projectCachedLocalPlacementTurnClaim(owners.get(identity.key), placement);
 }
 
 export async function preparePlacementPreservationRead(

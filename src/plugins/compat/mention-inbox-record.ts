@@ -9,7 +9,7 @@ export const MENTION_INBOX_COMPAT_RECORD = {
   warningStarts: "2026-10-03",
   removalGate: "next-plugin-sdk-major",
   replacement:
-    "Await mentionInbox.listAsync(client, publish), mentionInbox.dismissAsync(client, ids, publish), mentionInbox.recordCommittedInputAsync(input), and mentionInbox.invalidateAsync(sessionKey). Publish list/dismiss responses synchronously inside the supplied callback. Deprecated synchronous signatures remain until the next Plugin SDK major; list/dismiss return UNAVAILABLE and record/invalidate throw migration-directed errors without scheduling work.",
+    "Await mentionInbox.listAsync(client, publish), mentionInbox.dismissAsync(client, ids, publish), mentionInbox.recordCommittedInputAsync(input), and mentionInbox.invalidateAsync(sessionKey). Publish list/dismiss responses synchronously inside the supplied callback. Deprecated synchronous signatures remain until the next Plugin SDK major; list/dismiss return UNAVAILABLE, invalidate throws migration guidance, and recordCommittedInput queues the worker operation after commit.",
   docsPath: "/plugins/sdk-migration/how-to-migrate#await-mention-inbox-operations",
   surfaces: [
     "GatewayRequestHandlerOptions.context.mentionInbox.list",
@@ -29,5 +29,5 @@ export const MENTION_INBOX_COMPAT_RECORD = {
     "src/gateway/mention-inbox.compat.test.ts",
   ],
   releaseNote:
-    "Mention Inbox reads, dismissals, recording, and invalidation expose awaited worker-backed methods. Synchronous plugin persistence is retired: list/dismiss return UNAVAILABLE and record/invalidate throw with awaited migration guidance. Their TypeScript signatures remain deprecated until the next Plugin SDK major; stored data, retention, and update behavior are unchanged.",
+    "Mention Inbox reads, dismissals, recording, and invalidation expose awaited worker-backed methods. Synchronous list/dismiss return UNAVAILABLE and invalidate throws with awaited migration guidance. Legacy recording queues the worker operation after an enclosing commit; await recordCommittedInputAsync for completion. Their TypeScript signatures remain deprecated until the next Plugin SDK major; stored data, retention, and update behavior are unchanged.",
 } as const satisfies PluginCompatRecord;

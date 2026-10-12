@@ -61,7 +61,7 @@ export type MentionInbox = {
     ids: readonly string[],
     publish: (result: Result<MentionsListResult, ErrorShape>) => undefined,
   ) => Promise<void>;
-  /** @deprecated Await recordCommittedInputAsync. The synchronous adapter rejects calls; its signature is removed in the next Plugin SDK major. */
+  /** @deprecated Queues recording; await recordCommittedInputAsync for completion. */
   recordCommittedInput: (input: MentionCommittedInput) => void;
   /** @deprecated Await invalidateAsync. The synchronous adapter rejects calls; its signature is removed in the next Plugin SDK major. */
   invalidate: (sessionKey?: string) => void;
