@@ -43,10 +43,18 @@ import {
   toProviderAutoSetupKind,
   toSavedAuthSetupKind,
 } from "./setup-inference-core.js";
+import { rankSetupInferenceCandidates } from "./setup-inference-ranking.js";
 import {
   listSetupNativeSessionCatalogs,
   requiresSetupNativeSessionCatalogConsent,
 } from "./setup-native-session-catalogs.js";
+
+function recommendSetupInferenceCandidate(
+  candidates: SetupInferenceCandidate[],
+): SetupInferenceCandidate[] {
+  const recommended = rankSetupInferenceCandidates(candidates)[0];
+  return candidates.map((candidate) => ({ ...candidate, recommended: candidate === recommended }));
+}
 
 async function listSavedSetupInferenceCandidates(params: {
   cfg: OpenClawConfig;
@@ -343,7 +351,9 @@ async function discoverSetupInference(
       signal.throwIfAborted();
       onPartial({
         ...partial,
-        candidates: saved.filter((candidate) => !requiresDetection(candidate)),
+        candidates: recommendSetupInferenceCandidate(
+          saved.filter((candidate) => !requiresDetection(candidate)),
+        ),
       });
       return saved;
     }),
@@ -375,8 +385,6 @@ async function discoverSetupInference(
       ),
   );
   const candidates: SetupInferenceCandidate[] = raw.map((candidate) =>
-    // Released macOS clients require this field. Keep it false so the wire
-    // contract remains decodable without expressing a provider preference.
     Object.assign(
       candidate,
       { recommended: false as const },
@@ -399,7 +407,7 @@ async function discoverSetupInference(
   const offeredCandidates = candidates.filter((candidate) => !requiresDetection(candidate));
   onPartial({
     ...partial,
-    candidates: [...offeredCandidates],
+    candidates: recommendSetupInferenceCandidate(offeredCandidates),
     ...(configuredModel ? { configuredModel } : {}),
     setupComplete: Boolean(configuredModel),
   });
@@ -416,7 +424,7 @@ async function discoverSetupInference(
   );
   return {
     ...partial,
-    candidates: offeredCandidates,
+    candidates: recommendSetupInferenceCandidate(offeredCandidates),
     ...(configuredModel ? { configuredModel } : {}),
     setupComplete: Boolean(configuredModel),
   };
