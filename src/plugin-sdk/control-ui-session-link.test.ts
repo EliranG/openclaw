@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createSessionHeaderLink } from "./control-ui-session-link.js";
 import type { ControlUiAccessory, ControlUiHost, ControlUiViewContext } from "./control-ui.js";
 
-// Mirrors the 2026.10.1 Discord/Slack browser entries; the UI typecheck lane
+// Mirrors the 2026.10.1 Discord/Slack browser entries; the plugin-sdk test typecheck
 // compiles this file, so the shipped consumer shape must still type-check.
 const shippedAccessory: ControlUiAccessory = {
   id: "conversation-link",
