@@ -23,6 +23,107 @@ import {
 afterEach(cleanupUsagePageTest);
 
 describe("UsagePage detail requests", () => {
+  it("keeps selected comparisons across pages and refreshes them with their overview", async () => {
+    const snapshot = cacheSnapshot("fresh");
+    let revision = snapshot.result.updatedAt;
+    let sessions = Array.from({ length: 53 }, (_, index) => ({
+      key: `agent:main:comparison-${index}`,
+      label: `Comparison ${index + 1}`,
+      agentId: "main",
+      sessionId: `comparison-${index}`,
+      updatedAt: 100 - index,
+      usage: { ...snapshot.result.totals, totalTokens: 100 },
+    }));
+    const request = vi.fn(async (method: string, params?: Record<string, unknown>) =>
+      method === "sessions.usage"
+        ? {
+            ...snapshot.result,
+            updatedAt: revision,
+            sessions: params?.key
+              ? sessions.filter((session) => session.key === params.key)
+              : sessions,
+          }
+        : { providers: [], points: [], logs: [] },
+    );
+    const page = await createPage({ request } as unknown as GatewayBrowserClient, true);
+    await preloadUsage(page);
+    const settle = async () => {
+      await waitForFast(() => expect(page.usageLoading).toBe(false));
+      await page.updateComplete;
+    };
+    const changePage = async (label: string) => {
+      [...page.querySelectorAll<HTMLButtonElement>(".data-table-pagination button")]
+        .find((button) => button.textContent?.trim() === label)!
+        .click();
+      await settle();
+    };
+    const compare = (label: string, shiftKey = false) =>
+      page
+        .querySelector<HTMLButtonElement>(
+          `.session-bars:not(.session-bars--selected) .session-bar-selection[aria-label="${label}"]`,
+        )!
+        .dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey }));
+    const comparisons = () =>
+      [...page.querySelectorAll(".session-bars--selected .session-bar-title")].map(
+        (row) => row.textContent,
+      );
+
+    await changePage("Next");
+    compare("Comparison 51");
+    await settle();
+    expect(page.querySelector(".session-bars .session-bar-title")?.textContent).toBe(
+      "Comparison 51",
+    );
+    compare("Comparison 53", true);
+    await settle();
+    expect(comparisons()).toEqual(["Comparison 51", "Comparison 52", "Comparison 53"]);
+    await changePage("Previous");
+    expect(page.querySelector(".session-bars .session-bar-title")?.textContent).toBe(
+      "Comparison 1",
+    );
+    expect(comparisons()).toEqual(["Comparison 51", "Comparison 52", "Comparison 53"]);
+
+    revision++;
+    sessions = sessions.map((session, index) =>
+      index === 50 ? { ...session, usage: { ...session.usage, totalTokens: 350 } } : session,
+    );
+    refreshButton(page).click();
+    await settle();
+    expect(page.querySelector(".session-bars--selected .session-bar-value")?.textContent).toBe(
+      "350",
+    );
+
+    revision++;
+    sessions = sessions.filter((session) => session.label !== "Comparison 52");
+    refreshButton(page).click();
+    await settle();
+    expect(comparisons()).toEqual(["Comparison 51", "Comparison 53"]);
+    expect(page.usageSelectedSessions).toHaveLength(3);
+
+    page
+      .querySelector<HTMLButtonElement>(
+        '.session-bars--selected .session-bar-selection[aria-label="Comparison 53"]',
+      )!
+      .click();
+    await settle();
+    expect(page.querySelector(".session-detail-title")?.textContent).toContain("Comparison 53");
+
+    const input = page.querySelector<HTMLInputElement>(".usage-query-input")!;
+    input.value = "label:missing";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await settle();
+    expect(page.querySelector(".session-bar-row")).toBeNull();
+    expect(page.querySelector(".sessions-selected-group")).toBeNull();
+    const clearSelection = [
+      ...page.querySelectorAll<HTMLButtonElement>(".sessions-card button"),
+    ].find((button) => button.textContent?.trim() === "Clear Selection");
+    expect(clearSelection).toBeDefined();
+    clearSelection!.click();
+    await settle();
+    expect(page.usageSelectedSessions).toEqual([]);
+  });
+
   it.each([
     { key: "global", agentId: "opus", needsOwnerHint: true },
     { key: "agent:openclaw:usage", agentId: "openclaw", needsOwnerHint: false },

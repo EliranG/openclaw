@@ -59,27 +59,18 @@ import {
   scanUsageCostRollupInWorker,
 } from "./session-cost-usage-worker-refresh.js";
 import { readUsageCostReportEntry } from "./session-cost-usage-worker-report.js";
-import type {
-  UsageCostWorkerDatabase,
-  UsageCostWorkerHostEffects,
-  UsageCostWorkerHostReply,
-  UsageCostWorkerInput,
-  UsageCostWorkerReply,
-  UsageCostWorkerResult,
+import {
+  UsageCostHostEffectError,
+  type UsageCostWorkerDatabase,
+  type UsageCostWorkerHostEffects,
+  type UsageCostWorkerHostReply,
+  type UsageCostWorkerInput,
+  type UsageCostWorkerReply,
+  type UsageCostWorkerResult,
 } from "./session-cost-usage-worker.types.js";
 import { isTransientSqliteError } from "./unhandled-rejections.js";
 import { WorkerTaskError } from "./worker-task-pool.js";
 import type { WorkerTaskChannel } from "./worker-task-server.js";
-
-class UsageCostHostEffectError extends Error {
-  constructor(
-    readonly origin: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "UsageCostHostEffectError";
-  }
-}
 
 type ReadDatabase = <T>(
   database: UsageCostWorkerDatabase,

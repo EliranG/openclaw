@@ -57,7 +57,7 @@ describe("session cost usage stream errors", () => {
     expect(logs).toEqual([]);
   });
 
-  it("does not persist a partial durable cache entry after a background stream error", async () => {
+  it("keeps readable usage and complete checkpoints after background and report stream errors", async () => {
     const tempDir = tempDirs.make("openclaw-session-cost-cache-stream-");
     const sessionsDir = path.join(tempDir, "agents", "main", "sessions");
     await fs.mkdir(sessionsDir, { recursive: true });
@@ -73,6 +73,11 @@ describe("session cost usage stream errors", () => {
       });
     await fs.writeFile(sessionFile, `${usageEntry("2026-07-06T12:00:00.000Z", 10)}\n`, "utf-8");
 
+    await fs.writeFile(
+      path.join(sessionsDir, "sess-readable.jsonl"),
+      `${usageEntry("2026-07-06T12:00:00.000Z", 7)}\n`,
+      "utf-8",
+    );
     const appendedEntry = `${usageEntry("2026-07-06T12:01:00.000Z", 20)}\n`;
     const armed = path.join(tempDir, "fail-next-stream");
     const failed = path.join(tempDir, "stream-failed");
@@ -127,16 +132,36 @@ if (!isMainThread) {
         } finally {
           await work.drain();
         }
-        const summary = await loadCostUsageSummaryFromCache({
-          ...range,
-          agentId: "main",
-          requestRefresh: false,
-        });
-
+        const readSummary = () =>
+          loadCostUsageSummaryFromCache({
+            ...range,
+            agentId: "main",
+            requestRefresh: false,
+          });
+        const afterRefresh = await readSummary();
         expect(await fs.readFile(failed, "utf8")).toBe("stream read failed");
         expect(readSessionCostUsageRollupRows()).toEqual(rollupsBefore);
-        expect(summary.totals.totalTokens).toBe(10);
-        expect(summary.cacheStatus?.pendingFiles).toBe(1);
+        expect(afterRefresh.totals.totalTokens).toBe(17);
+        expect(afterRefresh.cacheStatus).toMatchObject({
+          status: "partial",
+          cachedFiles: 2,
+          pendingFiles: 1,
+        });
+
+        await fs.unlink(failed);
+        await fs.writeFile(armed, "armed");
+        const afterReplay = await readSummary();
+        expect(await fs.readFile(failed, "utf8")).toBe("stream read failed");
+        expect(afterReplay.totals.totalTokens).toBe(7);
+        expect(afterReplay.cacheStatus).toMatchObject({
+          status: "partial",
+          cachedFiles: 1,
+          pendingFiles: 1,
+        });
+        expect(readSessionCostUsageRollupRows()).toEqual(rollupsBefore);
+        const recovered = await readSummary();
+        expect(recovered.totals.totalTokens).toBe(17);
+        expect(readSessionCostUsageRollupRows()).toEqual(rollupsBefore);
       },
     );
   });

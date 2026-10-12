@@ -145,7 +145,7 @@ export function createUsageProps(overrides: Partial<UsageProps> = {}): UsageProp
     ...overrides,
   };
   if (props.data.sessions.length && !props.data.overview) {
-    props.data.overview = projectUsageData(props.data.sessions).overview;
+    props.data.overview = projectUsageData(props.data.sessions, props.filters).overview;
   }
   return props;
 }
@@ -158,6 +158,7 @@ export function createUsageOverview(
     unfilteredSessionCount: 0,
     selectedSessionCount: 0,
     selectedRowCount: 0,
+    selectedRows: [],
     tableSessionCount: 0,
     tableTotals: { tokens: 0, cost: 0, errors: 0 },
     offset: 0,

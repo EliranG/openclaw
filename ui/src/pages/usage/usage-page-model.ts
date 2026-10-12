@@ -156,10 +156,7 @@ export class UsagePageModel {
         const sessionKey =
           this.usageSelectedSessions.length === 1 ? this.usageSelectedSessions[0] : undefined;
         if (sessionKey) {
-          const selectedRow = result.sessions.find((session) => session.key === sessionKey);
-          if (selectedRow) {
-            this.selectedSession = selectedRow;
-          }
+          this.selectedSession = result.overview?.selectedRows[0] ?? this.selectedSession;
           // Manual intent belongs to this request's selection, never a later poll or selection.
           this.details.load(sessionKey, value.refreshSessionKey === sessionKey, refreshSummary);
         }
@@ -523,7 +520,9 @@ export class UsagePageModel {
   }
 
   private selectSession(key: string, shiftKey: boolean, orderedKeys: string[]) {
-    const selectedRow = this.usageRosterResult?.sessions.find((session) => session.key === key);
+    const selectedRow =
+      this.usageRosterResult?.sessions.find((session) => session.key === key) ??
+      this.usageResult?.overview?.selectedRows.find((session) => session.key === key);
     this.details.clear();
     this.display = {
       ...this.display,
@@ -543,7 +542,7 @@ export class UsagePageModel {
 
     this.selectedSession =
       this.usageSelectedSessions.length === 1 ? (selectedRow ?? this.selectedSession) : null;
-    this.refreshOverview();
+    void this.loadUsage();
     if (this.usageSelectedSessions.length === 1) {
       const sessionKey = this.usageSelectedSessions[0];
       if (sessionKey) {
@@ -682,7 +681,7 @@ export class UsagePageModel {
             this.usageSelectedSessions = [];
             this.selectedSession = null;
             this.details.clear();
-            this.refreshOverview();
+            void this.loadUsage();
           },
           onClearFilters: () => {
             this.clearSelectionsAndDetails();

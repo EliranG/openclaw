@@ -87,6 +87,7 @@ suite.define(() => {
             unfilteredSessionCount: 1250,
             selectedSessionCount: filtered ? 1 : 1250,
             selectedRowCount: filtered ? 1 : 1250,
+            selectedRows: [],
             tableSessionCount: filtered ? 1 : 1250,
             tableTotals: { tokens: filtered ? 100 : 125000, cost: filtered ? 0.1 : 125, errors: 0 },
             queryWarnings: [],

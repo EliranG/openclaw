@@ -344,6 +344,7 @@ describe("overview family and multi-agent accounting", () => {
       total: 2,
       selectedSessionCount: 2,
       selectedRowCount: 2,
+      selectedRows: [],
       unfilteredSessionCount: 2,
     });
     expect(result.overview.filterOptions.agent).toEqual(["first", "second"]);
@@ -478,7 +479,11 @@ it.each(["tokens", "cost"] as const)(
       agentId: "main",
       instances: [{ sessionFile: key }],
     }));
-    const options = { selectedDays: ["2026-02-01"], sort };
+    const options = {
+      selectedDays: ["2026-02-01"],
+      selectedSessions: ["second", "first"],
+      sort,
+    };
     const dayBucket = { mode: "utc-offset" as const, utcOffsetMinutes: 0 };
     const compact = buildUsageOverview({ sessions, summaries, options, dayBucket });
     expect(
@@ -503,6 +508,18 @@ it.each(["tokens", "cost"] as const)(
       ["second", 1000],
     ]);
     expect(canonical.sessions[0]?.usage?.dailyBreakdown).toHaveLength(2);
+    expect(
+      compact.overview.selectedRows.map((session) => [
+        session.key,
+        session.usage?.totalTokens,
+        session.usage?.totalCost,
+      ]),
+    ).toEqual([
+      ["second", 1, 0.1],
+      ["first", 90, 9],
+    ]);
+    expect(compact.overview.selectedRows[0]?.usage?.dailyBreakdown).toBeUndefined();
+    expect(canonical.overview.selectedRows[0]?.usage?.dailyBreakdown).toHaveLength(2);
     expect(compact.overview).toMatchObject({
       tableSessionCount: 2,
       tableTotals: { tokens: 91, cost: 9.1, errors: 0 },

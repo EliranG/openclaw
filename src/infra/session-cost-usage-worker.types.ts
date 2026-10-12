@@ -119,6 +119,16 @@ export type UsageCostWorkerFailure = {
   hostFailureOnly?: boolean;
 };
 
+export class UsageCostHostEffectError extends Error {
+  constructor(
+    readonly origin: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "UsageCostHostEffectError";
+  }
+}
+
 /** Retain the domain failure while the pool proves native retirement. */
 export class UsageCostWorkerReplyError extends Error {
   constructor(readonly failure: UsageCostWorkerFailure) {

@@ -134,6 +134,8 @@ export type SessionsUsageOverview = {
   selectedSessionCount: number;
   /** Matching rows in the selected population, including empty sessions eligible for detail reads. */
   selectedRowCount: number;
+  /** Explicitly selected matching rows, in selection order and independent of the table page. */
+  selectedRows: SessionUsageEntry[];
   /** Comparison statistics before paging and the Recent roster selection. */
   tableSessionCount: number;
   tableTotals: { tokens: number; cost: number; errors: number };

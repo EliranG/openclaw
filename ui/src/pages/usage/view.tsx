@@ -266,7 +266,10 @@ export function renderUsage(props: UsageProps) {
           >
             <div class="usage-header-row">
               <div class="usage-controls">
-                {renderFilterChips(props.data.sessions, props)}
+                {renderFilterChips(
+                  props.data.overview?.selectedRows ?? props.data.sessions,
+                  props,
+                )}
                 <div class="usage-presets">
                   <For each={state().datePresets} keyed={(preset) => preset.days}>
                     {(preset) => (

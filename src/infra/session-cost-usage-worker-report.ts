@@ -12,7 +12,9 @@ import {
 } from "./session-cost-usage-rollup-codec.js";
 import { createSessionUsageRollupData } from "./session-cost-usage-rollup.js";
 import { scanUsageCostRollupInWorker } from "./session-cost-usage-worker-refresh.js";
+import { UsageCostHostEffectError } from "./session-cost-usage-worker.types.js";
 import type { UsageCostTranscriptFile, UsageDailyBucket } from "./session-cost-usage.types.js";
+import { WorkerTaskError } from "./worker-task-pool.js";
 
 type RollupScan = Omit<Parameters<typeof scanUsageCostRollupInWorker>[0], "file" | "previous">;
 
@@ -91,8 +93,16 @@ export async function readUsageCostReportEntry(params: {
           mtimeMs: checkpoint.mtimeMs,
         }
       : { ...file, size: checkpoint.observedSize, mtimeMs: checkpoint.observedMtimeMs };
-  const canonical = await scanUsageCostRollupInWorker({ ...scan, file: snapshotFile });
-  if (canonical.checkpoint.anchorHash !== checkpoint.anchorHash) {
+  const canonical = await scanUsageCostRollupInWorker({ ...scan, file: snapshotFile }).catch(
+    (error: unknown) => {
+      if (error instanceof UsageCostHostEffectError || error instanceof WorkerTaskError) {
+        throw error;
+      }
+      // Omit failed replays so the report stays partial without publishing incomplete usage.
+      return undefined;
+    },
+  );
+  if (!canonical || canonical.checkpoint.anchorHash !== checkpoint.anchorHash) {
     return undefined;
   }
   return { ...canonical, scannedAt: cached.scannedAt };

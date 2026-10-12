@@ -52,7 +52,7 @@ export function SessionsCard(props: {
       sessionSortDir === "desc" ? "usage.sessions.descending" : "usage.sessions.ascending",
     );
 
-    const entries = sessions.map((session) => {
+    const toEntry = (session: UsageSessionEntry) => {
       const usage = session.usage;
       const tokens = usage?.totalTokens ?? 0;
       const cost = usage?.totalCost ?? 0;
@@ -67,15 +67,15 @@ export function SessionsCard(props: {
         displayLabel,
         value: isTokenMode ? tokens : cost,
       };
-    });
+    };
+    const entries = sessions.map(toEntry);
     const count = props.overview?.tableSessionCount ?? 0;
     const totals = props.overview?.tableTotals;
     const totalValue = (isTokenMode ? totals?.tokens : totals?.cost) ?? 0;
     const avgValue = count ? totalValue / count : 0;
     const totalErrors = totals?.errors ?? 0;
 
-    const selectedSet = new Set(selectedSessions);
-    const selectedEntries = entries.filter((entry) => selectedSet.has(entry.session.key));
+    const selectedEntries = props.usage.data.overview?.selectedRows.map(toEntry) ?? [];
     const selectedCount = selectedEntries.length;
     const displayedEntries = entries;
 
@@ -169,7 +169,7 @@ export function SessionsCard(props: {
               {state().sessionSortDir === "desc" ? "↓" : "↑"}
             </button>
           </openclaw-tooltip>
-          {state().selectedCount > 0 ? (
+          {state().selectedSessions.length > 0 ? (
             <button class="btn btn--sm" onClick={() => state().onClearSessions()}>
               {t("usage.sessions.clearSelection")}
             </button>

@@ -338,6 +338,11 @@ export function buildUsageOverview(
   );
   const selected = new Set(options.selectedSessions);
   const scoped = selected.size ? matched.filter((session) => selected.has(session.key)) : matched;
+  const selectedRows = new Map(
+    selected.size ? scoped.map((session) => [session.key, session]) : [],
+  );
+  const toRow = (session: SessionUsageEntry) =>
+    params.compact === false ? session : compactSession(session, days);
   const recent = options.recentKeys === undefined ? undefined : new Set(options.recentKeys);
   const roster = recent ? matched.filter((session) => recent.has(session.key)) : matched;
   const accumulator = createUsageAggregateAccumulator();
@@ -346,6 +351,10 @@ export function buildUsageOverview(
     unfilteredSessionCount: sessions.length,
     selectedSessionCount: 0,
     selectedRowCount: scoped.length,
+    selectedRows: [...selected].flatMap((key) => {
+      const session = selectedRows.get(key);
+      return session ? [toRow(session)] : [];
+    }),
     tableSessionCount: matched.length,
     tableTotals: { tokens: 0, cost: 0, errors: 0 },
     offset: options.offset ?? 0,
@@ -465,7 +474,7 @@ export function buildUsageOverview(
     sessions: roster
       .toSorted(compareUsageOverviewSessions(options))
       .slice(options.offset ?? 0, (options.offset ?? 0) + (options.limit ?? PAGE_SIZE))
-      .map((session) => (params.compact === false ? session : compactSession(session, days))),
+      .map(toRow),
     totals,
     aggregates,
     overview,
