@@ -2633,8 +2633,6 @@
   "ui/src/pages/skills/library-detail.ts",
   "ui/src/pages/skills/library-events.ts",
   "ui/src/pages/skills/library-files.ts",
-  "ui/src/plugins/control-ui-view.runtime.ts",
-  "ui/src/plugins/control-ui-view.solid.tsx",
   "ui/src/styles/chat/composer-progress.css",
   "ui/src/styles/chat/composer-queue.css",
   "ui/src/styles/chat/question-card.css",
