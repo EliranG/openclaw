@@ -218,14 +218,15 @@ export function createSessionSharingConsumption(params: {
   const current = { sharing: params.sharing, profiles: params.getProfiles() };
   return Object.assign(current, {
     policy: (cfg: OpenClawConfig) =>
-      current.sharing
+      current.sharing || current.profiles
         ? prepareProjectedSessionSharing({
             cfg,
             client: params.client,
             profiles: current.profiles,
             isMember: (_target, id) =>
-              current.sharing!.isMember?.(id) ??
-              current.sharing!.members.some((member) => member.identityId === id),
+              current.sharing?.isMember?.(id) ??
+              current.sharing?.members.some((member) => member.identityId === id) ??
+              false,
           })
         : undefined,
     consume: <T>(

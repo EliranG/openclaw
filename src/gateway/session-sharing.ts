@@ -168,7 +168,9 @@ export function resolveSessionMutationAuthorization(request: SessionMutationAuth
   });
   const { policy: preparedPolicy, consume: consumeSharing } = consuming;
   const sessionCap = (cfg: OpenClawConfig) =>
-    consuming.sharing ? preparedPolicy(cfg)?.sessionCap : operatorSessionCap(params.client, cfg);
+    consuming.sharing || consuming.profiles
+      ? preparedPolicy(cfg)?.sessionCap
+      : operatorSessionCap(params.client, cfg);
   const authorizeTargetPolicy = (
     targetRef: SessionMutationTarget,
     target: SessionSharingTarget | null,

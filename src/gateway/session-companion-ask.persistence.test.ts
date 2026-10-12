@@ -35,7 +35,7 @@ it.each(["missing", "replaced", "reset with the same id", "claimed by another wr
         },
       );
       const remove = vi.spyOn(internalSessionEffects, "removeInternalSessionEffectsSession");
-      const open = SessionManager.openAsync;
+      const open = SessionManager.openAsync.bind(SessionManager);
       let changedEntry: InternalSessionEntry | undefined;
       let originalEvents: Awaited<ReturnType<typeof loadTranscriptEvents>> = [];
       vi.spyOn(SessionManager, "openAsync").mockImplementationOnce(async (...args) => {
@@ -93,7 +93,7 @@ it.each(["missing", "replaced", "reset with the same id", "claimed by another wr
             question: "What is it doing?",
             connId: "conn-1",
           }),
-        ).rejects.toThrow("session writer claim changed before transcript persistence");
+        ).rejects.toThrow("Side chat could not answer right now.");
         const target = expectDefined(prepared, "prepared companion session");
         expect(runEmbeddedAgent).not.toHaveBeenCalled();
         await expect(loadTranscriptEvents(target)).resolves.toEqual(originalEvents);

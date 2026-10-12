@@ -14,7 +14,9 @@ import type { SessionEntry } from "../../config/sessions.js";
 import { withSessionEntriesFromStoresInWorker } from "../../config/sessions/session-entry-read-runtime.js";
 import { captureSessionEntryMetadataRead } from "../../config/sessions/session-entry-source-authority.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import { resolvePluginMetadataSnapshotAsync } from "../../plugins/plugin-metadata-snapshot.js";
 import type { PluginMetadataSnapshot } from "../../plugins/plugin-metadata-snapshot.types.js";
+import { getActivePluginRegistryWorkspaceDirFromState } from "../../plugins/runtime-state.js";
 import { isIncognitoSessionKey, parseAgentSessionKey } from "../../routing/session-key.js";
 import { resolveSessionPinnedHarnessId } from "../../sessions/agent-harness-session-key.js";
 import { resolveStoredModelOverrideAsync } from "../../sessions/stored-model-overrides.js";
@@ -55,6 +57,15 @@ export async function resolveWorkerPlacementSessionRuntimeAsync(
     readSourceEntry?: (key: string) => Promise<SessionEntry | undefined>;
   },
 ): Promise<string> {
+  const preparedEnvironment = captureRuntimeStateEnvironment();
+  const workspaceDir = getActivePluginRegistryWorkspaceDirFromState();
+  const metadataSnapshot = await resolvePluginMetadataSnapshotAsync({
+    config: params.cfg,
+    env: preparedEnvironment,
+    ...(workspaceDir ? { workspaceDir } : {}),
+    allowWorkspaceScopedCurrent: true,
+  });
+  params.assertCurrent?.();
   const ownership = await readSessionRuntimeOwnershipAsync({
     config: params.cfg,
     agentId: params.agentId,
@@ -82,6 +93,8 @@ export async function resolveWorkerPlacementSessionRuntimeAsync(
     provider: storedOverride?.provider ?? configured.provider,
     model: storedOverride?.model ?? configured.model,
     preparedRuntimeOwnership: ownership ?? null,
+    preparedEnvironment,
+    metadataSnapshot,
   });
 }
 

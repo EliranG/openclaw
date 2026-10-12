@@ -283,18 +283,17 @@ export function createMentionInbox(params: MentionInboxOptions): MentionInbox {
     return ok({ gatewayInstanceId: params.gatewayInstanceId, revision, items: visible });
   }
 
-  async function refreshConnectedViews(): Promise<void> {
+  function publishConnectedViews(targets: SharingTargets): void {
     if (scheduler.signal.aborted) {
       return;
     }
-    await prepareTargets();
     const cfg = params.getRuntimeConfig();
     for (const client of params.getClients()) {
       if (!client.connId) {
         continue;
       }
       const previous = views.get(client);
-      const result = readView(client, cfg, true, connectedTargets);
+      const result = readView(client, cfg, true, targets);
       if (
         !result.ok ||
         (previous ? previous.revision === result.value.revision : result.value.items.length === 0)
@@ -307,6 +306,11 @@ export function createMentionInbox(params: MentionInboxOptions): MentionInbox {
         new Set([client.connId]),
       );
     }
+  }
+
+  async function refreshConnectedViews(): Promise<void> {
+    await prepareTargets();
+    publishConnectedViews(connectedTargets);
   }
 
   function scheduleExpiry(retryAfterMs?: number): void {
@@ -407,6 +411,8 @@ export function createMentionInbox(params: MentionInboxOptions): MentionInbox {
       },
       notify: () => {
         if (!scheduler.signal.aborted) {
+          // Deprecated synchronous callers retain post-commit publication timing.
+          publishConnectedViews(legacyTargets(state));
           void refresh();
           scheduleExpiry();
           notify?.();

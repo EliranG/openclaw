@@ -6,6 +6,7 @@ import {
   resolveSubagentController,
 } from "../../agents/subagents/registry/subagent-control.js";
 import type { SubagentRequestSessionOrigin } from "../../agents/subagents/registry/subagent-exec-request-ownership.js";
+import { prepareSessionCapabilityRead } from "../../agents/subagents/spawn/subagent-session-store.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 
@@ -27,11 +28,21 @@ export async function abortControlledSubagents(params: {
     }>;
   };
 }) {
-  const controller = resolveSubagentController({
-    cfg: params.cfg,
-    agentSessionKey: params.sessionKey,
-    agentId: params.agentId,
-  });
+  const preparedController = await prepareSessionCapabilityRead(() =>
+    resolveSubagentController({
+      cfg: params.cfg,
+      agentSessionKey: params.sessionKey,
+      agentId: params.agentId,
+    }),
+  );
+  using controllerRead = { [Symbol.dispose]: preparedController.release };
+  void controllerRead;
+  params.assertCurrent?.();
+  const controller = preparedController.read();
+  const assertCurrent = () => {
+    params.assertCurrent?.();
+    preparedController.read();
+  };
   let commands =
     params.execCancellation ??
     captureExecRequestCancellation({
@@ -88,7 +99,7 @@ export async function abortControlledSubagents(params: {
       return false;
     }
     try {
-      params.assertCurrent?.();
+      assertCurrent();
     } catch (error) {
       // Without descendants, the caller owns the original authority exception.
       if (requestSelection.runs.length === 0) {
@@ -112,7 +123,7 @@ export async function abortControlledSubagents(params: {
         runs: requestSelection.runs,
         requestSelection,
         suppressTaskDelivery: true,
-        assertCurrent: params.assertCurrent,
+        assertCurrent,
         beforeKill,
       });
     }
