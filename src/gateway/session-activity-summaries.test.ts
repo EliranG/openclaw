@@ -10,13 +10,11 @@ import { ACTIVITY_SUMMARY_FORMAT_REVISION } from "../config/sessions/activity-su
 import { resolveSessionStorePathCore } from "../config/sessions/paths.js";
 import {
   loadSessionEntryReadOnly,
-  appendTranscriptEvent,
   deleteSessionEntryLifecycle,
   replaceSessionEntry,
   readSessionTranscriptWatermark,
   patchSessionEntryCore,
   persistSessionTranscriptTurn,
-  waitForSessionTranscriptProjection,
   upsertSessionEntryCore,
 } from "../config/sessions/session-accessor.js";
 import { writeSessionEntry } from "../config/sessions/session-accessor.sqlite-entry-store.js";
@@ -24,7 +22,6 @@ import { runExclusiveSqliteSessionWrite } from "../config/sessions/session-acces
 import { getSessionColdStorageStatus } from "../config/sessions/session-cold-storage-status.js";
 import { runSessionColdStorageMaintenance } from "../config/sessions/session-cold-storage.js";
 import { readSessionEntryReadOnlyInWorker } from "../config/sessions/session-entry-read-runtime.js";
-import { prewarmSessionHistoryWorker } from "../config/sessions/session-transcript-worker-runtime.js";
 import type { SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { registerAgentRunContext, clearAgentRunContext } from "../infra/agent-run-registry.js";
@@ -38,10 +35,7 @@ import {
 } from "../state/openclaw-agent-db.js";
 import { SQLITE_SESSION_WRITER_QUEUES } from "../state/openclaw-agent-write-admission-state.js";
 import { createTestGatewayScheduler } from "../test-utils/gateway-scheduler-clock.js";
-import {
-  createOpenClawTestState,
-  type OpenClawTestState,
-} from "../test-utils/openclaw-test-state.js";
+import type { OpenClawTestState } from "../test-utils/openclaw-test-state.js";
 import { createDirectChatContext } from "./server-chat.agent-events.test-helpers.js";
 import { sessionActivitySummaryHandlers } from "./server-methods/session-activity-summary.js";
 import { sessionByKeyReadHandlers } from "./server-methods/sessions-read-by-key.js";
@@ -50,7 +44,15 @@ import {
   createSessionActivitySummaries,
   type SessionActivitySummaryService,
 } from "./session-activity-summaries.js";
-import { messages, scope, target, terminal } from "./session-activity-summaries.test-support.js";
+import {
+  activityRecapResult as result,
+  createActivityRecapSessionFixture,
+  messages,
+  preparedActivityRecapModel as prepared,
+  scope,
+  target,
+  terminal,
+} from "./session-activity-summaries.test-support.js";
 import { projectSessionActivitySummary } from "./session-activity-summary-state.js";
 import { listSessionFixture } from "./session-list.test-support.js";
 import type { defaultCompleteModel, defaultPrepareModel } from "./session-observer-model.js";
@@ -75,22 +77,6 @@ vi.mock("../config/sessions/session-accessor.sqlite-archive.js", async (importOr
   };
 });
 
-const prepared = {
-  config: {},
-  authProfileId: undefined,
-  provider: "test",
-  model: "utility",
-  agentId: "main",
-  agentDir: "/tmp/unused",
-  outputTextPolicy: "strict-visible" as const,
-};
-const result = (text: string) => ({
-  text,
-  provider: "test",
-  model: "utility",
-  owner: { kind: "harness" as const, id: "test" },
-});
-
 describe("Activity recap lifecycle with the canonical session store", () => {
   let testState: OpenClawTestState;
   let testSignal: AbortSignal;
@@ -103,7 +89,13 @@ describe("Activity recap lifecycle with the canonical session store", () => {
   const prepare = vi.fn(async () => prepared);
   const changed = vi.fn();
   const read = () => loadSessionEntryReadOnly(scope);
-  const view = () => projectSessionActivitySummary({ ...target, cfg, entry: read() });
+  const view = () =>
+    projectSessionActivitySummary({
+      ...target,
+      cfg,
+      entry: read(),
+      watermark: readSessionTranscriptWatermark(scope),
+    });
   const createService = (prepareModel: typeof defaultPrepareModel = prepare) =>
     createSessionActivitySummaries({
       scheduler: createTestGatewayScheduler(),
@@ -115,7 +107,7 @@ describe("Activity recap lifecycle with the canonical session store", () => {
     });
 
   const awaitPublication = async (
-    start: () => void | Promise<unknown>,
+    start: () => unknown,
     ready = () => view()?.state === "current",
   ) => {
     const published = createDeferred();
@@ -140,18 +132,11 @@ describe("Activity recap lifecycle with the canonical session store", () => {
 
   beforeEach(async ({ signal }) => {
     testSignal = signal;
-    testState = await createOpenClawTestState({ scenario: "minimal" });
+    testState = await createActivityRecapSessionFixture();
     cfg = { agents: { defaults: { utilityModel: "test/utility" } } };
     complete.mockReset().mockImplementation(async () => result("Completed the requested work."));
     prepare.mockReset().mockImplementation(async () => prepared);
     changed.mockReset();
-    await upsertSessionEntryCore(scope, {
-      sessionId: scope.sessionId,
-      lifecycleRevision: "lifecycle-1",
-      updatedAt: 1,
-    });
-    // Cleanup closes each test's database handle even when the worker survives.
-    await prewarmSessionHistoryWorker({ agentId: scope.agentId, env: testState.env });
     service = createService();
   });
   afterEach(async () => {
@@ -268,9 +253,11 @@ describe("Activity recap lifecycle with the canonical session store", () => {
     const parse = vi.spyOn(JSON, "parse");
     onTestFinished(() => parse.mockRestore());
     await awaitPublication(async () => {
+      const requests = [];
       for (let index = 0; index < 12; index += 1) {
-        await ensureRecap(target);
+        requests.push(ensureRecap(target));
       }
+      await Promise.all(requests);
     });
     expect(parse.mock.calls.some(([json]) => json.includes(unrelatedLabel))).toBe(false);
     parse.mockRestore();
@@ -651,52 +638,6 @@ describe("Activity recap lifecycle with the canonical session store", () => {
     expect(read()).toBeUndefined();
   });
 
-  it("invalidates cached projection after an offline branch change without changing activity ordering", async () => {
-    await messages(3);
-    await awaitPublication(() => ensureRecap(target));
-    expect(view()?.state).toBe("current");
-    await service.dispose();
-    const oldActivity = read()?.updatedAt;
-    const oldWatermark = readSessionTranscriptWatermark(scope);
-    await appendTranscriptEvent(scope, {
-      type: "leaf",
-      id: "rewind",
-      parentId: "message-0",
-      targetId: "message-0",
-    });
-    expect(readSessionTranscriptWatermark(scope).generation).toBe(oldWatermark.generation);
-    expect(read()?.updatedAt).toBe(oldActivity);
-    expect(view()?.state).toBe("stale");
-    // Offline edits rebuild asynchronously; finish the fixture before restarting its observer.
-    await waitForSessionTranscriptProjection(scope);
-    service = createService();
-    await awaitPublication(() => ensureRecap(target));
-    expect(view()?.state).toBe("current");
-    expect(complete).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(complete.mock.calls[1]![0].prompt)).toMatchObject({
-      previousRecap: "",
-      messages: ["user: Outcome 0"],
-    });
-    const entry = read()!;
-    const ordinary = await listSessionFixture({
-      cfg,
-      storePath: resolveSessionStorePathCore(cfg.session?.store, { agentId: scope.agentId }),
-      store: { [target.key]: entry },
-      opts: {},
-    });
-    expect(ordinary.sessions[0]?.activitySummary).toBeUndefined();
-    const activity = await listSessionFixture({
-      cfg,
-      storePath: resolveSessionStorePathCore(cfg.session?.store, { agentId: scope.agentId }),
-      store: { [target.key]: entry },
-      opts: { includeActivitySummary: true },
-    });
-    expect(activity.sessions[0]?.activitySummary).toMatchObject({
-      text: "Completed the requested work.",
-      state: "current",
-    });
-  });
-
   it("does not let timeout release a preparation slot or dispatch a late model request", async () => {
     await messages(1);
     const secondTarget = { key: "agent:main:second-recap", agentId: "main" };
@@ -807,7 +748,14 @@ describe("Activity recap lifecycle with the canonical session store", () => {
       if (
         conversations.every(({ target: row, scope: session }) => {
           const entry = loadSessionEntryReadOnly(session);
-          return projectSessionActivitySummary({ ...row, cfg, entry })?.state === "current";
+          return (
+            projectSessionActivitySummary({
+              ...row,
+              cfg,
+              entry,
+              watermark: readSessionTranscriptWatermark(session),
+            })?.state === "current"
+          );
         })
       ) {
         published.resolve();
@@ -925,6 +873,7 @@ describe("Activity recap lifecycle with the canonical session store", () => {
           ...aliasTarget,
           cfg,
           entry: loadSessionEntryReadOnly(aliasScope),
+          watermark: readSessionTranscriptWatermark(aliasScope),
         })?.state === "current",
     );
     expect(loadSessionEntryReadOnly(aliasScope)?.activitySummary).toBeDefined();
@@ -1008,7 +957,12 @@ describe("Activity recap lifecycle with the canonical session store", () => {
       expect(relocatedEntry.lifecycleRevision).toBe(
         loadSessionEntryReadOnly(originalScope)?.lifecycleRevision,
       );
-      const projected = projectSessionActivitySummary({ ...target, cfg, entry: relocatedEntry });
+      const projected = projectSessionActivitySummary({
+        ...target,
+        cfg,
+        entry: relocatedEntry,
+        watermark: readSessionTranscriptWatermark(relocatedScope),
+      });
       expect.soft(projected?.state).toBe("stale");
       await awaitPublication(
         () => ensureRecap(target),

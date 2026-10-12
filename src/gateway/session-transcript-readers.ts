@@ -22,6 +22,7 @@ import {
 } from "../config/sessions/session-incognito-history-read.js";
 import { readSessionTranscriptAccountingFromProjection } from "../config/sessions/session-transcript-accounting.js";
 import type { SessionTranscriptAccountingOptions } from "../config/sessions/session-transcript-accounting.types.js";
+import type { ReadRecentSessionConversationTextOptions } from "../config/sessions/transcript-recent-text.js";
 import { captureSessionTranscriptStorageEnvironment } from "../config/sessions/transcript-target-binding.js";
 import { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 import { isIncognitoSessionKey } from "../shared/incognito-session-key.js";
@@ -37,7 +38,10 @@ import {
 } from "./session-history-snapshot.js";
 import { aggregateSessionTranscriptUsage } from "./session-transcript-derived-readers.js";
 import { createSessionActorTranscriptReader } from "./session-transcript-memory-reader.js";
-import { createSessionTranscriptReader } from "./session-transcript-read-kernel.js";
+import {
+  createSessionTranscriptReader,
+  selectSessionTranscriptProjection,
+} from "./session-transcript-read-kernel.js";
 import {
   resolveTranscriptReadTarget,
   toTranscriptReadScope,
@@ -293,6 +297,44 @@ export async function readSessionTranscriptBoundedMessageTailPageAsync(
     );
   }
   return readSessionTranscriptBoundedMessageTailPage(scope, options, signal);
+}
+
+const readRecentConversationText = createHistoryPageReader(
+  async (target, options: ReadRecentSessionConversationTextOptions) =>
+    withCurrentProjectionSnapshot(target, (projection) =>
+      selectSessionTranscriptProjection(projection, { kind: "recent-text", options }),
+    ),
+  (read, target, options, signal) =>
+    read({ kind: "recent-text", params: { target, options } }, signal),
+  () => {
+    throw new Error("Recent text requires its captured actor binding");
+  },
+);
+
+export async function readRecentSessionConversationTextAsync(
+  scope: SessionTranscriptReadScope,
+  options: ReadRecentSessionConversationTextOptions,
+  signal?: AbortSignal,
+) {
+  const memory = captureSessionActorTranscriptRead(scope, signal);
+  if (memory) {
+    const result = memory.missing
+      ? []
+      : await memory.read("session.history.recent-text", {
+          options: structuredClone(options),
+        });
+    memory.assertCurrent();
+    return result;
+  }
+  const incognito = captureIncognitoSessionHistoryBinding(scope);
+  return incognito
+    ? readIncognitoSessionHistory(
+        incognito,
+        scope,
+        (target) => ({ type: "session.history.recent-text", input: { ...target, options } }),
+        signal,
+      )
+    : readRecentConversationText(scope, options, signal);
 }
 
 export const readRecentSessionMessagesWithStatsAsync = createHistoryPageReader(

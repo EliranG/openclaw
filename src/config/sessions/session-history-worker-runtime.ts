@@ -373,7 +373,8 @@ export async function readSessionHistoryPageInWorker(
         capturedRequest.kind === "recent-usage" ||
         capturedRequest.kind === "history-event-page" ||
         capturedRequest.kind === "active-accounting" ||
-        capturedRequest.kind === "bounded-tail"
+        capturedRequest.kind === "bounded-tail" ||
+        capturedRequest.kind === "recent-text"
           ? true
           : capturedRequest.kind === "artifacts"
             ? capturedRequest.params.query.kind === "image-page"
@@ -404,6 +405,7 @@ export async function readSessionHistoryPageInWorker(
               } catch (error) {
                 if (
                   (capturedRequest.kind === "active-accounting" ||
+                    capturedRequest.kind === "recent-text" ||
                     (capturedRequest.kind === "bounded-tail" &&
                       !capturedRequest.params.options.readOnly)) &&
                   isSessionTranscriptProjectionUnavailableError(error)

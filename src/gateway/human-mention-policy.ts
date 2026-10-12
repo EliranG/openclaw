@@ -12,10 +12,7 @@ import {
   type UsersMentionableResult,
 } from "../../packages/gateway-protocol/src/index.js";
 import type { SessionEntry } from "../config/sessions.js";
-import {
-  updateSessionProfileInvolvement,
-  updateSessionProfileInvolvementAsync,
-} from "../config/sessions/session-accessor.js";
+import { updateSessionProfileInvolvementAsync } from "../config/sessions/session-accessor.js";
 import { captureIncognitoSessionSource } from "../config/sessions/session-incognito-binding.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { pruneMapToMaxSize } from "../infra/map-size.js";

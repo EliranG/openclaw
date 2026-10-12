@@ -131,18 +131,51 @@ export const sessionActivitySummaryHandlers: GatewayRequestHandlers = {
             entry: { ...selected.entry, ...target.entry },
           });
         }
-        respond(true, {
-          sessions: targets.map((target) => ({
+        const sessions = await Promise.all(
+          targets.map(async (target) => ({
             key: target.key,
             agentId: target.agentId,
             activitySummary: {
               ...(target.unavailable
                 ? { state: "unavailable" as const }
-                : service.ensure(target, target.entry)),
+                : await service.ensure(target, target.entry)),
               canEnsure: true,
             },
           })),
-        });
+        );
+        const currentCfg = context.getRuntimeConfig();
+        for (const [index, { requested }] of requestedTargets.entries()) {
+          const selected = prepared[index];
+          if (!selected) {
+            continue;
+          }
+          const facts = selected.read.readCurrent(currentCfg);
+          const target = facts.target;
+          const sharing = prepareProjectedSessionSharing({
+            cfg: currentCfg,
+            client,
+            profiles,
+            isMember: (_target, id) => facts.membership.has(id),
+          });
+          const error = target
+            ? (authorizeIncognitoSessionTarget({ client, sessionKey: requested.key, target }) ??
+              sharing.authorizeTarget(target))
+            : errorShape(ErrorCodes.INVALID_REQUEST, "Session is unavailable.");
+          if (
+            error ||
+            (target &&
+              hasOperatorBoundary(client, currentCfg) &&
+              sharing.entryFilter?.(target.canonicalKey, target.entry) === false)
+          ) {
+            respond(
+              false,
+              undefined,
+              error ?? errorShape(ErrorCodes.INVALID_REQUEST, "Session is unavailable."),
+            );
+            return;
+          }
+        }
+        respond(true, { sessions });
       } finally {
         for (const read of reads) {
           read.release();

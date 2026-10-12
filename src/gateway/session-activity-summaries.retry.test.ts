@@ -9,6 +9,7 @@ import {
   loadSessionEntryReadOnly,
   patchSessionEntryCore,
   persistSessionTranscriptTurn,
+  readSessionTranscriptWatermark,
   SessionTranscriptProjectionUnavailableError,
   upsertSessionEntryCore,
 } from "../config/sessions/session-accessor.js";
@@ -75,6 +76,7 @@ describe("Activity recap admission, refresh, and provider recovery", () => {
       ...target,
       cfg,
       entry: loadSessionEntryReadOnly(scope(target)),
+      watermark: readSessionTranscriptWatermark(scope(target)),
     });
   const addSession = async (index: number, agentId = "main") => {
     const target = { agentId, key: `agent:${agentId}:recap-${index}` };
@@ -231,7 +233,6 @@ describe("Activity recap admission, refresh, and provider recovery", () => {
       "user: Request 1",
       "assistant: Verified additional work.",
     ]);
-    expect(readWatermark).not.toHaveBeenCalled();
   });
 
   it("refreshes the bounded recap source after a committed append", async () => {

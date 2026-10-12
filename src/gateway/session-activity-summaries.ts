@@ -45,7 +45,7 @@ import { subscribeActivitySummaryEntryReceipts } from "./session-activity-summar
 import { readActivitySummarySource } from "./session-activity-summary-source.js";
 import {
   activitySummaryScope,
-  projectSessionActivitySummary,
+  prepareSessionActivitySummaryView,
   resolveActivitySummaryEventTarget,
   sessionActivitySummaryOwnerIsCurrent,
   setSessionActivitySummaryState,
@@ -102,7 +102,10 @@ class ActivitySummaryCancelledError extends Error {
 }
 
 export type SessionActivitySummaryService = {
-  ensure: (target: ActivitySummaryTarget, entry: SessionEntry | undefined) => ActivitySummaryView;
+  ensure: (
+    target: ActivitySummaryTarget,
+    entry: SessionEntry | undefined,
+  ) => Promise<ActivitySummaryView>;
   handleEvent: (event: SessionObserverEvent) => void;
   handleTranscript: (event: InternalSessionTranscriptUpdate) => void;
   handleLifecycle: (event: SessionLifecycleEvent) => void;
@@ -585,7 +588,7 @@ export function createSessionActivitySummaries(deps: {
     }
   });
   const unsubscribeFacts = subscribeActivitySummaryEntryReceipts(states, drop);
-  const ensure = (requested: ActivitySummaryTarget, entry: SessionEntry | undefined) => {
+  const ensure = async (requested: ActivitySummaryTarget, entry: SessionEntry | undefined) => {
     const target = eventTarget(requested.key, requested.agentId)!;
     if (isCronSessionKey(target.key)) {
       return { state: "unavailable" as const };
@@ -594,11 +597,13 @@ export function createSessionActivitySummaries(deps: {
     if (state) {
       schedule(state, true);
     }
-    const projected = projectSessionActivitySummary({ ...target, cfg: deps.getConfig(), entry });
-    if (!state && projected?.state !== "current") {
-      return { ...projected, state: "unavailable" as const };
-    }
-    return projected ?? { state: "updating" as const };
+    return prepareSessionActivitySummaryView({
+      ...target,
+      cfg: deps.getConfig(),
+      entry,
+      storePath: scope(target).storePath,
+      admitted: state !== undefined,
+    });
   };
   const trackAdmission = <T>(work: Promise<T>): Promise<T> => {
     admissions.add(work);
