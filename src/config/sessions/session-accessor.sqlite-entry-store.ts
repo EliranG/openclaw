@@ -593,7 +593,7 @@ export function writeSessionEntry(
                 queries.node(sessionNode);
               }
               if (persisted.snapshotsChanged) {
-                writeSessionEntrySnapshots(database, sessionKey, persisted.snapshots);
+                writeSessionEntrySnapshots(database, sessionKey, persisted.snapshots, persisted);
               }
             })
           : undefined;
