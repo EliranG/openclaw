@@ -467,8 +467,8 @@ describe("desktop proof identity and public evidence", () => {
     const handle = await actual.open(file, "r");
     const read = vi.spyOn(handle, "read");
     const close = vi.spyOn(handle, "close");
-    vi.mocked(lstat).mockImplementationOnce(async () => {
-      const admitted = await actual.lstat(file);
+    vi.mocked(lstat).mockImplementationOnce(async (...args) => {
+      const admitted = await actual.lstat(...args);
       await appendFile(file, Buffer.alloc(1024 * 1024, 32));
       return admitted;
     });

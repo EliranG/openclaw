@@ -223,11 +223,11 @@ describe("migrateOrphanedSessionKeys", () => {
         agents: { entries: { ops: {} } },
       } as OpenClawConfig;
       const realStatSync = fs.statSync.bind(fs);
-      const statSpy = vi.spyOn(fs, "statSync").mockImplementation((candidate) => {
+      const statSpy = vi.spyOn(fs, "statSync").mockImplementation((candidate, options) => {
         if (path.resolve(candidate.toString()) === configuredStorePath) {
           throw Object.assign(new Error("inaccessible store"), { code: "EACCES" });
         }
-        return realStatSync(candidate);
+        return realStatSync(candidate, options);
       });
 
       let result: Awaited<ReturnType<typeof migrateOrphanedSessionKeys>>;

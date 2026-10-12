@@ -363,22 +363,24 @@ describe("session cost usage", () => {
     const originalStat = nodeFs.promises.stat.bind(nodeFs.promises);
     let activeStats = 0;
     let maxActiveStats = 0;
-    const statSpy = vi.spyOn(nodeFs.promises, "stat").mockImplementation(async (target) => {
-      const targetPath = String(target);
-      if (targetPath.startsWith(sessionsDir) && targetPath.endsWith(".jsonl")) {
-        activeStats += 1;
-        maxActiveStats = Math.max(maxActiveStats, activeStats);
-        try {
-          await new Promise((resolve) => {
-            setTimeout(resolve, 2);
-          });
-          return await originalStat(target);
-        } finally {
-          activeStats -= 1;
+    const statSpy = vi
+      .spyOn(nodeFs.promises, "stat")
+      .mockImplementation(async (target, options) => {
+        const targetPath = String(target);
+        if (targetPath.startsWith(sessionsDir) && targetPath.endsWith(".jsonl")) {
+          activeStats += 1;
+          maxActiveStats = Math.max(maxActiveStats, activeStats);
+          try {
+            await new Promise((resolve) => {
+              setTimeout(resolve, 2);
+            });
+            return await originalStat(target, options);
+          } finally {
+            activeStats -= 1;
+          }
         }
-      }
-      return await originalStat(target);
-    });
+        return await originalStat(target, options);
+      });
 
     try {
       const files = await listUsageCountedTranscriptStats("main", { sessionsDir });

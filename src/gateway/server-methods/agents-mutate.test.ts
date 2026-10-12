@@ -1,6 +1,7 @@
 // Agent mutation tests cover create/update/delete handlers, safe workspace file
 // access, config preconditions, trash cleanup, and workspace-state handling.
 
+import fs from "node:fs";
 import path from "node:path";
 import { expectDefined } from "@openclaw/normalization-core";
 import { describe, expect, it, vi, beforeEach } from "vitest";
@@ -111,7 +112,10 @@ const mocks = vi.hoisted(() => ({
   fsAppendFile: vi.fn(async () => {}),
   fsReadFile: vi.fn(async () => ""),
   fsStat: vi.fn(async (..._args: unknown[]) => null as import("node:fs").Stats | null),
-  fsLstat: vi.fn(async (..._args: unknown[]) => null as import("node:fs").Stats | null),
+  fsLstat: vi.fn(
+    async (..._args: unknown[]) =>
+      null as import("node:fs").Stats | import("node:fs").BigIntStats | null,
+  ),
   fsRealpath: vi.fn(async (p: string) => p),
   fsReadlink: vi.fn(async (_pathname: string) => ""),
   fsRm: vi.fn(async () => undefined),
@@ -585,15 +589,16 @@ beforeEach(() => {
     exactIdentity: { dev: 1n, ino: 1n },
   });
   mocks.rootStat.mockImplementation(async ({ rootDir, relativePath }) => {
-    const stat = await mocks.fsLstat(path.join(rootDir, relativePath));
+    const stat = await mocks.fsLstat(path.join(rootDir, relativePath), { bigint: true });
     return {
-      dev: stat?.dev,
-      ino: stat?.ino,
+      dev: stat ? Number(stat.dev) : undefined,
+      ino: stat ? Number(stat.ino) : undefined,
+      exactIdentity: stat ? { dev: BigInt(stat.dev), ino: BigInt(stat.ino) } : undefined,
       isFile: stat?.isFile?.() ?? true,
       isSymbolicLink: stat?.isSymbolicLink?.() ?? false,
-      mtimeMs: stat?.mtimeMs ?? 0,
-      nlink: stat?.nlink ?? 1,
-      size: stat?.size ?? 0,
+      mtimeMs: Number(stat?.mtimeMs ?? 0),
+      nlink: Number(stat?.nlink ?? 1),
+      size: Number(stat?.size ?? 0),
     };
   });
   mocks.rootWrite.mockResolvedValue(undefined);
@@ -629,6 +634,17 @@ async function call(method: keyof typeof agentsHandlers, params: Record<string, 
   const { respond, promise } = makeCall(method, params);
   await promise;
   return respond;
+}
+
+function makeCleanupStat(overrides: Partial<fs.BigIntStats> = {}): fs.BigIntStats {
+  return Object.assign(fs.statSync(new URL(import.meta.url), { bigint: true }), {
+    dev: 1n,
+    ino: 1n,
+    nlink: 1n,
+    isFile: () => false,
+    isSymbolicLink: () => false,
+    ...overrides,
+  });
 }
 
 async function listAgentFileNames(agentId = "main") {
@@ -779,9 +795,7 @@ describe("agents.delete", () => {
     mocks.resolveAgentDir.mockImplementation((_cfg?: unknown, agentId?: string) =>
       agentId === "main" ? "/agents/main/agent" : "/agents/test-agent",
     );
-    mocks.fsLstat.mockResolvedValue({
-      isSymbolicLink: () => false,
-    } as unknown as import("node:fs").Stats);
+    mocks.fsLstat.mockResolvedValue(makeCleanupStat());
     mocks.fsRealpath.mockImplementation(async (pathname: string) => pathname);
     mocks.loadConfigReturn = {
       agents: {
@@ -967,7 +981,7 @@ describe("agents.delete", () => {
       if (trashed.has(String(pathname))) {
         throw createEnoentError();
       }
-      return null as unknown as import("node:fs").Stats;
+      return makeCleanupStat();
     });
     mocks.movePathToTrash.mockImplementation(async (pathname?: string) => {
       if (pathname === journal.workspaceDir && workspaceAttempts++ === 0) {
@@ -1060,15 +1074,8 @@ describe("agents.delete", () => {
     mocks.fsRealpath.mockImplementation(async (pathname: string) =>
       pathname === workspaceAlias ? workspaceDir : pathname,
     );
-    mocks.fsLstat.mockImplementation(
-      async (pathname: unknown) =>
-        ({
-          dev: 2,
-          ino: pathname === workspaceDir ? 200 : 100,
-          isFile: () => false,
-          isSymbolicLink: () => false,
-          nlink: 1,
-        }) as unknown as import("node:fs").Stats,
+    mocks.fsLstat.mockImplementation(async (pathname: unknown) =>
+      makeCleanupStat({ dev: 2n, ino: pathname === workspaceDir ? 200n : 100n }),
     );
 
     const respond = await call("agents.delete", { agentId: "test-agent" });
@@ -1110,13 +1117,10 @@ describe("agents.delete", () => {
       if (pathname !== completedChild && pathname !== workspaceDir) {
         throw createEnoentError();
       }
-      return {
-        dev: pathname === completedChild ? 2 : 1,
-        ino: pathname === completedChild ? 100 : 20,
-        isFile: () => false,
-        isSymbolicLink: () => false,
-        nlink: 1,
-      } as unknown as import("node:fs").Stats;
+      return makeCleanupStat({
+        dev: pathname === completedChild ? 2n : 1n,
+        ino: pathname === completedChild ? 100n : 20n,
+      });
     });
 
     const respond = await call("agents.delete", { agentId: "test-agent" });
@@ -1137,7 +1141,7 @@ describe("agents.delete", () => {
       if (pathname === "/workspace/test-agent" && workspaceLstatCalls++ > 1) {
         throw createEnoentError();
       }
-      return null as unknown as import("node:fs").Stats;
+      return makeCleanupStat();
     });
     mocks.movePathToTrash.mockImplementation(async (pathname?: string) => {
       if (pathname === "/workspace/test-agent") {
@@ -1175,11 +1179,10 @@ describe("agents.delete", () => {
     mocks.fsRealpath.mockImplementation(async (pathname: string) =>
       pathname.replace(agentLink, agentTarget),
     );
-    mocks.fsLstat.mockImplementation(
-      async (pathname: unknown) =>
-        ({
-          isSymbolicLink: () => pathname === agentLink,
-        }) as unknown as import("node:fs").Stats,
+    mocks.fsLstat.mockImplementation(async (pathname: unknown) =>
+      makeCleanupStat({
+        isSymbolicLink: () => pathname === agentLink,
+      }),
     );
     mocks.movePathToTrash.mockImplementation(async (pathname?: string) => {
       if (pathname === agentTarget) {
@@ -1263,11 +1266,10 @@ describe("agents.delete", () => {
       }
       return pathname.replace(workspaceLink, workspaceTarget);
     });
-    mocks.fsLstat.mockImplementation(
-      async (pathname: unknown) =>
-        ({
-          isSymbolicLink: () => pathname === workspaceLink || pathname === canonicalWorkspaceLink,
-        }) as unknown as import("node:fs").Stats,
+    mocks.fsLstat.mockImplementation(async (pathname: unknown) =>
+      makeCleanupStat({
+        isSymbolicLink: () => pathname === workspaceLink || pathname === canonicalWorkspaceLink,
+      }),
     );
 
     const respond = await call("agents.delete", { agentId: "test-agent" });
@@ -1345,9 +1347,9 @@ describe("agents.delete", () => {
       ) {
         throw createEnoentError();
       }
-      return {
+      return makeCleanupStat({
         isSymbolicLink: () => pathname === workspaceLink,
-      } as unknown as import("node:fs").Stats;
+      });
     });
     mocks.movePathToTrash.mockImplementation(async (pathname?: string) => {
       if (pathname === originalTarget && workspaceAttempts++ === 0) {
@@ -1687,13 +1689,11 @@ describe("agents.delete", () => {
       if (!stat) {
         throw createEnoentError();
       }
-      return {
-        dev: stat.dev,
-        ino: stat.ino,
+      return makeCleanupStat({
+        dev: BigInt(stat.dev),
+        ino: BigInt(stat.ino),
         isFile: () => stat.file,
-        isSymbolicLink: () => false,
-        nlink: 1,
-      } as unknown as import("node:fs").Stats;
+      });
     });
     // The live runtime reopens the agent database while deletion awaits config,
     // cron, and session-purge work, recreating -wal/-shm after preparation.

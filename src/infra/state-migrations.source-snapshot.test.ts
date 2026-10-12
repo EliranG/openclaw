@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { root, type Root } from "@openclaw/fs-safe";
-import * as fsSafeAdvanced from "@openclaw/fs-safe/advanced";
 import { configureFsSafeNative } from "@openclaw/fs-safe/config";
 import { FsSafeError } from "@openclaw/fs-safe/errors";
 import { __setFsSafeTestHooksForTest } from "@openclaw/fs-safe/test-hooks";
@@ -21,11 +20,34 @@ import {
   resolveLegacyMigrationRelativePath,
 } from "./state-migrations.source-snapshot.js";
 
+const sourceIdentityFixture = vi.hoisted(() => ({
+  filePath: undefined as string | undefined,
+  ino: 0n,
+}));
+
+vi.mock("@openclaw/fs-safe/advanced", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openclaw/fs-safe/advanced")>();
+  return {
+    ...actual,
+    readRegularFileSync: (params: Parameters<typeof actual.readRegularFileSync>[0]) => {
+      const result = actual.readRegularFileSync(params);
+      if (params.filePath !== sourceIdentityFixture.filePath) {
+        return result;
+      }
+      return {
+        ...result,
+        exactIdentity: { ...result.exactIdentity, ino: sourceIdentityFixture.ino },
+      };
+    },
+  };
+});
+
 describe("doctor legacy migration source contract", () => {
   const tempDirs = useAutoCleanupTempDirTracker((cleanup) => {
     afterEach(() => {
       configureFsSafeNative({ mode: "auto" });
       __setFsSafeTestHooksForTest(undefined);
+      sourceIdentityFixture.filePath = undefined;
       vi.restoreAllMocks();
       cleanup();
     });
@@ -108,17 +130,13 @@ describe("doctor legacy migration source contract", () => {
 
   it("accepts an unchanged large file identity and rejects a rounded-number collision", () => {
     const { sourcePath } = createSource();
-    const read = fsSafeAdvanced.readRegularFileSync;
-    let ino = 9_007_199_254_740_992n;
-    vi.spyOn(fsSafeAdvanced, "readRegularFileSync").mockImplementation((options) => ({
-      ...read(options),
-      exactIdentity: { dev: 1n, ino },
-    }));
+    sourceIdentityFixture.filePath = sourcePath;
+    sourceIdentityFixture.ino = 9_007_199_254_740_992n;
     const snapshot = readLegacyMigrationSourceSnapshotSync({ sourcePath, label: "test" });
     expect(() =>
       assertLegacyMigrationSourceUnchanged({ sourcePath, snapshot, label: "test" }),
     ).not.toThrow();
-    ino += 1n;
+    sourceIdentityFixture.ino += 1n;
     expect(() =>
       assertLegacyMigrationSourceUnchanged({ sourcePath, snapshot, label: "test" }),
     ).toThrow("changed after doctor loaded it");

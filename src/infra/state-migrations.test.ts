@@ -1684,11 +1684,11 @@ describe("state migrations", () => {
       agents: { entries: { main: {} } },
     } as OpenClawConfig;
     const realStatSync = fsSync.statSync.bind(fsSync);
-    const statSpy = vi.spyOn(fsSync, "statSync").mockImplementation((candidate) => {
+    const statSpy = vi.spyOn(fsSync, "statSync").mockImplementation((candidate, options) => {
       if (path.resolve(candidate.toString()) === configuredStorePath) {
         throw Object.assign(new Error("inaccessible store"), { code: "EACCES" });
       }
-      return realStatSync(candidate);
+      return realStatSync(candidate, options);
     });
     let detected: Awaited<ReturnType<typeof detectLegacyStateMigrations>>;
     try {

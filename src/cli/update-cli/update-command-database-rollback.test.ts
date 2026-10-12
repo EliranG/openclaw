@@ -8,6 +8,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
+import { installPrivateUpdateHandoffStore } from "../../../test/helpers/private-update-handoff-store.js";
 import { stopChildProcess } from "../../../test/helpers/stop-child-process.js";
 import { createTempDirTracker } from "../../../test/helpers/temp-dir.js";
 import { buildBackupArchivePath } from "../../commands/backup-shared.js";
@@ -229,6 +230,8 @@ it.each([
     for (const directory of [stateDir, controlDir, path.dirname(shared), path.dirname(agent)]) {
       await fs.mkdir(directory, { recursive: true });
     }
+    // The handoff store has its own path owner, separate from OPENCLAW_STATE_DIR.
+    installPrivateUpdateHandoffStore(controlDir);
     serviceEnv = {
       ...process.env,
       HOME: base,

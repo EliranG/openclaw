@@ -87,10 +87,9 @@ describe("gatewayServiceCommandUsesRoot release ownership", () => {
           await fs.symlink(layout === "foreign" ? foreign : release, current);
         } else if (layout === "paired") {
           // The Docker proof supplies real bind mounts; this isolates directory identity.
-          const selected = await fs.stat(release);
           const stat = fs.stat.bind(fs);
-          vi.spyOn(fs, "stat").mockImplementation(async (target) =>
-            path.resolve(String(target)) === current ? selected : stat(target),
+          vi.spyOn(fs, "stat").mockImplementation(async (target, options) =>
+            stat(path.resolve(String(target)) === current ? release : target, options),
           );
         }
         const command = {

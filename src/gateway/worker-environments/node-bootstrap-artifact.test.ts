@@ -399,8 +399,8 @@ describe("node bootstrap distribution", () => {
       const handle = await openFile(...args);
       if (args[0] === entryPath) {
         const stat = handle.stat.bind(handle);
-        vi.spyOn(handle, "stat").mockImplementationOnce(async () => {
-          const before = await stat();
+        vi.spyOn(handle, "stat").mockImplementationOnce(async (...statArgs) => {
+          const before = await stat(...statArgs);
           await fs.truncate(entryPath, 1);
           truncated = true;
           return before;

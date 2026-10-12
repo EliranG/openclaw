@@ -82,16 +82,21 @@ unix.each([0o664, 0o666, 0o602])(
 unix("recovers a store owned by another user without adopting it", async () => {
   interruptFirstWrite();
   const foreignIno = fs.lstatSync(databasePath).ino;
+  const foreignExactIno = fs.lstatSync(databasePath, { bigint: true }).ino;
   const realLstatSync = fs.lstatSync.bind(fs);
   // Only the original inode is foreign. The store that replaces it is ours, which
   // is what makes the recovery converge instead of quarantining on every call.
-  vi.spyOn(fs, "lstatSync").mockImplementation(((target: fs.PathLike, ...rest: never[]) => {
-    const stat = realLstatSync(target, ...rest);
+  vi.spyOn(fs, "lstatSync").mockImplementation((...args) => {
+    const stat = realLstatSync(...args);
+    const isForeign =
+      typeof stat?.ino === "bigint" ? stat.ino === foreignExactIno : stat?.ino === foreignIno;
     // Keep the Stats prototype so isFile()/isSymbolicLink() stay real.
-    return stat.ino === foreignIno
-      ? Object.assign(Object.create(Object.getPrototypeOf(stat)), stat, { uid: stat.uid + 1 })
+    return stat && isForeign
+      ? Object.assign(Object.create(Object.getPrototypeOf(stat)), stat, {
+          uid: typeof stat.uid === "bigint" ? stat.uid + 1n : stat.uid + 1,
+        })
       : stat;
-  }) as typeof fs.lstatSync);
+  });
 
   const { callback, done } = writeConfig();
   await expect(done).resolves.toBeUndefined();
