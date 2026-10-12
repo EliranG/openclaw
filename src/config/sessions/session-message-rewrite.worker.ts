@@ -505,10 +505,9 @@ export function applySessionTranscriptCorrection(
     }
     return { ...row, seq: identity.seq };
   });
-  rewriteSqliteTranscriptEventRowsInTransaction(database, input.scope, rows);
+  const generation = rewriteSqliteTranscriptEventRowsInTransaction(database, input.scope, rows);
   assertLockedTranscriptWriteAllowed(database, input.scope, input.fence);
-  candidate.generation =
-    readTranscriptGenerationInTransaction(database, input.scope.sessionId) ?? null;
+  candidate.generation = generation ?? current.generation;
   return candidate;
 }
 
@@ -626,8 +625,9 @@ export function applySessionMessageRewrite<T>(
         throw new SessionTranscriptWriterClaimReboundError();
       }
       const changed = input.message !== undefined;
+      let generation: string | undefined;
       if (changed) {
-        rewriteSqliteTranscriptEventRowsInTransaction(database, input.scope, [
+        generation = rewriteSqliteTranscriptEventRowsInTransaction(database, input.scope, [
           {
             event: { ...current.event, message: input.message },
             expectedEventJson: current.eventJson,
@@ -635,7 +635,7 @@ export function applySessionMessageRewrite<T>(
           },
         ]);
       }
-      const generation = readTranscriptGenerationInTransaction(database, input.scope.sessionId);
+      generation ??= readTranscriptGenerationInTransaction(database, input.scope.sessionId);
       const candidate: SessionMessageRewriteCommitted = {
         kind: "session-message-rewrite",
         result:
