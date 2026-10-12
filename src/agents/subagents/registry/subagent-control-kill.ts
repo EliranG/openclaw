@@ -20,7 +20,6 @@ import {
 import {
   ensureSubagentControllerOwnsRun,
   getLatestOwnedSubagentRun,
-  isCurrentSubagentRun,
   type captureExecRequestSubagentSelection,
 } from "./subagent-control-scope.js";
 import {
@@ -41,6 +40,7 @@ import { getCurrentSubagentRunOwner, subagentRuns } from "./subagent-registry-me
 import { listRunsForControllerFromRuns } from "./subagent-registry-queries.js";
 import { listSubagentRunsForRequester } from "./subagent-registry-read.js";
 import type { SubagentRunRecord } from "./subagent-registry.types.js";
+import { isSameSubagentRunOwner } from "./subagent-run-generation.js";
 
 async function killSubagentRun(
   params: Parameters<typeof mutateSubagentRunForKill>[0],
@@ -654,7 +654,14 @@ export async function killSubagentRunAdmin(
       ownsRoot:
         params.expectedGeneration === undefined
           ? undefined
-          : (candidate) => isCurrentSubagentRun(candidate, params.cfg),
+          : (candidate) => {
+              const current = getLatestOwnedSubagentRun(
+                candidate.childSessionKey,
+                authority.childAgentId,
+                params.cfg,
+              );
+              return !current || isSameSubagentRunOwner(current, candidate);
+            },
     },
     async (scope, [tree]) => {
       if (!tree) {
