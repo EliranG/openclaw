@@ -199,10 +199,7 @@ export async function prepareSubagentRunReadSnapshot<S extends SubagentRunReadSe
   };
 }
 
-export type PreparedSubagentSessionsRead = PreparedSubagentRunsRead & {
-  // The protected cron deletion adapter still calls this resource-shaped API.
-  dispose(): void;
-};
+export type PreparedSubagentSessionsRead = PreparedSubagentRunsRead;
 
 /** The worker selects durable descendants; current liveness remains parent-owned. */
 export async function prepareSubagentSessionRunReadSnapshot(params: {
@@ -237,7 +234,6 @@ export async function prepareSubagentSessionRunReadSnapshot(params: {
   const persisted = reply?.runs ?? new Map<string, SubagentRunRecord>();
   const selected = reply?.descendants?.sessionKeys ?? collectSubagentSessionReadKeys(roots, links);
   return {
-    dispose() {},
     consume(consume) {
       signal?.throwIfAborted();
       assertSubagentReadContext(context);
