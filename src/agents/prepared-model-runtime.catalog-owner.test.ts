@@ -17,6 +17,7 @@ import {
 } from "./prepared-model-catalog-owner.js";
 import { setPreparedModelFullCatalogAuth } from "./prepared-model-runtime-auth.js";
 import * as runtimeBuild from "./prepared-model-runtime.build.js";
+import { preparedModelInventoryKey } from "./prepared-model-runtime.facts.js";
 import {
   acquireAgentRunPreparedModelRuntime,
   activateStandalonePreparedModelRuntime,
@@ -39,6 +40,25 @@ const fixture = usePreparedModelRuntimeHarness();
 const { mocks } = fixture;
 
 describe("prepared catalog owner lifecycle", () => {
+  it("invalidates catalog diagnostics when a configured selection is corrected", () => {
+    const input = fixture.agentInput("pro", {
+      agents: { defaults: { model: "ollama/qwen3:8bb" } },
+    });
+    const before = preparedModelInventoryKey(input);
+    expect(
+      preparedModelInventoryKey({
+        ...input,
+        config: { agents: { defaults: { model: "ollama/qwen3:8b" } } },
+      }),
+    ).not.toBe(before);
+    expect(
+      preparedModelInventoryKey({
+        ...input,
+        config: { agents: { defaults: { model: "ollama/qwen3:8bb", thinkingDefault: "high" } } },
+      }),
+    ).toBe(before);
+  });
+
   it("retains the current preparation across adopted auth", async () => {
     mocks.configuredAgentIds = ["alpha"];
     const agentDir = fixture.state.agentDir("alpha");

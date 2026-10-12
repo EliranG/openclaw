@@ -2,7 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { setImmediate as nextTurn } from "node:timers/promises";
-import type { ConfiguredModelRef } from "@openclaw/model-catalog-core/configured-model-refs";
+import {
+  collectConfiguredModelRefs,
+  type ConfiguredModelRef,
+} from "@openclaw/model-catalog-core/configured-model-refs";
 import { normalizeProviderId } from "@openclaw/model-catalog-core/provider-id";
 import { stableStringify } from "@openclaw/normalization-core";
 import { hashRuntimeConfigValue } from "../config/runtime-snapshot.js";
@@ -572,6 +575,7 @@ export function preparedModelInventoryKey(input: PreparedModelRuntimeInput): str
   return fingerprintPreparedRuntimeFacts({
     ...input,
     config: { models, auth, env, plugins },
+    configuredModelRefs: collectConfiguredModelRefs(input.config),
     env: input.env ?? process.env,
     runtimePluginSelections: undefined,
     order:

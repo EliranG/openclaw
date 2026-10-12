@@ -144,8 +144,10 @@ export async function runProviderCatalog(params: {
   if (!hook) {
     return undefined;
   }
+  const { collectConfiguredCatalogModels } = await import("../agents/configured-model-entries.js");
   const result = await hook.run({
     config: params.config,
+    configuredModels: collectConfiguredCatalogModels(params.config),
     agentDir: params.agentDir,
     workspaceDir: params.workspaceDir,
     env: params.env,

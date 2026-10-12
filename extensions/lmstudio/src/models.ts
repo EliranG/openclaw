@@ -521,3 +521,11 @@ export function mapLmstudioWireModels(
     })
     .filter((entry): entry is ModelDefinitionConfig => entry !== null);
 }
+
+export function normalizeLmstudioModelKey(modelId: string): string {
+  const trimmed = modelId.trim();
+  if (trimmed.toLowerCase().startsWith("lmstudio/")) {
+    return trimmed.slice("lmstudio/".length).trim();
+  }
+  return trimmed;
+}

@@ -1,3 +1,5 @@
+import { getOllamaLatestDedupeKey } from "./model-id.js";
+export { findAvailableOllamaModelName } from "./model-id.js";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { selectPreferredLocalModelId } from "openclaw/plugin-sdk/provider-model-shared";
 import {
@@ -27,11 +29,6 @@ export function normalizeOllamaModelName(value: string | undefined): string | un
     : trimmed;
 }
 
-function getOllamaLatestDedupeKey(name: string): string {
-  const normalized = name.trim().toLowerCase();
-  return normalized.endsWith(":latest") ? normalized.slice(0, -":latest".length) : normalized;
-}
-
 export function mergeUniqueModelNames(...groups: string[][]): string[] {
   const mergedByKey = new Map<string, string>();
   for (const group of groups) {
@@ -48,19 +45,6 @@ export function mergeUniqueModelNames(...groups: string[][]): string[] {
     }
   }
   return [...mergedByKey.values()];
-}
-
-export function findAvailableOllamaModelName(
-  modelName: string,
-  availableModelNames: Iterable<string>,
-): string | undefined {
-  const wantedKey = getOllamaLatestDedupeKey(modelName);
-  for (const available of availableModelNames) {
-    if (getOllamaLatestDedupeKey(available) === wantedKey) {
-      return available;
-    }
-  }
-  return undefined;
 }
 
 export function orderPreferredOllamaModelIds(modelIds: Iterable<string>): string[] {

@@ -20,6 +20,17 @@ rules without loading provider replay or transport helpers.
 Use `splitTrailingAuthProfile` to separate a trailing auth profile while preserving
 model-version and local quantization suffixes.
 
+Catalog hooks receive optional `ctx.configuredModels`: resolved authored model
+references and declarations for the current configuration generation, including
+model-level endpoint overrides. A provider may return
+`unlistedConfiguredModelIds` on a `ready` catalog outcome after comparing these
+references against its existing successful server listing. Apply provider ID
+aliases before comparing, use the raw listing before filtering model kinds, and
+skip references routed to another endpoint. This metadata is advisory only; it
+must never alter entitlement or model availability. Failed or skipped discovery
+must not publish missing-ID diagnostics. Core consumes the recorded facts without
+new provider requests. The existing `listedModelIds` entitlement contract is unchanged.
+
 ## Live model discovery
 
 If your provider exposes an OpenAI-compatible `/models` API, opt the

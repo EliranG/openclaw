@@ -15,7 +15,7 @@ export default {
   catalog: {
     order: "late",
     run: async (ctx) => {
-      const { discoverLmstudioProvider } = await import("./src/setup.js");
+      const { discoverLmstudioProvider } = await import("./src/catalog.js");
       return await discoverLmstudioProvider(ctx, { discoveryMode: "strict" });
     },
   },

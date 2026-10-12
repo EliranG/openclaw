@@ -128,6 +128,7 @@ export function copyProviderCatalogOutcomes(
     const status = readRecordValue(entry, "status");
     const rawModelOrder = readRecordValue(entry, "modelOrder");
     const rawListedModelIds = readRecordValue(entry, "listedModelIds");
+    const unlistedConfiguredModelIds = readRecordValue(entry, "unlistedConfiguredModelIds");
     if (
       typeof provider !== "string" ||
       provider.trim().length === 0 ||
@@ -156,6 +157,9 @@ export function copyProviderCatalogOutcomes(
         // An empty successful listing remains authoritative.
         ...(ready && Array.isArray(rawListedModelIds)
           ? { listedModelIds: copyModelIds(rawListedModelIds) }
+          : {}),
+        ...(ready && Array.isArray(unlistedConfiguredModelIds)
+          ? { unlistedConfiguredModelIds: copyModelIds(unlistedConfiguredModelIds) }
           : {}),
       },
     ];

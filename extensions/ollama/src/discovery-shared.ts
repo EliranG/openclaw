@@ -1,5 +1,8 @@
 import { isIPv4 } from "node:net";
-import type { ProviderCatalogResult } from "openclaw/plugin-sdk/plugin-entry";
+import type {
+  ProviderCatalogContext,
+  ProviderCatalogResult,
+} from "openclaw/plugin-sdk/plugin-entry";
 import { runLiveProviderCatalog } from "openclaw/plugin-sdk/provider-catalog-live-runtime";
 import type { ModelProviderConfig } from "openclaw/plugin-sdk/provider-model-shared";
 import { coerceSecretRef } from "openclaw/plugin-sdk/secret-input-runtime";
@@ -10,6 +13,7 @@ import {
   OLLAMA_DEFAULT_API_KEY,
   OLLAMA_DEFAULT_BASE_URL,
 } from "./defaults.js";
+import { findAvailableOllamaModelName, normalizeOllamaWireModelId } from "./model-id.js";
 import { readProviderBaseUrl } from "./provider-base-url.js";
 import { resolveOllamaApiBase } from "./provider-models.js";
 
@@ -26,6 +30,7 @@ export type OllamaPluginConfig = {
 };
 
 type OllamaDiscoveryContext = {
+  configuredModels?: ProviderCatalogContext["configuredModels"];
   providerIds?: readonly string[];
   config: {
     models?: {
@@ -229,7 +234,11 @@ export async function resolveOllamaDiscoveryResult(params: {
   pluginConfig: OllamaPluginConfig;
   buildProvider: (
     configuredBaseUrl?: string,
-    opts?: { apiKey?: string; discoveryMode?: "strict" },
+    opts?: {
+      apiKey?: string;
+      discoveryMode?: "strict";
+      onListedModels?: (names: string[]) => void;
+    },
   ) => Promise<ModelProviderConfig>;
 }): Promise<ProviderCatalogResult> {
   if (params.ctx.providerIds && !params.ctx.providerIds.includes(OLLAMA_PROVIDER_ID)) {
@@ -287,7 +296,20 @@ export async function resolveOllamaDiscoveryResult(params: {
     providerId: OLLAMA_PROVIDER_ID,
     profileId: resolvedOllamaAuth.profileId,
     run: async () => {
+      let unlistedConfiguredModelIds: string[] = [];
       const provider = await params.buildProvider(configuredBaseUrl, {
+        onListedModels: (names) => {
+          unlistedConfiguredModelIds = (params.ctx.configuredModels ?? [])
+            .filter(
+              (model) =>
+                model.provider === OLLAMA_PROVIDER_ID &&
+                (!model.baseUrl ||
+                  resolveOllamaApiBase(model.baseUrl) ===
+                    resolveOllamaApiBase(configuredBaseUrl)) &&
+                !findAvailableOllamaModelName(normalizeOllamaWireModelId(model.modelId), names),
+            )
+            .map((model) => model.modelId);
+        },
         discoveryMode: "strict",
         ...(discoveryApiKey ? { apiKey: discoveryApiKey } : {}),
       });
@@ -296,6 +318,18 @@ export async function resolveOllamaDiscoveryResult(params: {
       // that fail on tool schemas), so discovery only adds models the config does not list.
       const configuredIds = new Set(explicit?.models?.map((model) => model.id));
       return {
+        ...(unlistedConfiguredModelIds.length
+          ? {
+              outcomes: [
+                {
+                  provider: OLLAMA_PROVIDER_ID,
+                  profileId: resolvedOllamaAuth.profileId,
+                  status: "ready" as const,
+                  unlistedConfiguredModelIds,
+                },
+              ],
+            }
+          : {}),
         provider: {
           ...provider,
           models: provider.models

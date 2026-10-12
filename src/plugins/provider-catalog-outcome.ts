@@ -20,4 +20,6 @@ export type ProviderCatalogOutcome = {
    * rows; never projected publicly. Subscription routes for other ids are not entitled.
    */
   listedModelIds?: readonly string[];
+  /** Advisory only: configured ids absent from this successful server listing; never eligibility. */
+  unlistedConfiguredModelIds?: readonly string[];
 };

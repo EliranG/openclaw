@@ -1,5 +1,6 @@
-/** Doctor check for configured model references that have no installed provider owner. */
 import { resolveKnownModelRefMigrationTarget } from "../commands/doctor/shared/codex-route-warnings.js";
+/** Doctor check for configured model references that have no installed provider owner. */
+import { readModelCatalogWarnings } from "../commands/models/catalog-warnings.js";
 import type { HealthCheck, HealthFinding } from "./health-checks.js";
 
 export function createModelReferenceCheck(): HealthCheck {
@@ -11,7 +12,7 @@ export function createModelReferenceCheck(): HealthCheck {
     async detect(ctx) {
       const { inspectConfiguredModelReferences } =
         await import("../commands/models/model-reference-validation.js");
-      return inspectConfiguredModelReferences({
+      const findings = inspectConfiguredModelReferences({
         cfg: ctx.cfg,
         env: ctx.env,
         workspaceDir: ctx.cwd,
@@ -61,6 +62,17 @@ export function createModelReferenceCheck(): HealthCheck {
           },
         ];
       });
+      for (const warning of await readModelCatalogWarnings(ctx.cfg)) {
+        findings.push({
+          checkId: "core/doctor/model-references",
+          severity: "warning",
+          source: "doctor",
+          target: warning.ref,
+          message: warning.message,
+          fixHint: warning.fixHint,
+        });
+      }
+      return findings;
     },
   };
 }

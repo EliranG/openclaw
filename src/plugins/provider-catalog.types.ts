@@ -20,6 +20,8 @@ export type ProviderCatalogContext = {
   env: NodeJS.ProcessEnv;
   /** Normalized provider identities selected for this catalog owner; absent means the full catalog. */
   providerIds?: readonly string[];
+  /** Resolved authored selections/declarations for this config generation, not static catalog ids. */
+  configuredModels?: readonly { provider: string; modelId: string; baseUrl?: string }[];
   resolveProviderApiKey: (providerId?: string) => {
     apiKey: string | undefined;
     discoveryApiKey?: string;

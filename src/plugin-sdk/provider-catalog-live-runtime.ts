@@ -1,3 +1,4 @@
+import { stripSelfProviderModelPrefix } from "@openclaw/model-catalog-core/provider-model-id-normalization";
 import { asOptionalRecord } from "@openclaw/normalization-core/record-coerce";
 import { resolveProviderRequestHeaders } from "../agents/provider-request-config.js";
 import type {
@@ -378,6 +379,7 @@ function resolveFixedLiveModelDiscoveryEndpoint(
 }
 
 type OpenAICompatibleLiveModelProviderParams = {
+  configuredModels?: ProviderCatalogContext["configuredModels"];
   providerId: string;
   providerConfig: ModelProviderConfig;
   apiKey?: string;
@@ -415,7 +417,7 @@ function prepareOpenAICompatibleLiveModelDiscovery(
           discoveryApiKey: params.discoveryApiKey,
           profileId: params.profileId,
         };
-  const request: BuildLiveModelProviderConfigParams<ModelDefinitionConfig> = {
+  const request = {
     discoveryMode: params.discoveryMode,
     providerId: params.providerId,
     endpoint,
@@ -434,7 +436,7 @@ function prepareOpenAICompatibleLiveModelDiscovery(
       params.modelDiscovery?.projectRows ??
       ((rows, fallbackProvider) =>
         buildOpenAICompatibleLiveModels(rows, fallbackProvider, acceptUnknownModel)),
-  };
+  } satisfies BuildLiveModelProviderConfigParams<ModelDefinitionConfig>;
   return { kind: "live" as const, request, profileId: auth.profileId };
 }
 
@@ -454,9 +456,41 @@ export async function buildOpenAICompatibleLiveProviderCatalog(
   if (discovery.kind === "static") {
     return { provider: discovery.provider };
   }
-  const run = async () => ({
-    provider: await buildLiveModelProviderConfig(discovery.request),
-  });
+  const run = async () => {
+    let unlistedConfiguredModelIds: string[] = [];
+    const projectRows = discovery.request.projectRows;
+    const provider = await buildLiveModelProviderConfig({
+      ...discovery.request,
+      projectRows: (rows, fallback) => {
+        const listed = new Set(rows.map(readLiveModelCatalogId).filter(Boolean));
+        unlistedConfiguredModelIds = (params.configuredModels ?? [])
+          .filter(
+            (model) =>
+              normalizeProviderId(model.provider) === normalizeProviderId(params.providerId) &&
+              (!model.baseUrl ||
+                model.baseUrl.replace(/\/+$/, "") === fallback.baseUrl.replace(/\/+$/, "")) &&
+              !listed.has(stripSelfProviderModelPrefix(params.providerId, model.modelId)),
+          )
+          .map((model) => model.modelId);
+        return projectRows(rows, fallback);
+      },
+    });
+    return {
+      provider,
+      ...(unlistedConfiguredModelIds.length
+        ? {
+            outcomes: [
+              {
+                provider: params.providerId,
+                profileId: discovery.profileId,
+                status: "ready" as const,
+                unlistedConfiguredModelIds,
+              },
+            ],
+          }
+        : {}),
+    };
+  };
   return params.discoveryMode === "strict"
     ? await runLiveProviderCatalog({
         providerId: params.providerId,
@@ -491,6 +525,7 @@ export function buildOpenAICompatibleProviderFamilyCatalog(params: {
             id,
             result: await buildOpenAICompatibleLiveProviderCatalog({
               providerId: id,
+              configuredModels: ctx.configuredModels,
               providerConfig: buildProvider(),
               apiKey: auth.apiKey,
               discoveryApiKey: auth.discoveryApiKey,
@@ -536,6 +571,7 @@ export async function buildOpenAICompatibleProviderCatalog(
     return result;
   }
   return await buildOpenAICompatibleLiveProviderCatalog({
+    configuredModels: params.ctx.configuredModels,
     providerId: params.providerId,
     providerConfig: result.provider,
     apiKey: auth.apiKey,
