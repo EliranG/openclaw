@@ -27,8 +27,9 @@ describe("main-thread stall attribution", () => {
     expect(monitor.drain()).toEqual({
       stalls: [{ elapsedMs: 1_220, task: "transcript-index", taskMs: 1_200 }],
       dropped: 0,
+      delayMaxMs: 1_220,
     });
-    expect(monitor.drain()).toEqual({ stalls: [], dropped: 0 });
+    expect(monitor.drain()).toEqual({ stalls: [], dropped: 0, delayMaxMs: 0 });
   });
 
   it("ignores time awaiting I/O and attributes a blocking continuation to its named owner", async () => {
@@ -39,12 +40,13 @@ describe("main-thread stall attribution", () => {
       elapse(1_200);
     });
     elapse(5_000);
-    expect(monitor.drain()).toEqual({ stalls: [], dropped: 0 });
+    expect(monitor.drain()).toEqual({ stalls: [], dropped: 0, delayMaxMs: 0 });
     ready.resolve();
     await operation;
     expect(monitor.drain()).toEqual({
       stalls: [{ elapsedMs: 1_200, task: "maintenance:resume", taskMs: 1_200 }],
       dropped: 0,
+      delayMaxMs: 1_200,
     });
   });
 
@@ -58,7 +60,7 @@ describe("main-thread stall attribution", () => {
     expect(report.dropped).toBe(4);
     monitor.stop();
     runWithMainThreadTask("maintenance", () => elapse(1_001));
-    expect(monitor.drain()).toEqual({ stalls: [], dropped: 0 });
+    expect(monitor.drain()).toEqual({ stalls: [], dropped: 0, delayMaxMs: 0 });
   });
 
   it.each(["sync", "resolved", "rejected"] as const)(
@@ -86,6 +88,7 @@ describe("main-thread stall attribution", () => {
       expect(monitor.drain()).toEqual({
         stalls: [{ elapsedMs: 1_700, task: "unattributed", taskMs: 1_700 }],
         dropped: 0,
+        delayMaxMs: 1_700,
       });
     },
   );

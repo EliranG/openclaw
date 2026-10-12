@@ -1,5 +1,5 @@
 import { cpus, type CpuInfo } from "node:os";
-import { createHistogram, performance, type RecordableHistogram } from "node:perf_hooks";
+import { monitorEventLoopDelay, performance, type ELDHistogram } from "node:perf_hooks";
 import { isMainThread, Worker } from "node:worker_threads";
 import type { Static } from "typebox";
 import type { SchemaContract } from "../../../packages/gateway-protocol/src/schema-contract.js";
@@ -178,9 +178,8 @@ export function createGatewayEventLoopHealthMonitor(
   const flightRecorder = createStallFlightRecorder((message) => log.warn(message), nowMs);
   const stalls = createMainThreadStallMonitor(nowMs);
   let unattributedDelayMs = 0;
-  let histogram: RecordableHistogram | null = null;
-  let lastSampleAt = nowMs();
-  let lastWallAt = lastSampleAt;
+  let histogram: ELDHistogram | null = null;
+  let lastWallAt = nowMs();
   let lastCpuUsage = readCpuUsage();
   let lastMainThreadCpuUsage = readMainThreadCpuUsage();
   let lastHostCpuTimes = readHostCpuTimes();
@@ -275,8 +274,8 @@ export function createGatewayEventLoopHealthMonitor(
   };
 
   try {
-    // The default range covers 104 days; the int64 maximum fails on Linux Bun.
-    histogram = createHistogram({ lowest: 1_000, figures: 3 });
+    histogram = monitorEventLoopDelay({ resolution: EVENT_LOOP_MONITOR_RESOLUTION_MS });
+    histogram.enable();
   } catch {
     histogram = null;
   }
@@ -288,6 +287,7 @@ export function createGatewayEventLoopHealthMonitor(
 
     const now = nowMs();
     const attributed = stalls.drain();
+    const delayMaxMs = Math.max(nanosecondsToMilliseconds(histogram.max), attributed.delayMaxMs);
     let longestStallMs = attributed.stalls.length === 0 ? unattributedDelayMs : 0;
     for (const stall of attributed.stalls) {
       longestStallMs = Math.max(longestStallMs, stall.elapsedMs);
@@ -296,12 +296,8 @@ export function createGatewayEventLoopHealthMonitor(
     if (unattributedDelayMs > 0 && attributed.stalls.length === 0) {
       log.warn(`main-thread stall: elapsedMs=${Math.round(unattributedDelayMs)} task=unattributed`);
     }
-    // The sampler can run inside the same scheduler callback as the blocking job.
-    // Give its after hook one turn to publish before declaring the delay unattributed.
     unattributedDelayMs =
-      now - lastSampleAt > EVENT_LOOP_DELAY_WARN_MS && attributed.stalls.length === 0
-        ? now - lastSampleAt
-        : 0;
+      delayMaxMs > EVENT_LOOP_DELAY_WARN_MS && attributed.stalls.length === 0 ? delayMaxMs : 0;
     for (const stall of attributed.stalls) {
       log.warn(
         `main-thread stall: elapsedMs=${Math.round(stall.elapsedMs)} task=${JSON.stringify(stall.task.slice(0, 160))} taskMs=${Math.round(stall.taskMs)}`,
@@ -311,12 +307,7 @@ export function createGatewayEventLoopHealthMonitor(
     if (profile) {
       log.warn(`main-thread stall profile: ${profile}`);
     }
-    // A window reset must not erase the pending sample's monotonic anchor.
-    // Native interval histograms reset that anchor before an overdue callback runs.
-    histogram.record(BigInt(Math.max(1, Math.round((now - lastSampleAt) * 1_000_000))));
-    lastSampleAt = now;
     const intervalMs = Math.max(1, now - lastWallAt);
-    const delayMaxMs = nanosecondsToMilliseconds(histogram.max);
     if (attributed.dropped > 0) {
       log.warn(`main-thread stall: omitted=${attributed.dropped} pendingLimit=8`);
     }
@@ -395,9 +386,10 @@ export function createGatewayEventLoopHealthMonitor(
   const samplingJob = histogram
     ? scheduler.schedule({
         id: "event-loop-health",
-        atMs: scheduler.now() + EVENT_LOOP_MONITOR_RESOLUTION_MS,
-        everyMs: EVENT_LOOP_MONITOR_RESOLUTION_MS,
-        run: sample,
+        atMs: scheduler.now() + SUSTAINED_LOAD_SAMPLE_MIN_INTERVAL_MS,
+        everyMs: SUSTAINED_LOAD_SAMPLE_MIN_INTERVAL_MS,
+        // Let the blocking callback's after hook publish its stall before resetting the window.
+        run: () => queueMicrotask(sample),
       })
     : undefined;
   if (histogram) {
@@ -408,8 +400,7 @@ export function createGatewayEventLoopHealthMonitor(
     stalls.drain();
     unattributedDelayMs = 0;
     histogram?.reset();
-    lastSampleAt = nowMs();
-    lastWallAt = lastSampleAt;
+    lastWallAt = nowMs();
     lastCpuUsage = readCpuUsage();
     lastMainThreadCpuUsage = readMainThreadCpuUsage();
     lastHostCpuTimes = readHostCpuTimes();
@@ -438,6 +429,7 @@ export function createGatewayEventLoopHealthMonitor(
       flightRecorder.stop();
       stalls.stop();
       samplingJob?.cancel();
+      histogram?.disable();
       histogram = null;
       cancelWorkerCpuSample?.();
       lastWorkerCpuWindow = undefined;
