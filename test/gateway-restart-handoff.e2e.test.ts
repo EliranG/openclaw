@@ -13,7 +13,7 @@ import { loadOrCreateDeviceIdentity } from "../src/infra/device-identity.js";
 import { openNodeSqliteDatabase } from "../src/infra/node-sqlite.js";
 import { writeGatewayRestartIntentSync } from "../src/infra/restart-intent.js";
 import { readSqliteCleanCloseSeal } from "../src/infra/sqlite-clean-close-seal.js";
-import { OPENCLAW_DATABASE_SEAL_SCHEMA } from "../src/state/openclaw-database-seal-schema.js";
+import { SQLITE_DATABASE_SEAL_SCHEMA } from "../src/state/openclaw-database-seal-schema.js";
 import { acquireGatewayTestClient } from "./helpers/gateway-client.js";
 import { startGatewayRestartProvider } from "./helpers/gateway-restart-provider.js";
 import {
@@ -307,7 +307,7 @@ it.skipIf(process.platform !== "linux")(
         expect(serviceStop!.at).toBeLessThanOrEqual(exitedAt);
         const seal = readSqliteCleanCloseSeal(
           agentPath,
-          OPENCLAW_DATABASE_SEAL_SCHEMA,
+          SQLITE_DATABASE_SEAL_SCHEMA,
           statSync(agentPath, { bigint: true }),
         );
         expect(seal).toBeDefined();
