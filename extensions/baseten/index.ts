@@ -39,6 +39,7 @@ export default defineSingleProviderPluginEntry({
           return { provider: { ...buildStaticBasetenProvider(), apiKey } };
         }
         return await buildOpenAICompatibleLiveProviderCatalog({
+          configuredModels: ctx.configuredModels,
           discoveryMode: "strict",
           providerId: PROVIDER_ID,
           providerConfig: buildStaticBasetenProvider(),

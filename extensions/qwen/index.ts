@@ -77,6 +77,7 @@ async function resolveQwenCatalog(
   );
   const buildProvider = providerId === PROVIDER_ID ? buildQwenProvider : buildQwenTokenPlanProvider;
   return await buildOpenAICompatibleLiveProviderCatalog({
+    configuredModels: ctx.configuredModels,
     discoveryMode: "strict",
     providerId,
     providerConfig: buildProvider({ baseUrl }),

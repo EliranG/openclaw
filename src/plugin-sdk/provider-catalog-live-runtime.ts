@@ -20,7 +20,7 @@ import {
 import {
   buildOpenAICompatibleLiveModels,
   readLiveModelCatalogId,
-  readLiveModelCatalogStringField,
+  readOpenAICompatibleLiveModelId,
   type ProjectedUpstreamProviderCatalogModel,
 } from "./provider-catalog-live-normalize.internal.js";
 import {
@@ -462,9 +462,7 @@ export async function buildOpenAICompatibleLiveProviderCatalog(
     const provider = await buildLiveModelProviderConfig({
       ...discovery.request,
       projectRows: (rows, fallback) => {
-        const listed = new Set(
-          rows.map((row) => readLiveModelCatalogStringField(row, "id")).filter(Boolean),
-        );
+        const listed = new Set(rows.map(readOpenAICompatibleLiveModelId).filter(Boolean));
         unlistedConfiguredModelIds = (params.configuredModels ?? [])
           .filter(
             (model) =>

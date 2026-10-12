@@ -43,36 +43,44 @@ function buildFetchGuard(body: unknown): {
 }
 
 describe("provider-catalog-live-runtime", () => {
-  it("diagnoses configured ids against raw OpenAI-compatible rows before chat filtering", async () => {
-    const { fetchGuard, fetchGuardMock } = buildFetchGuard({
-      data: [
-        { id: "chat-local", object: "model" },
-        { id: "local/chat-local", object: "model" },
-        { id: "embed-local", object: "embedding" },
-      ],
-    });
-    const result = await buildOpenAICompatibleLiveProviderCatalog({
-      providerId: "local",
-      discoveryMode: "strict",
-      fetchGuard,
-      providerConfig: {
-        api: "openai-completions",
-        baseUrl: "http://127.0.0.1:1234/v1",
-        models: [],
-      },
-      configuredModels: [
-        ...["chat-local", "local/chat-local", "embed-local", "chat-typo"].map((modelId) => ({
-          provider: "local",
-          modelId,
-        })),
-        { provider: "local", modelId: "other-server", baseUrl: "http://other.test/v1" },
-      ],
-    });
-    expect(result?.outcomes).toEqual([
-      { provider: "local", status: "ready", unlistedConfiguredModelIds: ["chat-typo"] },
-    ]);
-    expect(fetchGuardMock).toHaveBeenCalledOnce();
-  });
+  it.each(["id", "model", "model_name", "modelName"])(
+    "diagnoses configured ids using raw %s identities before chat filtering",
+    async (idField) => {
+      const { fetchGuard, fetchGuardMock } = buildFetchGuard({
+        data: [
+          { [idField]: "chat-local", object: "model" },
+          { id: "local/chat-local", object: "model" },
+          { id: "embed-local", object: "embedding" },
+        ],
+      });
+      const result = await buildOpenAICompatibleLiveProviderCatalog({
+        providerId: "local",
+        discoveryMode: "strict",
+        fetchGuard,
+        providerConfig: {
+          api: "openai-completions",
+          baseUrl: "http://127.0.0.1:1234/v1",
+          models: [],
+        },
+        configuredModels: [
+          ...["chat-local", "local/chat-local", "embed-local", "chat-typo"].map((modelId) => ({
+            provider: "local",
+            modelId,
+          })),
+          { provider: "local", modelId: "other-server", baseUrl: "http://other.test/v1" },
+        ],
+      });
+      expect(result?.outcomes).toEqual([
+        { provider: "local", status: "ready", unlistedConfiguredModelIds: ["chat-typo"] },
+      ]);
+      expect(result).toMatchObject({
+        provider: {
+          models: expect.arrayContaining([expect.objectContaining({ id: "chat-local" })]),
+        },
+      });
+      expect(fetchGuardMock).toHaveBeenCalledOnce();
+    },
+  );
 
   beforeEach(() => {
     clearLiveCatalogCacheForTests();

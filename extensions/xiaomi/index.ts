@@ -86,6 +86,7 @@ async function resolveXiaomiCatalog(params: {
     return null;
   }
   return await buildOpenAICompatibleLiveProviderCatalog({
+    configuredModels: params.ctx.configuredModels,
     discoveryMode: "strict",
     providerId: params.providerId,
     providerConfig: {

@@ -107,6 +107,7 @@ async function resolveApiCatalog(ctx: ProviderCatalogContext) {
     api: ctx.config.models?.providers?.[API_PROVIDER_ID]?.api ?? defaults.api,
   };
   return await buildOpenAICompatibleLiveProviderCatalog({
+    configuredModels: ctx.configuredModels,
     discoveryMode: "strict",
     providerId: API_PROVIDER_ID,
     providerConfig,
@@ -169,6 +170,7 @@ async function resolvePortalCatalog(ctx: ProviderCatalogContext): Promise<Provid
     apiKey,
   };
   return await buildOpenAICompatibleLiveProviderCatalog({
+    configuredModels: ctx.configuredModels,
     discoveryMode: "strict",
     providerId: PORTAL_PROVIDER_ID,
     providerConfig,

@@ -32,6 +32,7 @@ async function resolveArceeCatalog(ctx: ProviderCatalogContext) {
     const directAuth = ctx.resolveProviderApiKey(PROVIDER_ID);
     if (directAuth.apiKey) {
       return await buildOpenAICompatibleLiveProviderCatalog({
+        configuredModels: ctx.configuredModels,
         discoveryMode: "strict",
         providerId: PROVIDER_ID,
         providerConfig: buildArceeProvider(),
