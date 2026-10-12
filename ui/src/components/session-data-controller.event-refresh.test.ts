@@ -286,12 +286,15 @@ describe("filtered sidebar session event refresh", () => {
         expect(host.requestUpdate).toHaveBeenCalledOnce();
 
         host.requestUpdate.mockClear();
-        vi.stubGlobal("document", { ...document, visibilityState: "hidden" });
+        Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
         publishPresence("hidden-profile");
         expect(controller.presencePayload?.presence?.[0]?.instanceId).toBe("hidden-profile");
         expect(host.requestUpdate).toHaveBeenCalledOnce();
 
-        vi.stubGlobal("document", { ...document, visibilityState: "visible" });
+        Object.defineProperty(document, "visibilityState", {
+          configurable: true,
+          value: "visible",
+        });
         host.requestUpdate.mockClear();
         publishPresence("retired-profile");
         disconnectHost();

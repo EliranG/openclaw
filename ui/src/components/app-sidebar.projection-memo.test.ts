@@ -86,7 +86,7 @@ async function mount(rows: GatewaySessionRow[]) {
         ...sessions.sessions.state.result!,
         sessions: next,
         count: next.length,
-        owners: sessions.sessions.state.result!.owners?.map((owner) => ({ ...owner })),
+        owners: structuredClone(sessions.sessions.state.result!.owners),
       },
     });
   return {

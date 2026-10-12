@@ -213,7 +213,7 @@ describe("AppSidebar catalog session rows", () => {
     sidebar.connected = true;
     await sidebar.updateComplete;
     await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersToNextFrame();
+    vi.advanceTimersToNextFrame();
     await settleLitElement(sidebar);
     return { sidebar, request };
   }
