@@ -344,12 +344,39 @@ describe("Gateway automatic Workshop learning", () => {
             expect(laterTranscript).toContain(laterReply);
             // The review announces its change in the originating conversation, where the
             // foreground agent sees it next turn and can undo it.
-            await expect
-              .poll(() => JSON.stringify(loadTranscriptEventsSync(source)), {
-                timeout: 80_000,
-                interval: 100,
-              })
-              .toContain("💾 Learned:");
+            try {
+              await expect
+                .poll(() => JSON.stringify(loadTranscriptEventsSync(source)), {
+                  timeout: 80_000,
+                  interval: 100,
+                })
+                .toContain("💾 Learned:");
+            } catch (pollError) {
+              try {
+                const [changes, skill, support] = await Promise.all([
+                  listWorkshopChanges("main"),
+                  fs.readFile(skillFile, "utf8"),
+                  fs.readFile(supportFile, "utf8"),
+                ]);
+                console.error(
+                  "WORKSHOP_REVIEW_FAILURE",
+                  JSON.stringify({
+                    reviewRequests,
+                    reviewActions,
+                    providerErrors: providerErrors.map(String),
+                    sourceEntry: loadSessionEntry(scope),
+                    changes,
+                    skillOriginal: skill === originalSkill,
+                    skillPatched: skill === originalSkill.replace(oldRule, newRule),
+                    supportOriginal: support === originalSupport,
+                    supportPatched: support === originalSupport.replace(oldRule, newRule),
+                  }),
+                );
+              } catch (diagnosticError) {
+                console.error("WORKSHOP_DIAGNOSTIC_FAILURE", String(diagnosticError));
+              }
+              throw pollError;
+            }
             const skill = await fs.readFile(skillFile, "utf8");
             const support = await fs.readFile(supportFile, "utf8");
             const outside = await fs.readFile(outsideFile, "utf8");
