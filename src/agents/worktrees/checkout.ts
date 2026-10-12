@@ -8,6 +8,7 @@ import { OpenClawStateLeaseError } from "../../state/openclaw-state-lease-error.
 import type { WorktreeWaitBudget } from "./allocation.js";
 import { withWorktreeGitConfig } from "./checkout-git-config.js";
 import { prepareWorktreePromptFiles } from "./checkout-inputs.js";
+import { materializeManagedWorktree } from "./checkout-materialize.js";
 import { resolveWorktreeCheckoutKey } from "./checkout-policy-key.js";
 import type { WorktreeSourceProfile } from "./checkout-profiles.js";
 import { hasWorktreeUnknownOutcome } from "./errors.js";
@@ -725,47 +726,6 @@ export async function addManagedWorktree(input: CheckoutOptions): Promise<Checko
     throw failures[0];
   }
   return outcome.result;
-}
-
-/** Materialization and restore share one filter-safe operation boundary. */
-export async function materializeManagedWorktree(
-  params: {
-    destination: string;
-    commit: string;
-    sourceOnly?: boolean;
-    resetIndexTo?: string;
-    removeExisting?: boolean;
-  },
-  options: GitCommandOptions,
-  indexOptions: GitCommandOptions = options,
-): Promise<GitResult> {
-  return await withWorktreeGitConfig(
-    params.destination,
-    params.sourceOnly === true,
-    indexOptions,
-    async (git) => {
-      if (params.removeExisting) {
-        await git.require(
-          params.destination,
-          ["rm", "-r", "--force", "--ignore-unmatch", "--", "."],
-          options,
-        );
-      }
-      const result = await git.run(
-        params.destination,
-        ["read-tree", "--reset", "--no-recurse-submodules", "-u", params.commit],
-        { ...options, env: { ...options.env, GIT_NO_LAZY_FETCH: "1" } },
-      );
-      if (result.code === 0 && params.resetIndexTo) {
-        await git.require(
-          params.destination,
-          params.sourceOnly ? ["read-tree", "--reset", params.resetIndexTo] : ["reset"],
-          indexOptions,
-        );
-      }
-      return result;
-    },
-  );
 }
 
 async function removeFailedCheckout(options: CheckoutOptions): Promise<void> {

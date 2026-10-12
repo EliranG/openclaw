@@ -6946,7 +6946,6 @@
 ["src/gateway/http-utils.model-override.test.ts","../config/io.js","4e97196551777ed1734fa725dd67e43065981a03edb69aa6b93d21f6372d8517",1]
 ["src/gateway/http-utils.model-override.test.ts","./server-model-catalog.js","75d55b028c2018ab5d0f58f61f85c74aa2c87921b16939ee4f66ef88b9096dba",1]
 ["src/gateway/local-request-context.session-archive.test.ts","../browser-lifecycle-cleanup.js","932978110f5fb27f9735a219708e6b01d58d1d4296e97f78171c9eff879c4ce9",1]
-["src/gateway/local-request-context.session-rename.test.ts","../agents/openclaw-plugin-tools.js","5f4cec3553f307631c831e2fb9157c52af96afde0a174251d4e53d04a9ac3697",1]
 ["src/gateway/local-request-context.session-tools-steering.test.ts","../browser-lifecycle-cleanup.js","932978110f5fb27f9735a219708e6b01d58d1d4296e97f78171c9eff879c4ce9",1]
 ["src/gateway/local-request-context.session-tools.test.ts","../browser-lifecycle-cleanup.js","932978110f5fb27f9735a219708e6b01d58d1d4296e97f78171c9eff879c4ce9",1]
 ["src/gateway/local-request-context.test.ts","./agent-turn/agent-turn-service.js","e80bd09125a48c6482e4c98f4215ac6b25cabc36d06fb6f7964fa352504ee06f",1]
