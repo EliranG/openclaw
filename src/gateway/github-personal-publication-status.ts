@@ -1,18 +1,12 @@
 import type { SessionGitHubStatusResult } from "../../packages/gateway-protocol/src/schema/session-github-publication.js";
-import {
-  readGitHubPublicationSessionLifecycle,
-  readGitHubPublicationSessionLifecycleInWorker,
-} from "../state/github-publication-session-lifecycles.js";
+import type { GitHubPublicationSessionLifecycle } from "../state/github-publication-read.types.js";
+import { readGitHubPublicationSessionLifecycleInWorker } from "../state/github-publication-session-lifecycles.js";
 import {
   getSessionRepositoryWorkspaceStore,
   type PreparedRepositoryWorkspace,
 } from "../state/session-repository-workspaces.js";
 import type { PersonalGitHubPublicationRow } from "./github-personal-publication-store.js";
-import {
-  personalGitHubStatus,
-  personalGitHubStatusAsync,
-  type PersonalGitHubAction,
-} from "./github-personal-status.js";
+import { personalGitHubStatusAsync, type PersonalGitHubAction } from "./github-personal-status.js";
 import type { PublicationSessionIdentity as SessionIdentity } from "./github-publication-availability.js";
 import { projectGitHubPublicationResult } from "./github-publication-receipt.js";
 import { readRepositoryGitHubPublicationAsync } from "./github-publication-store-async.js";
@@ -54,13 +48,13 @@ export async function preparePersonalRepositoryPublicationStatus(requestId: stri
 }
 
 /** Source owners supply liveness; personal status never grants execution authority. */
-export function presentPersonalGitHubPublicationStatus(
+function presentPersonalGitHubPublicationStatus(
   receipt: PersonalPublicationReceipt,
   action: PersonalGitHubAction,
   session: SessionIdentity & { archivedAt?: number | null },
   executing: boolean,
-  preparedConnection?: ReturnType<typeof personalGitHubStatus> | null,
-  preparedLifecycle?: ReturnType<typeof readGitHubPublicationSessionLifecycle> | null,
+  connection: Awaited<ReturnType<typeof personalGitHubStatusAsync>> | null,
+  lifecycle: GitHubPublicationSessionLifecycle | null,
 ): SessionGitHubStatusResult {
   const { row } = receipt;
   const pending = isPendingPersonalPublication(receipt, executing);
@@ -86,21 +80,6 @@ export function presentPersonalGitHubPublicationStatus(
       repositoryOwner = resolveReceiptOwner(receipt.row, prepared.repository);
     }
   }
-  const connection =
-    preparedConnection === undefined
-      ? pending
-        ? personalGitHubStatus(action)
-        : null
-      : preparedConnection;
-  const lifecycle =
-    pending && receipt.kind === "worktree"
-      ? preparedLifecycle === undefined
-        ? readGitHubPublicationSessionLifecycle({
-            publicationKind: "personal",
-            requestId: row.request_id,
-          })
-        : preparedLifecycle
-      : undefined;
   const sessionChanged =
     row.session_id !== session.sessionId ||
     (receipt.kind === "repository"
@@ -199,21 +178,7 @@ export function createRepositoryPersonalPublicationStatus(
   instanceId: string,
   active: ReadonlyMap<string, string>,
 ) {
-  const personalStatus = (
-    row: RepositoryGitHubPublicationStatusRow,
-    action: PersonalGitHubAction,
-    session: SessionIdentity,
-    prepared: PreparedRepositoryPublicationStatus | undefined,
-  ) =>
-    presentPersonalGitHubPublicationStatus(
-      { kind: "repository", row, prepared },
-      action,
-      session,
-      row.execution_id !== null &&
-        row.gateway_instance_id === instanceId &&
-        active.get(row.request_id) === row.execution_id,
-    );
-  const personalStatusAsync = async (
+  return (
     row: RepositoryGitHubPublicationStatusRow,
     action: PersonalGitHubAction,
     session: SessionIdentity,
@@ -227,5 +192,4 @@ export function createRepositoryPersonalPublicationStatus(
         row.gateway_instance_id === instanceId &&
         active.get(row.request_id) === row.execution_id,
     );
-  return { personalStatus, personalStatusAsync };
 }
