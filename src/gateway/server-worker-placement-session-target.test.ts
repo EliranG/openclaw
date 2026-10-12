@@ -493,3 +493,54 @@ test("resolves consecutive placement workspaces without decoding unrelated sessi
     }
   });
 });
+
+test("resolves a device folder without consulting Git or the managed-worktree registry", async () => {
+  await withStateDirEnv("device-folder-target-", async () => {
+    const identity = {
+      agentId: "main",
+      sessionKey: "agent:main:dashboard:incognito-device-folder",
+      sessionId: "device-folder-session",
+    };
+    const actor = await openIncognitoTestActor(process.env, { assertCurrent() {} });
+    await actor.sessions.create(
+      { assertCurrent() {} },
+      {
+        sessionKey: identity.sessionKey,
+        entry: {
+          sessionId: identity.sessionId,
+          updatedAt: 1,
+          lifecycleRevision: "folder-generation",
+          incognito: true,
+          deviceFolder: { deviceId: "paired-device", path: "/existing/non-git" },
+        },
+      },
+    );
+    const findLiveByOwner = vi.fn(async () => undefined);
+    try {
+      await withIncognitoSessionActor(actor, async () => {
+        const resolved = await resolveWorkerPlacementSessionTarget({
+          ...identity,
+          config: {},
+          errorMessage: "folder binding changed",
+          sessionRuntime: {
+            managedWorktrees: { findLiveByOwner },
+            resolveGatewaySessionStoreTargetWithStore,
+            resolveCanonicalSessionEntryFromStoreKeys,
+          },
+        });
+        expect(resolved.workspace).toEqual({
+          kind: "device-folder",
+          deviceId: "paired-device",
+          path: "/existing/non-git",
+        });
+        expect(findLiveByOwner).not.toHaveBeenCalled();
+        await patchSessionEntryCore({ ...identity, storePath: actor.path }, () => ({
+          deviceFolder: { deviceId: "another-device", path: "/existing/non-git" },
+        }));
+        expect(() => resolved.assertCurrent()).toThrow("folder binding changed");
+      });
+    } finally {
+      await actor.close();
+    }
+  });
+});

@@ -347,6 +347,7 @@ describe("SQLite session entry cache", () => {
     const prompt = "large skill prompt".repeat(8192);
     const scope = await seed("lazy-list-projection", {
       label: "projected",
+      deviceFolder: { deviceId: "device-one", path: "/home/example/project" },
       worktree: { id: "worktree-1", branch: "main", repoRoot: "/repo" },
       ...savedPrompts(prompt),
     });
@@ -361,6 +362,7 @@ describe("SQLite session entry cache", () => {
 
       expect(first).not.toBe(fullEntry);
       expect(first?.worktree).toEqual(fullEntry.worktree);
+      expect(first?.deviceFolder).toEqual(fullEntry.deviceFolder);
       expect(first?.skillsSnapshot).toBeUndefined();
       expect(first?.systemPromptReport).toBeUndefined();
       expect(second).toBe(first);
@@ -385,6 +387,8 @@ describe("SQLite session entry cache", () => {
       expect(view.get(scope.sessionKey)).toStrictEqual(copiedListEntry);
       expect(view.entries()[0]?.entry).toStrictEqual(copiedListEntry);
       copiedListEntry!.worktree!.branch = "mutated list copy";
+      copiedListEntry!.deviceFolder!.path = "/mutated-copy";
+      expect(first?.deviceFolder?.path).toBe("/home/example/project");
       expect(first?.worktree?.branch).toBe("main");
       expect(listingEntries(scope).get(scope.sessionKey)).toBe(first);
     } finally {

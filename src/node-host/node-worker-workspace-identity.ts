@@ -341,3 +341,10 @@ export function buildNodeWorkerWorkspaceRetainSnapshot(input: NodeWorkerWorkspac
     manifestsBySession,
   };
 }
+
+export type NodeWorkerWorkspaceAcquisition = {
+  workspaceDir: string;
+  homeDir?: string;
+  assertCurrent?: () => void;
+  release: () => void;
+};

@@ -24,6 +24,8 @@ const ARGV_MAX_ITEMS = 128;
 // REQUEST_MAX_BYTES; the canonical manifest script is larger than an ordinary argv item.
 const ARG_MAX_BYTES = 128 * 1024;
 const TIMEOUT_MAX_MS = 10 * 60 * 1000;
+export const NODE_WORKSPACE_VALIDATE_DEVICE_FOLDER_COMMAND =
+  "openclaw-internal-workspace-validate-device-folder";
 export const NODE_WORKSPACE_DRAIN_COMMAND = "openclaw-internal-workspace-drain";
 export const NODE_WORKSPACE_QUIESCENCE_COMMAND = "openclaw-internal-workspace-quiescence";
 
@@ -72,6 +74,7 @@ const WorkspaceInput = workerProtocolObject({
   gatewayNamespace: WorkerGatewayNamespace,
   environmentId: identifier("environmentId"),
   sessionId: identifier("sessionId"),
+  deviceFolder: identifier("deviceFolder", 4_096).optional(),
   sessionKey: identifier("sessionKey", 1_024).optional(),
   preparationKey: z
     .custom<string>((value) => typeof value === "string" && /^[a-f0-9]{64}$/u.test(value), {
@@ -159,6 +162,28 @@ export function parseNodeWorkerWorkspaceExecInput(
     );
   }
   const input = parsed.data;
+  if (
+    input.deviceFolder !== undefined &&
+    (input.preparationKey !== undefined ||
+      input.resetWorkspace !== undefined ||
+      input.transfer ||
+      input.seed ||
+      input.quiescence)
+  ) {
+    throw new Error(
+      "INVALID_REQUEST: device folders cannot be prepared, reset, transferred, seeded, or quiesced",
+    );
+  }
+  if (
+    input.argv[0] === NODE_WORKSPACE_VALIDATE_DEVICE_FOLDER_COMMAND &&
+    (input.deviceFolder === undefined ||
+      input.argv.length !== 1 ||
+      input.input !== undefined ||
+      input.process ||
+      input.nativeProcessOwner)
+  ) {
+    throw new Error("INVALID_REQUEST: device folder validation owns its operation");
+  }
   if (input.quiescence || input.argv[0] === NODE_WORKSPACE_QUIESCENCE_COMMAND) {
     if (
       !input.quiescence ||

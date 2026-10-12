@@ -66,6 +66,7 @@ const metadataFields: ReadonlySet<string> = new Set([
   "spawnedCwd",
   "spawnedWorkspaceDir",
   "worktree",
+  "deviceFolder",
   "worktreeId",
   "projectId",
   "pluginOwnerId",

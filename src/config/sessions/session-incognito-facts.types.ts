@@ -31,6 +31,7 @@ export type IncognitoSessionFacts = {
     | "pendingProjectGitUrl"
     | "projectId"
     | "worktree"
+    | "deviceFolder"
     | "pluginOwnerId"
   > & { worktreeId?: string };
   modelSelection?: Pick<
@@ -61,6 +62,7 @@ export type IncognitoSessionFacts = {
     | "execHost"
     | "execNode"
     | "execCwd"
+    | "deviceFolder"
     | "pluginOwnerId"
     | "agentHarnessId"
   >;

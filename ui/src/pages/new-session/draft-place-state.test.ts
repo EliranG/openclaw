@@ -879,3 +879,49 @@ describe("DraftPlaceState cloud machine selection", () => {
     expect(persistPreference).not.toHaveBeenCalled();
   });
 });
+
+describe("device folder selection", () => {
+  it("requires an explicit capable device and keeps its path out of Gateway discovery", () => {
+    const f = createRepositoryFixture();
+    f.state.adoptAgentDefaults();
+    f.state.selectDevice("desktop");
+    expect(f.state.deviceFolderAvailable).toBe(false);
+    f.state.selectDeviceFolder();
+    expect(f.state.deviceFolder).toBeUndefined();
+    f.gateway.environments![0]!.workerHost = { deviceFolders: true };
+    expect(f.state.deviceFolderAvailable).toBe(true);
+    f.state.selectDeviceFolder();
+    expect(f.state.folderSubmissionBlocked()).toBe(true);
+    f.request.mockClear();
+    f.persistPreference.mockClear();
+    f.state.setDeviceFolderPath("relative");
+    expect(f.state.folderSubmissionBlocked()).toBe(true);
+    f.state.setDeviceFolderPath("/srv/existing project");
+    expect(f.state.folderSubmissionBlocked()).toBe(false);
+    expect(f.state.worktree).toBe(false);
+    expect(f.state.checkoutVisible).toBe(false);
+    expect(f.request).not.toHaveBeenCalled();
+    expect(f.persistPreference).not.toHaveBeenCalled();
+    expect(
+      buildSelectedSessionCreateParams(f.state, { message: "hello", visibility: "normal" }),
+    ).toMatchObject({ deviceFolder: { deviceId: "desktop", path: "/srv/existing project" } });
+    f.state.selectDevice("", true);
+    expect(f.state.deviceFolderAvailable).toBe(false);
+    expect(f.state.deviceFolder).toBeUndefined();
+  });
+
+  it("blocks a selected device folder when current capability is withdrawn", () => {
+    const f = createRepositoryFixture();
+    f.gateway.environments![0]!.workerHost = { deviceFolders: true };
+    f.state.adoptAgentDefaults();
+    f.state.selectDevice("desktop");
+    f.state.selectDeviceFolder();
+    f.state.setDeviceFolderPath("/srv/project");
+    f.gateway.environments![0]!.workerHost = { deviceFolders: false };
+    expect(f.state.folderSubmissionBlocked()).toBe(true);
+    expect(f.state.deviceFolder).toEqual({ deviceId: "desktop", path: "/srv/project" });
+    f.state.selectNewWorkspace();
+    expect(f.state.deviceFolder).toBeUndefined();
+    expect(f.state.freshWorkspace).toBe(true);
+  });
+});

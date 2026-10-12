@@ -410,6 +410,46 @@ describe("session placement recovery", () => {
     expect(writeSessionPlacementRecovery(recovery)).toBe(false);
   });
 
+  it("round-trips a device folder only with its exact dispatch target", () => {
+    const creating = {
+      ...recovery,
+      phase: "creating" as const,
+      target: { kind: "device" as const, deviceId: "runner" },
+      createParams: {
+        key: recovery.sessionKey,
+        agentId: "cloud",
+        message: "" as const,
+        deviceFolder: { deviceId: "runner", path: "/srv/project" },
+      },
+    };
+    expect(writeSessionPlacementRecovery(creating)).toBe(true);
+    expect(readRecovery()).toEqual(creating);
+    expect(writeSessionPlacementRecovery({ ...creating, target: { kind: "auto-device" } })).toBe(
+      false,
+    );
+    expect(
+      writeSessionPlacementRecovery({ ...creating, target: { kind: "device", deviceId: "other" } }),
+    ).toBe(false);
+  });
+
+  it("rejects a malformed persisted device-folder binding", () => {
+    sessionStorage.setItem(
+      exactKey(recovery.sessionKey),
+      JSON.stringify({
+        ...recovery,
+        phase: "creating",
+        target: { kind: "device", deviceId: "runner" },
+        createParams: {
+          key: recovery.sessionKey,
+          agentId: "cloud",
+          message: "",
+          deviceFolder: null,
+        },
+      }),
+    );
+    expect(readRecovery()).toBeNull();
+  });
+
   it("round-trips an attachment-only first turn", () => {
     const attachmentRecovery = {
       ...recovery,
@@ -456,6 +496,10 @@ describe("session placement recovery", () => {
   });
 
   it.each([
+    {
+      name: "a device folder with a worktree",
+      value: { deviceFolder: { deviceId: "runner", path: "/srv/project" } },
+    },
     { name: "an unsupported workspace source", value: { worktreeSource: "folder" } },
     {
       name: "an empty workspace with a previous checkout",

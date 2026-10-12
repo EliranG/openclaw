@@ -259,7 +259,16 @@ export function resolveNewSessionSubmitBlock(
     }
   }
   if (place.folderSubmissionBlocked()) {
-    return { gate: "folder", reason: t("newSession.checkingPlace") };
+    return {
+      gate: "folder",
+      reason: t(
+        place.deviceFolder
+          ? place.deviceFolderAvailable
+            ? "newSession.deviceFolderPathRequired"
+            : "newSession.deviceFolderUnavailable"
+          : "newSession.checkingPlace",
+      ),
+    };
   }
   if (pendingPlacementActive) {
     const retryReady = Boolean(

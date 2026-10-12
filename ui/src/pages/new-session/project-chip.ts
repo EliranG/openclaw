@@ -103,6 +103,8 @@ export function renderProjectChip(params: {
   projectId: string;
   freshWorkspace?: boolean;
   onNewWorkspace?: () => void;
+  deviceFolder?: boolean;
+  onDeviceFolder?: () => void;
   gatewayLabel: string;
   submitting: boolean;
   pendingPlacement: boolean;
@@ -215,6 +217,21 @@ export function renderProjectChip(params: {
                           sub: t("newSession.newWorkspaceDescription"),
                           checked: params.freshWorkspace === true,
                           onSelect: params.onNewWorkspace,
+                        },
+                        params.submitting || params.pendingPlacement,
+                      )
+                    : nothing
+                }
+                ${
+                  params.onDeviceFolder && !query
+                    ? renderSessionMenuItem(
+                        {
+                          value: "device-folder",
+                          label: t("newSession.deviceFolder"),
+                          icon: icons.folder,
+                          sub: t("newSession.deviceFolderDescription"),
+                          checked: params.deviceFolder === true,
+                          onSelect: params.onDeviceFolder,
                         },
                         params.submitting || params.pendingPlacement,
                       )

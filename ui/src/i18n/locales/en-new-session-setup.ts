@@ -5,6 +5,15 @@ import { en } from "./en.ts";
 const enNewSessionSetup = {
   newSession: {
     openClawWorker: "OpenClaw worker",
+    deviceFolder: "Existing folder on device",
+    deviceFolderDescription:
+      "Work in place on the selected device. Files are not copied to the Gateway.",
+    deviceFolderPath: "Absolute path on device",
+    deviceFolderPathPlaceholder: "/path/to/existing/folder",
+    deviceFolderUnavailable:
+      "This device cannot use an existing folder right now. Check its connection and session-hosting support, or choose another workspace.",
+    deviceFolderPathRequired:
+      "Enter an absolute path to an existing folder on the selected device.",
     requiredWorkerHint: "Say what you’d like to work on.",
     requiredWorker: "Worker",
     requiredWorkerUnavailable:

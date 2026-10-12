@@ -147,7 +147,7 @@ export function renderNewSessionPlaceControls({
       environmentDeviceDisabledReason(place.modelControl) ?? gateway.deviceCatalogDisabledReason,
   });
   const projectState = resolveProjectChip({
-    folder: place.folder,
+    folder: place.deviceFolder?.path ?? place.folder,
     workspace: place.workspacePath(),
     projectId: browser.projectId,
     selectedRemoteProject: browser.remoteProject,
@@ -245,7 +245,9 @@ export function renderNewSessionPlaceControls({
               }}
           /></label>`
         : renderProjectChip({
-            state: projectState,
+            state: place.deviceFolder
+              ? { ...projectState, label: t("newSession.deviceFolder") }
+              : projectState,
             browseAvailable: place.browseAvailable(),
             isAdmin: place.isAdmin(),
             canWrite: place.canWrite(),
@@ -275,6 +277,10 @@ export function renderNewSessionPlaceControls({
             projectId: browser.projectId,
             freshWorkspace: place.freshWorkspace,
             onNewWorkspace: place.remotePlacement ? () => place.selectNewWorkspace() : undefined,
+            deviceFolder: Boolean(place.deviceFolder),
+            onDeviceFolder: place.deviceFolderAvailable
+              ? () => place.selectDeviceFolder()
+              : undefined,
             gatewayLabel,
             submitting,
             pendingPlacement,
@@ -293,6 +299,26 @@ export function renderNewSessionPlaceControls({
             onRegisterProject: (path) => void browser.registerBrowserProject(path),
             onClose: () => browser.close(),
           })
+  }${
+    place.deviceFolder
+      ? html`<label
+          class="new-session-page__select new-session-page__menu-field new-session-page__device-folder"
+        >
+          <span>${t("newSession.deviceFolderPath")}</span>
+          <input
+            aria-label=${t("newSession.deviceFolderPath")}
+            placeholder=${t("newSession.deviceFolderPathPlaceholder")}
+            .value=${place.deviceFolder.path}
+            ?disabled=${submitting || pendingPlacement}
+            @input=${(event: Event) => {
+              if (event.currentTarget instanceof HTMLInputElement) {
+                place.setDeviceFolderPath(event.currentTarget.value);
+              }
+            }}
+          />
+          <span class="muted">${t("newSession.deviceFolderDescription")}</span>
+        </label>`
+      : nothing
   }${
     place.checkoutVisible && !(nativeTerminal && place.terminalOnNode)
       ? renderCheckoutChip({

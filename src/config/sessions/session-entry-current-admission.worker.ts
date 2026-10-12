@@ -78,6 +78,7 @@ function createCurrentEntryRead(
         ...(current.repositoryWorkspaceId === undefined
           ? {}
           : { repositoryWorkspaceId: current.repositoryWorkspaceId }),
+        ...(current.deviceFolder ? { deviceFolder: { ...current.deviceFolder } } : {}),
         lifecycleRevision: current.lifecycleRevision,
         lifecycleRunId: current.lifecycleRunId,
         activeWriterRunId: current.activeWriterRunId,

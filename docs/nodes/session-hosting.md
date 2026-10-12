@@ -344,6 +344,56 @@ runner reconnects. Disabling hosting does not discard the session's workspace.
 See [Anthropic: Claude sessions across computers](/providers/anthropic#claude-sessions-across-computers)
 for the Control UI behavior and storage sources.
 
+### Work in an existing device folder
+
+Session hosting allows existing folders by default. To restrict sessions to specific
+directory roots, configure the paired device:
+
+```json5
+{
+  nodeHost: {
+    workerRuns: {
+      enabled: true,
+      folders: ["~/Projects"],
+    },
+  },
+}
+```
+
+`nodeHost.workerRuns.folders` has three modes:
+
+- Unset: any existing directory is allowed, except filesystem roots and directories
+  overlapping private worker storage. The node advertises existing-folder support.
+- A non-empty list: only those roots and their subdirectories are allowed.
+- `[]`: existing-folder sessions are disabled and the node does not advertise support.
+
+Paths must be absolute or home-relative (`~/`). The node resolves symlinks and
+checks the directory on every use; symlinks cannot escape configured roots.
+Restart the node host after changing the setting.
+
+This default uses the existing session-host trust boundary: operators can already
+run agents with exec on the node. Folder restrictions are an optional guardrail,
+not an exec sandbox. Only enable session hosting on a trusted device; use a narrow
+root list or `[]` if you do not want unrestricted in-place folder selection.
+
+For a specific paired device that advertises `workerHost.deviceFolders: true`,
+choose **Existing folder on device** in the workspace picker and enter an
+absolute path on that device. This option is not available for **Auto**, cloud
+workers, or devices that do not advertise the capability. The device validates
+the folder; the Gateway does not browse or resolve this path locally.
+
+The session records `deviceFolder: { deviceId, path }` and dispatches to that
+exact device. Do not combine `deviceFolder` with a project, repository,
+managed worktree, or Gateway `cwd`. The worker uses the existing folder in place:
+OpenClaw does not create a worktree, transfer a workspace, or reconcile its files
+back to the Gateway. Back up important files before giving an agent write access.
+The session display retains the device and folder path. Deleting the session
+does not remove the existing folder.
+
+Device-folder sessions cannot move to another device or continue on the Gateway.
+Attachment staging is not supported for these sessions; use a managed workspace
+when you need to upload attachments.
+
 ### Isolate hosted worker sessions in containers
 
 By default, hosted OpenClaw worker sessions run directly on the paired node.

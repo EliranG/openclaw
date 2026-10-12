@@ -20,6 +20,7 @@ export function projectIncognitoSessionRuntimeFacts(
           repositoryWorkspaceId: entry.repositoryWorkspaceId,
           worktreeId: entry.worktree?.id,
           worktree: entry.worktree,
+          deviceFolder: entry.deviceFolder,
           projectId: entry.projectId,
           pluginOwnerId: entry.pluginOwnerId,
           sessionRoot: entry.sessionRoot,
@@ -58,6 +59,7 @@ export function projectIncognitoSessionRuntimeFacts(
           execHost: entry.execHost,
           execNode: entry.execNode,
           execCwd: entry.execCwd,
+          deviceFolder: entry.deviceFolder,
           pluginOwnerId: entry.pluginOwnerId,
           agentHarnessId: entry.agentHarnessId,
         }

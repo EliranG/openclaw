@@ -376,6 +376,7 @@ async function createAdmittedGatewaySession(
     params.emitCommandHooks === true &&
     !requestedKey &&
     params.resetMainWhenUnspecified === true &&
+    !params.deviceFolder &&
     !requestedToolOverrides &&
     !parentIncognito &&
     // Catalog targets need a fresh locked row; resetting main would return before
@@ -575,6 +576,7 @@ async function createAdmittedGatewaySession(
       !params.spawnedCwd &&
       !params.sessionRoot &&
       !params.execNode &&
+      !params.deviceFolder &&
       !params.prepareLifecycle &&
       !params.pendingWorktree &&
       !params.pendingProjectGitUrl
@@ -686,6 +688,16 @@ async function createAdmittedGatewaySession(
         }
         if (params.initialEntry && existingEntry !== undefined) {
           return invalidSessionRequest("trusted initial session state requires a new session");
+        }
+        if (
+          params.deviceFolder &&
+          existingEntry !== undefined &&
+          (existingEntry.deviceFolder?.deviceId !== params.deviceFolder.deviceId ||
+            existingEntry.deviceFolder.path !== params.deviceFolder.path)
+        ) {
+          return invalidSessionRequest(
+            "device folder requires a new session or its original folder",
+          );
         }
         if (params.catalogTarget && existingEntry !== undefined) {
           return invalidSessionRequest("catalog session target requires a new session");
@@ -852,8 +864,12 @@ async function createAdmittedGatewaySession(
                 pluginOwnerId: catalogPluginOwnerId,
               }
             : {}),
+          ...(params.deviceFolder ? { deviceFolder: { ...params.deviceFolder } } : {}),
           ...(execNode ? { execHost: "node", execNode, ...(execCwd ? { execCwd } : {}) } : {}),
-          ...(createdNewEntry && params.armSessionDiffBaselineCapture && !execNode
+          ...(createdNewEntry &&
+          params.armSessionDiffBaselineCapture &&
+          !execNode &&
+          !params.deviceFolder
             ? {
                 sessionDiffBaselineCapture: createSessionDiffBaselineCaptureClaim(),
               }

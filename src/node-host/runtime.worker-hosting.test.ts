@@ -8,6 +8,7 @@ import { prepareNodeHostRuntime } from "./runtime.js";
 
 const mocks = vi.hoisted(() => ({
   checkWorkspaceAdmission: vi.fn(async () => undefined),
+  workspaceOptions: vi.fn(),
   closeWorkerSupervisor: vi.fn<() => Promise<void>>(async () => undefined),
   initializeWorkerSupervisor: vi.fn(async () => undefined),
   handleInvoke: vi.fn(async () => undefined),
@@ -38,6 +39,9 @@ vi.mock("./node-worker-supervisor.js", () => ({
 }));
 vi.mock("./node-worker-workspace.js", () => ({
   NodeWorkerWorkspaceRuntime: class {
+    constructor(options: unknown) {
+      mocks.workspaceOptions(options);
+    }
     readonly exec = vi.fn();
     readonly checkAdmission = mocks.checkWorkspaceAdmission;
   },
@@ -357,3 +361,15 @@ describe("node-host worker manifest", () => {
     expect(mocks.closeWorkerSupervisor).toHaveBeenCalledOnce();
   });
 });
+
+it.each([undefined, [], ["~/projects"]])(
+  "passes node-local folder consent into the workspace runtime (%j)",
+  async (folders) => {
+    const prepared = await prepareNodeHostRuntime({
+      config: { nodeHost: { skills: { enabled: false }, workerRuns: { enabled: true, folders } } },
+      env: { PATH: "/usr/bin" },
+    });
+    expect(mocks.workspaceOptions).toHaveBeenCalledWith(expect.objectContaining({ folders }));
+    expect(prepared.deviceFoldersEnabled).toBe(folders?.length !== 0 ? true : undefined);
+  },
+);
