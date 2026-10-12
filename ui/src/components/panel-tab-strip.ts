@@ -7,7 +7,7 @@ import type {
 } from "./panel-tab-strip-types.ts";
 import "./panel-tab-strip-lit.tsx";
 
-export type PanelTabStripTab = BasePanelTabStripTab<TemplateResult | typeof nothing>;
+export type PanelTabStripTab = BasePanelTabStripTab<TemplateResult | Node | typeof nothing>;
 export type PanelTabStripParams<T extends PanelTabStripTab = PanelTabStripTab> =
   BasePanelTabStripParams<T, TemplateResult | Node | typeof nothing>;
 

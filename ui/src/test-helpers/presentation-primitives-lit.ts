@@ -1,4 +1,5 @@
 import { html, render } from "lit";
+import { createComponent } from "solid-js";
 import { brandIcons } from "../components/brand-icons.ts";
 import { renderCopyButton } from "../components/copy-button.ts";
 import { icons } from "../components/icons.ts";
@@ -8,7 +9,6 @@ import { renderAgentStartupState, renderLazyViewError } from "../components/lazy
 import { renderConnectingSplash } from "../components/loading-skeleton.ts";
 import { renderLoadingState } from "../components/loading-state.ts";
 import { renderPanelEmptyState } from "../components/panel-empty-state.ts";
-import { renderPanelIconButton } from "../components/panel-icon-button.ts";
 import {
   renderPanelLoadingSkeleton,
   type PanelLoadingSkeletonVariant,
@@ -21,6 +21,9 @@ import {
 } from "../components/provider-icon.ts";
 import * as settings from "../components/settings-ui.ts";
 import { renderSettingsWorkspace } from "../components/settings-workspace.ts";
+import { Icon } from "../components/solid/icon.tsx";
+import { PanelIconButton } from "../components/solid/panel-icon-button.tsx";
+import { solidContent } from "../lit/solid-content.tsx";
 import { finishFixture, group, recordAction, root } from "./presentation-primitives-fixture.ts";
 
 const keyboardStyles = document.createElement("style");
@@ -260,7 +263,7 @@ function feedback() {
     card(
       "Actions and shortcuts",
       html`<div class="presentation-fixture__inline">
-        ${renderCopyButton("synthetic clipboard text", "Copy text")}${renderCopyButton("", "Copy unavailable text")}${renderPanelIconButton({ label: "Refresh panel", icon: icons.refresh, className: "btn btn--icon", onClick: () => recordAction("refresh") })}${renderPanelIconButton({ label: "Busy panel", icon: icons.refresh, className: "btn btn--icon", onClick: () => recordAction("unexpected"), disabled: true, busy: true })}${renderKbd(["⌘", "↵"])}${renderKeyboardShortcut({ key: "k", modifiers: ["mod"] }, { applePlatform: false })}
+        ${renderCopyButton("synthetic clipboard text", "Copy text")}${renderCopyButton("", "Copy unavailable text")}${solidContent(PanelIconButton, { label: "Refresh panel", icon: createComponent(Icon, { name: "refresh" }), class: "btn btn--icon", onClick: () => recordAction("refresh") })}${solidContent(PanelIconButton, { label: "Busy panel", icon: createComponent(Icon, { name: "refresh" }), class: "btn btn--icon", onClick: () => recordAction("unexpected"), disabled: true, busy: true })}${renderKbd(["⌘", "↵"])}${renderKeyboardShortcut({ key: "k", modifiers: ["mod"] }, { applePlatform: false })}
       </div>`,
     ),
   ];

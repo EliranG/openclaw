@@ -1,22 +1,16 @@
-import { html, nothing } from "lit";
 import type { ApplicationContext } from "../../app/context.ts";
+import { solidContent } from "../../lit/solid-content.tsx";
 import { SystemsController, type SystemsRouteData } from "./systems-controller.ts";
-import "./systems-page.tsx";
+import { SystemsPage } from "./systems-page.tsx";
+import { SystemsSidebar } from "./systems-sidebar.tsx";
 
 /** Route rendering stays in the lazy page module, not in startup route metadata. */
 export function render(data: SystemsRouteData | undefined, _pending: boolean, presented = true) {
-  return data
-    ? html`<openclaw-systems-page
-        .routeData=${data}
-        .presented=${presented}
-      ></openclaw-systems-page>`
-    : nothing;
+  return data ? solidContent(SystemsPage, { routeData: data, presented }) : undefined;
 }
 
 export function renderSidebar(data: SystemsRouteData | undefined) {
-  return data
-    ? html`<openclaw-systems-sidebar .controller=${data.controller}></openclaw-systems-sidebar>`
-    : nothing;
+  return data ? solidContent(SystemsSidebar, { controller: data.controller }) : undefined;
 }
 
 export function load(context: ApplicationContext): SystemsRouteData {

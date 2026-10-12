@@ -1,10 +1,14 @@
-import { render, type LitElement } from "lit";
+import { createComponent, flush } from "solid-js";
 import { afterEach, describe, expect, it } from "vitest";
-import { renderGatewayCpuVital, type GatewayStatusSnapshot } from "./gateway-vitals.ts";
+import { mountSolid } from "../test-helpers/mount-solid.ts";
+import type { GatewayStatusSnapshot } from "./gateway-vitals.ts";
+import { GatewayCpuVital } from "./solid/gateway-vitals.tsx";
 
 const root = document.createElement("div");
+let mounted: ReturnType<typeof mountSolid> | undefined;
 afterEach(() => {
-  render(null, root);
+  mounted?.unmount();
+  mounted = undefined;
   root.remove();
 });
 
@@ -24,14 +28,17 @@ const measured: GatewayStatusSnapshot = {
 
 async function show(statuses: GatewayStatusSnapshot[]) {
   document.body.append(root);
-  render(
-    renderGatewayCpuVital(
-      statuses.at(-1)!,
-      statuses.map((status, at) => ({ status, at })),
-    ),
-    root,
+  mounted?.unmount();
+  mounted = mountSolid(
+    () =>
+      createComponent(GatewayCpuVital, {
+        status: statuses.at(-1)!,
+        history: statuses.map((status, at) => ({ status, at })),
+      }),
+    { container: root },
   );
-  await root.querySelector<LitElement>("openclaw-sparkline")!.updateComplete;
+  flush();
+  await root.querySelector("openclaw-sparkline")!.updateComplete;
 }
 
 describe("Gateway CPU attribution", () => {
@@ -55,7 +62,7 @@ describe("Gateway CPU attribution", () => {
     ).toEqual(["18%", "220%", "≈20%"]);
     const chart = root.querySelector<HTMLElement>(".sparkline-tile__chart")!;
     chart.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 0 }));
-    await root.querySelector<LitElement>("openclaw-sparkline")!.updateComplete;
+    await root.querySelector("openclaw-sparkline")!.updateComplete;
     expect(root.querySelector(".sparkline-tile__value")?.textContent).toContain("54%");
     expect(root.querySelector(".sparkline-tile__secondary")?.textContent).toBe("Host 23%");
   });

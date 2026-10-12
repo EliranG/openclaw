@@ -1,4 +1,3 @@
-import type { LitElement } from "lit";
 import { describe, expect, it, vi } from "vitest";
 import { createDeferred as deferred } from "../../../../test/helpers/promise.js";
 import type { ApplicationContext, ApplicationGatewaySnapshot } from "../../app/context.ts";
@@ -22,16 +21,14 @@ type TestDebugOverlay = HTMLElement & {
   toggle: () => void;
 };
 
-type TestSparkline = LitElement & { samples: readonly SparklineSample[] };
+type TestSparkline = HTMLElement & { samples: readonly SparklineSample[] };
 
 async function updateOverlayVitals(overlay: TestDebugOverlay): Promise<void> {
   await overlay.updateComplete;
   flush();
   await overlay.querySelector<TestDebugContent>("openclaw-debug-overlay-content")?.updateComplete;
   flush();
-  for (const tile of overlay.querySelectorAll<TestSparkline>("openclaw-sparkline")) {
-    await tile.updateComplete;
-  }
+  flush();
 }
 
 useDebugTestEnvironment();
@@ -246,9 +243,11 @@ describe("DebugOverlay", () => {
       // One sample: tiles show current values, charts wait for a second point.
       expect(overlay.querySelectorAll(".gateway-vital")).toHaveLength(5);
       expect(normalizedText(overlay.querySelector(".gateway-vital--cpu"))).toContain("Host —");
-      expect(normalizedText(overlay.querySelector(".gateway-cpu-detail"))).toContain(
-        "Event loop busy 42%",
+      const loopLabel = [...overlay.querySelectorAll(".gateway-cpu-detail dt")].find(
+        (label) => normalizedText(label) === "Event loop busy",
       );
+      expect(loopLabel).toBeDefined();
+      expect(normalizedText(loopLabel?.nextElementSibling)).toBe("42%");
       expect(overlay.querySelector(".sparkline-tile__chart")).toBeNull();
       expect(normalizedText(overlay.querySelector(".debug-overlay__vitals-footer"))).toBe(
         "Uptime 1m",

@@ -1,5 +1,5 @@
 /* @vitest-environment jsdom */
-import { html, nothing, render } from "lit";
+import { createSignal, flush, For, type Setter } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDeferred } from "../../../test/helpers/promise.js";
 import {
@@ -7,9 +7,10 @@ import {
   type PresentationBinding,
 } from "../lit/presentation-binding.ts";
 import { installTestLinkReader, TEST_LINK_READER } from "../test-helpers/link-reader.ts";
+import { mountSolid } from "../test-helpers/mount-solid.ts";
 import { prefetchLinkReader } from "./link-reader-prefetch-request.ts";
-import { linkReaderPrefetch } from "./link-reader-prefetch.ts";
 import * as linkTargets from "./link-reader-target.ts";
+import { linkReaderPrefetchRef } from "./markdown-element-refs-solid.ts";
 
 vi.mock("./link-reader-prefetch-request.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./link-reader-prefetch-request.ts")>()),
@@ -46,13 +47,44 @@ let idleCallbacks: Map<number, IdleRequestCallback>;
 let nextIdleHandle: number;
 let presentation: PresentationBinding | undefined;
 
+type LinkState = { links: string[]; session: string; active: boolean; connected: boolean };
+let mounted: ReturnType<typeof mountSolid> | undefined;
+let updateLinks: Setter<LinkState>;
 function renderLinks(links = [href(1)], session = "first", active = true, connected = true) {
-  render(
-    html`<div ${linkReaderPrefetch(session, active ? (presentation ?? true) : false, connected)}>
-      ${links.map((url) => html`<a class="markdown-github-link" href=${url}>Item</a>`)}
-    </div>`,
-    container,
-  );
+  const next = { links, session, active, connected };
+  if (mounted) {
+    updateLinks(next);
+  } else {
+    mounted = mountSolid(
+      () => {
+        const [state, setState] = createSignal(next);
+        updateLinks = setState;
+        return (
+          <div
+            ref={linkReaderPrefetchRef(() => [
+              state().session,
+              state().active ? (presentation ?? true) : false,
+              state().connected,
+            ])}
+          >
+            <For each={state().links} keyed={false}>
+              {(url) => (
+                <a class="markdown-github-link" href={url()}>
+                  Item
+                </a>
+              )}
+            </For>
+          </div>
+        );
+      },
+      { container },
+    );
+  }
+  flush();
+}
+function unmountLinks() {
+  mounted?.unmount();
+  mounted = undefined;
 }
 
 function flushIdleScans() {
@@ -111,7 +143,7 @@ describe("GitHub preview warming", () => {
     observer().intersect(links);
     await vi.advanceTimersByTimeAsync(200);
     expect(prefetch).toHaveBeenCalledTimes(1);
-    // Bind the external provider after Lit connects the template's root.
+    // Bind the external provider after Solid connects the template's root.
     await show();
     const scan = vi.spyOn(container.firstElementChild!, "querySelectorAll");
     await show();
@@ -151,7 +183,7 @@ describe("GitHub preview warming", () => {
   });
 
   afterEach(() => {
-    render(nothing, container);
+    unmountLinks();
     provider.remove();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -410,7 +442,7 @@ describe("GitHub preview warming", () => {
         vi.spyOn(document, "hidden", "get").mockReturnValue(true);
         document.dispatchEvent(new Event("visibilitychange"));
       } else {
-        render(nothing, container);
+        unmountLinks();
       }
       if (!started) {
         expect(idleCallbacks.size).toBe(0);

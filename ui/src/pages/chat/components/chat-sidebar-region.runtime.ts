@@ -17,6 +17,7 @@ import {
   PANEL_HOSTED_TABS_CHANGE_EVENT,
   readPanelHostedTabs,
   type PanelHostedTab,
+  type PanelHostedTabsElement,
 } from "../../../components/panel-hosted-tabs.ts";
 import { renderPanelTabStrip, type PanelTabStripTab } from "../../../components/panel-tab-strip.ts";
 import {
@@ -425,7 +426,7 @@ class ChatSidebarRegion extends OpenClawLightDomElement {
 
   private renderHeaderActions(
     panelActions: TemplateResult | typeof nothing | null,
-    hostedActions: TemplateResult | Node | typeof nothing,
+    hostedActions: PanelHostedTabsElement["hostedActions"],
   ) {
     const active = sidebarActivePanel(this.layout);
     const expanded = this.layout.expanded === true && this.layout.expandedSide === true;
