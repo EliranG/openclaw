@@ -543,6 +543,7 @@ function* assembleOpenClawCodingTools(
   const toolsForModelProvider = applyModelProviderToolPolicy(toolsForMessageProvider, {
     ...options,
     agentId,
+    preparedRequesterPolicy: capabilityProfile.policy,
     localModelLeanPreserveToolNames,
   });
   options?.recordToolPrepStage?.("model-provider-policy");

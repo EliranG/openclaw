@@ -37,7 +37,6 @@ export async function abortControlledSubagents(params: {
   );
   using controllerRead = { [Symbol.dispose]: preparedController.release };
   void controllerRead;
-  params.assertCurrent?.();
   const controller = preparedController.read();
   const assertCurrent = () => {
     params.assertCurrent?.();

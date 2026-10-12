@@ -74,6 +74,7 @@ import {
   isSubagentAnnounceCompletionHandoff,
   isTrustedSubagentCompletionHandoffForRun,
 } from "../subagents/announce/subagent-announce-handoff.js";
+import { withPreparedSessionCapabilityRead } from "../subagents/spawn/subagent-session-store.js";
 import { isRuntimeToolAllowed, isToolAllowedByPolicies } from "../tool-policy-match.js";
 import { DEFAULT_MAX_LIVE_TOOL_RESULT_CHARS } from "../tool-result-limits.js";
 import {
@@ -176,15 +177,17 @@ export async function runAgentAttempt(
   });
   const trustedSubagentCompletionHandoff =
     exactSubagentCompletionHandoff &&
-    hasVerifiedRequesterCompletionHandoff({
-      config: params.cfg,
-      sessionKey: params.sessionKey,
-      inputProvenance: params.opts.inputProvenance,
-      trustedInternalHandoff: params.opts.trustedInternalHandoff,
-      sessionId: params.sessionId,
-      modelProvider: params.providerOverride,
-      modelId: params.modelOverride,
-    });
+    (await withPreparedSessionCapabilityRead(() =>
+      hasVerifiedRequesterCompletionHandoff({
+        config: params.cfg,
+        sessionKey: params.sessionKey,
+        inputProvenance: params.opts.inputProvenance,
+        trustedInternalHandoff: params.opts.trustedInternalHandoff,
+        sessionId: params.sessionId,
+        modelProvider: params.providerOverride,
+        modelId: params.modelOverride,
+      }),
+    ));
   const trustedSubagentAnnounceHandoff =
     isSubagentAnnounceHandoff && trustedSubagentCompletionHandoff;
   const completionRequestsMessageDelivery =

@@ -124,13 +124,17 @@ export async function createOpenClawToolsWithPreparation(
   options: OpenClawToolsOptions | undefined,
   shared: PreparedToolConstruction,
 ): Promise<AnyAgentTool[]> {
-  const { captured, delegated, webSearchConfigured, mediaTools } = await prepareOpenClawTools(
-    options,
-    shared,
-  );
+  const { captured, delegated, webSearchConfigured, mediaTools, progressCardAvailable } =
+    await prepareOpenClawTools(options, shared);
   shared.assertCurrent();
   captured.assertInvocationCurrent?.();
-  const steps = createOpenClawToolsSteps(captured, delegated, webSearchConfigured, mediaTools);
+  const steps = createOpenClawToolsSteps(
+    captured,
+    delegated,
+    webSearchConfigured,
+    mediaTools,
+    progressCardAvailable,
+  );
   let next = steps.next();
   while (!next.done) {
     const messageTool = await createMessageToolAsync(next.value);
@@ -174,6 +178,7 @@ function* createOpenClawToolsSteps(
   preparedDelegateTools?: AnyAgentTool[],
   preparedWebSearchConfigured?: boolean,
   preparedMediaTools?: Readonly<ReturnType<typeof resolveOptionalMediaToolFactoryPlan>>,
+  preparedProgressCardAvailable?: boolean,
 ): Generator<Parameters<typeof createMessageTool>[0], AnyAgentTool[], AnyAgentTool> {
   const resolvedConfig = options?.config;
   const sessionConfig = options?.sessionConfigSource === "runtime" ? undefined : resolvedConfig;
@@ -400,10 +405,13 @@ function* createOpenClawToolsSteps(
     callGateway: embedded ? createEmbeddedCallGateway() : callAgentToolGatewayRequest,
     sessionLinkBase: resolveControlUiSessionLinkBase(resolvedConfig),
   };
-  const progressCardTool = shouldIncludeProgressCardToolForOpenClawTools({
-    ...options,
-    agentId: sessionAgentId,
-  })
+  const progressCardAvailable =
+    preparedProgressCardAvailable ??
+    shouldIncludeProgressCardToolForOpenClawTools({
+      ...options,
+      agentId: sessionAgentId,
+    });
+  const progressCardTool = progressCardAvailable
     ? createProgressCardTool({
         agentSessionKey: sessionKey,
         agentId: sessionAgentId,
