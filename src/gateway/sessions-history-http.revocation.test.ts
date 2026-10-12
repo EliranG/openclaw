@@ -115,6 +115,28 @@ vi.mock("./session-sharing.js", () => ({
   }),
 }));
 
+vi.mock("./session-sharing-preparation.js", () => ({
+  prepareSessionMutationFacts: async () => ({
+    storageTarget: { agentId: "main", canonicalKey: "agent:main", storePath: "/tmp" },
+    readCurrent: () => ({
+      target: {
+        agentId: "main",
+        canonicalKey: "agent:main",
+        storeKey: "agent:main",
+        storeKeys: ["agent:main"],
+        storePath: "/tmp",
+        entry: {
+          sessionId: fixture.sessionId,
+          lifecycleRevision: fixture.lifecycleRevision,
+          sessionStartedAt: fixture.sessionStartedAt,
+        },
+      },
+      membership: new Set<string>(),
+    }),
+    release() {},
+  }),
+}));
+
 vi.mock("./session-utils.js", () => ({
   resolveGatewaySessionStoreTargetWithStore: () => ({
     storePath: "/tmp",

@@ -23,13 +23,22 @@ import { applyExecPolicyLayer } from "../infra/exec-policy.js";
 import { resolveAgentConfig, resolveSessionAgentId } from "./agent-scope.js";
 import { resolveExecTarget } from "./bash-tools.exec-runtime.js";
 import { isRequestedExecTargetAllowed } from "./bash-tools.exec-target.js";
-import { resolveSandboxRuntimeStatus } from "./sandbox/runtime-status.js";
+import {
+  resolveSandboxRuntimeStatus,
+  resolveSandboxRuntimeStatusAsync,
+} from "./sandbox/runtime-status.js";
 import { resolveSessionPermissionExecPolicy } from "./session-permission-exec-mode.js";
 
 /** Session-scoped exec fields that may be carried across an isolated runtime boundary. */
 export type ExecSessionDefaults = Pick<
   SessionEntry,
-  "execHost" | "execNode" | "execCwd" | "permissionMode" | "sandbox"
+  | "execHost"
+  | "execNode"
+  | "execCwd"
+  | "permissionMode"
+  | "sandbox"
+  | "sandboxMode"
+  | "createdActor"
 >;
 
 // Resolved exec config layers come from global config, agent config, and per-call overrides.
@@ -98,7 +107,7 @@ export function resolveNodeExecEligibility(
 export type ResolveExecDefaultsParams = {
   cfg?: OpenClawConfig;
   execApprovals?: ExecApprovalsFile;
-  sessionEntry?: ExecSessionDefaults;
+  sessionEntry?: ExecSessionDefaults | null;
   execOverrides?: ExecPolicyOverrides;
   agentId?: string;
   sessionKey?: string;
@@ -144,6 +153,7 @@ export function prepareExecDefaults(
         cfg,
         agentId: resolvedAgentId,
         sessionKey: params.sessionKey,
+        preparedSessionEntry: params.sessionEntry,
       }))
     : undefined;
   const sandboxRequired =
@@ -228,11 +238,36 @@ export function prepareExecDefaults(
 }
 
 /** Resolves effective exec host, mode, approval policy, and node availability. */
-export function resolveExecDefaults(params: ResolveExecDefaultsParams): ResolvedExecDefaults {
-  const preparation = prepareExecDefaults(params);
+export function resolveExecDefaults(
+  params: ResolveExecDefaultsParams,
+  preparedSandbox?: ReturnType<typeof resolveSandboxRuntimeStatus>,
+): ResolvedExecDefaults {
+  const preparation = prepareExecDefaults(params, preparedSandbox);
   return preparation.kind === "resolved"
     ? preparation.defaults
     : preparation.resolve(preparation.suppliedApprovals ?? loadExecApprovals());
+}
+
+/** Resolve missing durable policy through the session worker before applying exec defaults. */
+export async function resolveExecDefaultsAsync(
+  params: ResolveExecDefaultsParams,
+): Promise<ResolvedExecDefaults> {
+  if (!params.sessionKey) {
+    return resolveExecDefaults(params);
+  }
+  const { agentId } = resolveExecConfigState(params);
+  const sandbox = await resolveSandboxRuntimeStatusAsync({
+    cfg: params.cfg,
+    sessionKey: params.sessionKey,
+    agentId,
+  });
+  return resolveExecDefaults(params, sandbox);
+}
+
+export async function resolveNodeExecEligibilityAsync(
+  params: Omit<ResolveExecDefaultsParams, "scope" | "elevatedRequested">,
+): Promise<{ canExec: boolean; node?: string }> {
+  return resolveNodeExecEligibility(params, await resolveExecDefaultsAsync(params));
 }
 
 /** Called inside retained session-reader scopes, before synchronous tool construction. */

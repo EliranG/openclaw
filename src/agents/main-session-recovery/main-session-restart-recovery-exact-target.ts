@@ -4,12 +4,15 @@ import {
   isMainRestartRecoveryCandidate,
 } from "../../config/sessions/restart-recovery-state.js";
 import { loadExactSessionEntry } from "../../config/sessions/session-accessor.js";
+import { retainPreparedSessionEntryPredicate } from "../../config/sessions/session-accessor.sqlite-entry-cache-publication-state.js";
 import {
   readSessionEntriesFromStoreInWorker,
   readSessionEntryReadOnlyInWorker,
+  withSessionEntriesFromStoreInWorker,
 } from "../../config/sessions/session-entry-read-runtime.js";
 import { captureIncognitoSessionSource } from "../../config/sessions/session-incognito-binding.js";
 import type { InternalSessionEntry as SessionEntry } from "../../config/sessions/types.js";
+import { isIncognitoSessionKey } from "../../routing/session-key.js";
 import type { ExpectedRestartRecoveryTarget } from "./main-session-restart-recovery-shared.js";
 
 type ExpectedRecoveryRead = {
@@ -44,8 +47,10 @@ function matchesExpectedRecoveryTarget(
   );
 }
 
-/** Retain only the original actor and finite live recovery predicates across admission waits. */
-export function captureExpectedRestartRecoveryCurrent(params: ExpectedRecoveryRead): () => boolean {
+/** Keep one recovery read current through admission using the owner's write receipts. */
+export async function prepareExpectedRestartRecoveryCurrent(
+  params: ExpectedRecoveryRead,
+): Promise<{ isCurrent: () => boolean; release: () => void }> {
   const expected = {
     ...params.expected,
     claim: params.expected.claim && { ...params.expected.claim },
@@ -53,25 +58,72 @@ export function captureExpectedRestartRecoveryCurrent(params: ExpectedRecoveryRe
   const target = { ...expected, storePath: params.storePath };
   const source = captureIncognitoSessionSource(target);
   if (source && "kind" in source) {
-    return () => {
-      source.assertCurrent();
-      return false;
+    return {
+      isCurrent: () => {
+        source.assertCurrent();
+        return false;
+      },
+      release() {},
     };
   }
   if (source) {
     const claim = source.actor.sessions.captureCurrent(target.sessionKey);
-    return () => {
-      source.admissionSignal?.throwIfAborted();
-      claim.assertCurrent();
-      const current = source.actor.sessions.readSteering(target.sessionKey);
-      return matchesExpectedRecoveryTarget(current, expected, current?.hasRecoveryClaim === true);
+    return {
+      isCurrent: () => {
+        source.admissionSignal?.throwIfAborted();
+        claim.assertCurrent();
+        const current = source.actor.sessions.readSteering(target.sessionKey);
+        return matchesExpectedRecoveryTarget(current, expected, current?.hasRecoveryClaim === true);
+      },
+      release() {},
     };
   }
-  return () => {
-    const exact = loadExactSessionEntry({ ...target, readConsistency: "latest" });
-    const current = exact?.sessionKey === target.sessionKey ? exact.entry : undefined;
-    return matchesExpectedRecoveryTarget(current, expected, hasMainSessionRecoveryClaim(current));
-  };
+  if (isIncognitoSessionKey(target.sessionKey)) {
+    return {
+      isCurrent: () => {
+        const exact = loadExactSessionEntry({ ...target, readConsistency: "latest" });
+        const current = exact?.sessionKey === target.sessionKey ? exact.entry : undefined;
+        return matchesExpectedRecoveryTarget(
+          current,
+          expected,
+          hasMainSessionRecoveryClaim(current),
+        );
+      },
+      release() {},
+    };
+  }
+  let release = () => {};
+  let databaseIdentity: string | undefined;
+  try {
+    return await withSessionEntriesFromStoreInWorker(
+      { ...target, sessionKeys: [target.sessionKey], projection: "list" },
+      async (read) => {
+        const entry = read.result.entries.find(
+          ({ sessionKey }) => sessionKey === target.sessionKey,
+        )?.entry;
+        const matches = (current: SessionEntry | undefined) =>
+          matchesExpectedRecoveryTarget(current, expected, hasMainSessionRecoveryClaim(current));
+        if (!databaseIdentity || !matches(entry)) {
+          return { isCurrent: () => false, release() {} };
+        }
+        const retained = retainPreparedSessionEntryPredicate({
+          databaseIdentity,
+          sessionKey: target.sessionKey,
+          entry,
+          matches: (_before, current) => matches(current),
+        });
+        release = retained.release;
+        return { isCurrent: retained.isCurrent, release };
+      },
+      false,
+      (_database, identity) => {
+        databaseIdentity = identity.key;
+      },
+    );
+  } catch (error) {
+    release();
+    throw error;
+  }
 }
 
 export async function loadExpectedRestartRecoveryTarget(

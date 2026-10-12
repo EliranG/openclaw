@@ -218,6 +218,7 @@ export type CreateGatewaySessionParams = {
   /** Non-throwing notification of the exact newly committed row, before initial-turn work. */
   onCreatedSessionCommitted?: (created: CreatedGatewaySession) => void;
   afterSessionCommitted?: SessionEntryCreateWithTranscriptOptions["afterCommitted"];
+  bindSharingCreation?: SessionEntryCreateWithTranscriptOptions["bindCreation"];
   /** Synchronous caller-authority guard checked by each durable owner boundary. */
   commitGuard?: SessionSourceAssertion;
 };

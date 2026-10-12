@@ -4,6 +4,10 @@ import {
   appendTranscriptMessage,
   replaceSessionEntry,
 } from "../config/sessions/session-accessor.js";
+import {
+  bindPreparedSessionSourceAssertion,
+  prepareSessionSourceAuthority,
+} from "../config/sessions/session-source-authority.js";
 import type { SessionEntry } from "../config/sessions/types.js";
 import { createUserTurnTranscriptRecorder } from "../sessions/user-turn-transcript.js";
 import {
@@ -14,6 +18,7 @@ import {
   createOperationalRunInstanceRef,
   prepareAgentRunAdmission,
   resolveAdmittedRunActiveAssertion,
+  runWithPreparedRunSourceScope,
 } from "./admitted-run-context.js";
 import { buildCurrentRunRestartRecoveryClaim } from "./agent-command-restart-recovery.js";
 import {
@@ -222,6 +227,11 @@ describe("pre-mirror recovery input custody", () => {
           claim,
           storePath: target.storePath,
         });
+        const boundSource = bindPreparedSessionSourceAssertion(
+          guard,
+          await prepareSessionSourceAuthority(guard),
+        );
+        await using _ = { [Symbol.asyncDispose]: () => boundSource.release() };
         const admission = prepareAgentRunAdmission({
           cfg: {},
           facts: {
@@ -230,15 +240,19 @@ describe("pre-mirror recovery input custody", () => {
             ingress: { kind: "system", boundary: "test-recorder-recovery", state: "present" },
           },
           operationalRunInstance: createOperationalRunInstanceRef(recoveryRunId),
-          assertSourceCurrent: guard,
+          assertSourceCurrent: boundSource,
         });
         try {
           const context = await admission.admit("embedded");
-          const effect = resolveAdmittedRunActiveAssertion(context);
-          if (!effect) {
+          const assertEffect = resolveAdmittedRunActiveAssertion(context);
+          if (!assertEffect) {
             throw new Error("Missing real delegated effect authority");
           }
-          effect();
+          const effect = () =>
+            runWithPreparedRunSourceScope({ admittedRunContext: context }, async () =>
+              assertEffect(),
+            );
+          await effect();
           const inputRunId =
             scenario === "prior" || scenario === "unadmitted-prior" ? priorRunId : recoveryRunId;
           const recorder = createUserTurnTranscriptRecorder({
@@ -264,9 +278,9 @@ describe("pre-mirror recovery input custody", () => {
           expect(persisted?.message.idempotencyKey).toBe(`${inputRunId}:user`);
           expect(persisted?.message["__openclaw"]?.runId).toBeUndefined();
           if (scenario === "current" || scenario === "prior") {
-            expect(effect).not.toThrow();
+            await expect(effect()).resolves.toBeUndefined();
           } else {
-            expect(effect).toThrow();
+            await expect(effect()).rejects.toThrow();
           }
         } finally {
           admission.close();

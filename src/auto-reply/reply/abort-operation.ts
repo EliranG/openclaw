@@ -248,7 +248,7 @@ export async function executeFastAbortRequest(
         : undefined;
     let resolvedAbortTarget: SessionAbortTargetIdentity | null = null;
     try {
-      resolvedAbortTarget = resolveSessionAbortTarget({
+      resolvedAbortTarget = await resolveSessionAbortTarget({
         agentId,
         sessionKey: targetKey,
         storePath,

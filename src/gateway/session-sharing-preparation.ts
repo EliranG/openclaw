@@ -601,7 +601,12 @@ export async function prepareSessionMutationFacts(
         if (!params.allowMissing) {
           throw new SessionMutationFactsUnavailableError();
         }
-        facts = { target: null, membership: new Set() };
+        facts = {
+          target: null,
+          membership: new Set(),
+          sourcePath: sharing?.source.path,
+          sourceAgentId: sharing?.source.agentId,
+        };
         const retained =
           sharing && retainedReads.get(`${sharing.databaseIdentity}\0${canonicalKey}`);
         expectedPlaceholder = retained?.readCurrent()?.placeholder;
@@ -614,7 +619,7 @@ export async function prepareSessionMutationFacts(
           ) {
             throw new SessionMutationFactsUnavailableError();
           }
-          return { target: null, membership: new Set<string>() };
+          return { ...facts!, target: null, membership: new Set<string>() };
         };
       } else {
         if (!sharing) {

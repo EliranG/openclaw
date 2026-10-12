@@ -2,9 +2,9 @@ import { isDeepStrictEqual } from "node:util";
 import { readDatabasePathIdentitySync } from "../../infra/sqlite-worker-identity.js";
 import { buildConversationIdentity } from "./conversation-identity.js";
 import { resolveCurrentConversationSession } from "./conversation-registry.js";
+import { retainPreparedSessionEntryPredicate } from "./session-accessor.sqlite-entry-cache-publication-state.js";
 import { loadSessionEntryReadOnly } from "./session-accessor.sqlite-entry.js";
 import { resolveSqliteSessionKey } from "./session-accessor.sqlite-scope-helpers.js";
-import type { SessionEntryCurrentFacts } from "./session-entry-current.types.js";
 import {
   captureSessionEntryReadScope,
   isNativeSessionEntryRead,
@@ -47,7 +47,7 @@ export async function captureSessionEntryCurrentCheckInternal(inputParams: {
   isActive?: () => boolean;
   matchGeneration?: boolean;
   /** Exact policy fields retained alongside the returned entry. */
-  fields?: readonly (keyof SessionEntryCurrentFacts & keyof SessionEntry)[];
+  fields?: readonly (keyof SessionEntry)[];
   /** Refuse preparation when a previously selected entry no longer matches. */
   expected?: Partial<SessionEntry>;
   alternatives?: readonly {
@@ -59,6 +59,7 @@ export async function captureSessionEntryCurrentCheckInternal(inputParams: {
   entry: SessionEntry | undefined;
   isCurrent: () => boolean;
   assertCurrent: PreparedSessionSourceAssertion;
+  release: () => void;
 }> {
   const params = { ...inputParams };
   const incognito = captureIncognitoSessionSource(params);
@@ -125,196 +126,218 @@ export async function captureSessionEntryCurrentCheckInternal(inputParams: {
       };
     }),
   }));
-  return withSessionEntryReadOnlyInWorker(scope, assertActive, async (read, owner) => {
-    if (!read.ok) {
-      throw read.error;
-    }
-    const selected = read.value;
-    const selectedValues = fields.map((field) => structuredClone(selected?.[field]));
-    if (
-      expected &&
-      (!selected || fields.some((field) => !isDeepStrictEqual(selected[field], expected[field])))
-    ) {
-      refuse();
-    }
-    const readScope = owner.scope ?? scope;
-    const target = {
-      agentId: readScope.agentId ?? params.agentId,
-      sessionKey: resolveSqliteSessionKey(
-        readScope.sessionKey,
-        readScope.agentId ?? params.agentId,
-      ),
-      storePath: owner.scope?.storePath ?? scope.storePath,
-      env: scope.env,
-    };
-    const identity = incognito ? undefined : readDatabasePathIdentitySync(target.storePath);
-    const claim =
-      incognito && !("kind" in incognito)
-        ? incognito.actor.sessions.captureCurrent(target.sessionKey)
-        : undefined;
-    const selectedStore = owner.selectedStore;
-    const native = owner.kind === "native";
-    const sourceIsCurrent = () => {
-      if (incognito) {
-        incognito.admissionSignal?.throwIfAborted();
-        if ("kind" in incognito) {
-          incognito.assertCurrent();
-        } else {
-          incognito.actor.assertReadable();
-          claim!.assertCurrent();
-        }
-        return true;
+  let release = () => {};
+  try {
+    return await withSessionEntryReadOnlyInWorker(scope, assertActive, async (read, owner) => {
+      if (!read.ok) {
+        throw read.error;
       }
-      if (native) {
-        return true;
-      }
-      try {
-        if (
-          inputCandidates.some((candidate) => !isSessionStoreReadCandidateCurrent(candidate)) ||
-          alternatives.some((alternative) =>
-            alternative.conversations.some(
-              ({ locator }) => !isSessionStoreReadCandidateCurrent(locator),
-            ),
-          ) ||
-          (selectedStore &&
-            assertSessionStoreReadCandidate(selectedStore.path, inputCandidates) !==
-              selectedStore.physicalPath)
-        ) {
-          return false;
-        }
-        const current = readDatabasePathIdentitySync(target.storePath);
-        return (
-          !identity?.key.startsWith("file:") ||
-          (current.key === identity.key && current.birthtime === identity.birthtime)
-        );
-      } catch {
-        return false;
-      }
-    };
-    const check: SessionSourceCheck = () => {
-      if (params.isActive?.() === false || !sourceIsCurrent()) {
-        return false;
-      }
-      if (fields.length > 0) {
-        const current = incognito
-          ? "kind" in incognito
-            ? undefined
-            : incognito.actor.sessions.readCapability(target.sessionKey)
-          : loadSessionEntryReadOnly(readScope);
-        if (
-          (current === undefined) !== (selected === undefined) ||
-          fields.some((field, index) => !isDeepStrictEqual(current?.[field], selectedValues[index]))
-        ) {
-          return false;
-        }
-      }
-      return alternatives.some(
-        (alternative) =>
-          alternative.isActive?.() !== false &&
-          alternative.conversations.every(
-            ({ scope: conversationScope, predicate }) =>
-              (resolveCurrentConversationSession(conversationScope, predicate.conversationRef)
-                ?.sessionKey ?? null) === predicate.sessionKey,
-          ),
-      );
-    };
-    const assertCurrent = () => {
-      if (!check()) {
+      const selected = read.value;
+      const selectedValues = fields.map((field) => structuredClone(selected?.[field]));
+      if (
+        expected &&
+        (!selected || fields.some((field) => !isDeepStrictEqual(selected[field], expected[field])))
+      ) {
         refuse();
       }
-    };
-    // Pending publishers have no persistent target; incognito keeps its existing adapter.
-    const nativeSource =
-      incognito ||
-      native ||
-      !identity?.key.startsWith("file:") ||
-      alternatives.some((alternative) =>
-        alternative.conversations.some(
-          ({ locator }) => locator.physicalPath !== identity?.canonicalPath,
+      const readScope = owner.scope ?? scope;
+      const target = {
+        agentId: readScope.agentId ?? params.agentId,
+        sessionKey: resolveSqliteSessionKey(
+          readScope.sessionKey,
+          readScope.agentId ?? params.agentId,
         ),
-      );
-    const source: PreparedSessionSourceAssertion =
-      !identity || nativeSource
-        ? Object.assign(assertCurrent, {
-            nativeSource: true,
-            async prepareSessionSource() {
-              return { nativeSource: true, checks: [], assertCurrent };
-            },
-          })
-        : captureSessionEntrySourceAssertion({
-            scope: target,
-            readSource: {
-              agentId: owner.scope?.databaseAgentId ?? params.agentId,
-              path: identity.canonicalPath,
-              databaseIdentity: identity.key.slice("file:".length),
-              databaseBirthtime: identity.birthtime,
-            },
-            expected: selected,
-            fields,
-            assertCurrent,
-            assertHostCurrent: () => {
-              assertActive();
-              if (!sourceIsCurrent()) {
-                refuse();
-              }
-            },
-            async prepareConversations(readConversations) {
-              const predicates = alternatives.map((alternative) =>
-                alternative.conversations.map(({ predicate }) => predicate),
-              );
-              const refs = [
-                ...new Set(
-                  predicates.flatMap((alternative) =>
-                    alternative.map(({ conversationRef }) => conversationRef),
-                  ),
-                ),
-              ];
-              const rows = await readConversations(refs);
-              if (
-                !alternatives.some(
-                  (alternative, index) =>
-                    alternative.isActive?.() !== false &&
-                    predicates[index]!.every(
-                      (predicate) =>
-                        (rows.get(predicate.conversationRef) ?? null) === predicate.sessionKey,
+        storePath: owner.scope?.storePath ?? scope.storePath,
+        env: scope.env,
+      };
+      const identity = incognito ? undefined : readDatabasePathIdentitySync(target.storePath);
+      const claim =
+        incognito && !("kind" in incognito)
+          ? incognito.actor.sessions.captureCurrent(target.sessionKey)
+          : undefined;
+      const selectedStore = owner.selectedStore;
+      const native = owner.kind === "native";
+      let active = true;
+      const matchesFields = (current: SessionEntry | undefined) =>
+        (current === undefined) === (selected === undefined) &&
+        fields.every((field, index) => isDeepStrictEqual(current?.[field], selectedValues[index]));
+      const retained =
+        !incognito && !native && identity?.key.startsWith("file:") && fields.length > 0
+          ? retainPreparedSessionEntryPredicate({
+              databaseIdentity: identity.key,
+              sessionKey: target.sessionKey,
+              entry: selected,
+              matches: (_before, after) => matchesFields(after),
+            })
+          : undefined;
+      release = () => {
+        active = false;
+        retained?.release();
+      };
+      const sourceIsCurrent = () => {
+        if (!active) {
+          return false;
+        }
+        if (incognito) {
+          incognito.admissionSignal?.throwIfAborted();
+          if ("kind" in incognito) {
+            incognito.assertCurrent();
+          } else {
+            incognito.actor.assertReadable();
+            claim!.assertCurrent();
+          }
+          return true;
+        }
+        if (native) {
+          return true;
+        }
+        try {
+          if (
+            inputCandidates.some((candidate) => !isSessionStoreReadCandidateCurrent(candidate)) ||
+            alternatives.some((alternative) =>
+              alternative.conversations.some(
+                ({ locator }) => !isSessionStoreReadCandidateCurrent(locator),
+              ),
+            ) ||
+            (selectedStore &&
+              assertSessionStoreReadCandidate(selectedStore.path, inputCandidates) !==
+                selectedStore.physicalPath)
+          ) {
+            return false;
+          }
+          const current = readDatabasePathIdentitySync(target.storePath);
+          return current.key === identity?.key && current.birthtime === identity?.birthtime;
+        } catch {
+          return false;
+        }
+      };
+      const check: SessionSourceCheck = () => {
+        if (params.isActive?.() === false || !sourceIsCurrent()) {
+          return false;
+        }
+        if (fields.length > 0) {
+          const current = incognito
+            ? "kind" in incognito
+              ? undefined
+              : incognito.actor.sessions.readCapability(target.sessionKey)
+            : native
+              ? loadSessionEntryReadOnly(readScope)
+              : selected;
+          if (retained ? !retained.isCurrent() : !matchesFields(current)) {
+            return false;
+          }
+        }
+        return alternatives.some(
+          (alternative) =>
+            alternative.isActive?.() !== false &&
+            alternative.conversations.every(
+              ({ scope: conversationScope, predicate }) =>
+                (resolveCurrentConversationSession(conversationScope, predicate.conversationRef)
+                  ?.sessionKey ?? null) === predicate.sessionKey,
+            ),
+        );
+      };
+      const assertCurrent = () => {
+        if (!check()) {
+          refuse();
+        }
+      };
+      // Pending publishers have no persistent target; incognito keeps its existing adapter.
+      const nativeSource =
+        incognito ||
+        native ||
+        !identity?.key.startsWith("file:") ||
+        alternatives.some((alternative) =>
+          alternative.conversations.some(
+            ({ locator }) => locator.physicalPath !== identity?.canonicalPath,
+          ),
+        );
+      const source: PreparedSessionSourceAssertion =
+        !identity || nativeSource
+          ? Object.assign(assertCurrent, {
+              nativeSource: true,
+              async prepareSessionSource() {
+                return { nativeSource: true, checks: [], assertCurrent };
+              },
+            })
+          : captureSessionEntrySourceAssertion({
+              scope: target,
+              readSource: {
+                agentId: owner.scope?.databaseAgentId ?? params.agentId,
+                path: identity.canonicalPath,
+                databaseIdentity: identity.key.slice("file:".length),
+                databaseBirthtime: identity.birthtime,
+              },
+              expected: selected,
+              fields,
+              assertCurrent,
+              assertHostCurrent: () => {
+                assertActive();
+                if (!sourceIsCurrent()) {
+                  refuse();
+                }
+              },
+              async prepareConversations(readConversations) {
+                const predicates = alternatives.map((alternative) =>
+                  alternative.conversations.map(({ predicate }) => predicate),
+                );
+                const refs = [
+                  ...new Set(
+                    predicates.flatMap((alternative) =>
+                      alternative.map(({ conversationRef }) => conversationRef),
                     ),
-                )
-              ) {
-                refuse();
-              }
-              let matches: readonly number[] | undefined;
-              const accepted: number[] = [];
-              return {
-                alternatives: predicates,
-                acceptMatches: (validated) => {
-                  matches = validated;
-                  accepted.length = 0;
-                  return accepted;
-                },
-                assertCurrent: () => {
-                  assertActive();
-                  accepted.length = 0;
-                  for (const [index, alternative] of alternatives.entries()) {
-                    if (
-                      (!matches || matches.includes(index)) &&
-                      alternative.isActive?.() !== false
-                    ) {
-                      accepted.push(index);
+                  ),
+                ];
+                const rows = await readConversations(refs);
+                if (
+                  !alternatives.some(
+                    (alternative, index) =>
+                      alternative.isActive?.() !== false &&
+                      predicates[index]!.every(
+                        (predicate) =>
+                          (rows.get(predicate.conversationRef) ?? null) === predicate.sessionKey,
+                      ),
+                  )
+                ) {
+                  refuse();
+                }
+                let matches: readonly number[] | undefined;
+                const accepted: number[] = [];
+                return {
+                  alternatives: predicates,
+                  acceptMatches: (validated) => {
+                    matches = validated;
+                    accepted.length = 0;
+                    return accepted;
+                  },
+                  assertCurrent: () => {
+                    assertActive();
+                    accepted.length = 0;
+                    for (const [index, alternative] of alternatives.entries()) {
+                      if (
+                        (!matches || matches.includes(index)) &&
+                        alternative.isActive?.() !== false
+                      ) {
+                        accepted.push(index);
+                      }
                     }
-                  }
-                  if (accepted.length === 0) {
-                    refuse();
-                  }
-                },
-              };
-            },
-            refuse,
-          });
-    check.sessionSource = source;
-    owner.assertCurrent();
-    if (params.fields || incognito) {
-      assertCurrent();
-    }
-    return { entry: selected, isCurrent: check, assertCurrent: source };
-  });
+                    if (accepted.length === 0) {
+                      refuse();
+                    }
+                  },
+                };
+              },
+              refuse,
+            });
+      check.sessionSource = source;
+      owner.assertCurrent();
+      if (params.fields || incognito) {
+        assertCurrent();
+      }
+      return { entry: selected, isCurrent: check, assertCurrent: source, release };
+    });
+  } catch (error) {
+    release();
+    throw error;
+  }
 }

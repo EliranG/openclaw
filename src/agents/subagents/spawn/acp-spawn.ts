@@ -201,7 +201,7 @@ export async function spawnAcpDirect(
     sessionKey: requesterInternalKey,
     agentId: ctx.requesterAgentIdOverride,
   });
-  const runtimePolicyError = resolveAcpSpawnRuntimePolicyError({
+  const runtimePolicyError = await resolveAcpSpawnRuntimePolicyError({
     cfg,
     requesterAgentId,
     requesterSessionKey: ctx.agentSessionKey,

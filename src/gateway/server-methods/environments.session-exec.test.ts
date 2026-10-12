@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./environments.session.js", () => ({
   resolveSessionEnvironmentCaller: () => ({
     identity: { sessionId: "conversation", sessionKey: mocks.sessionKey, agentId: "main" },
+    release() {},
     assertCurrent: () => {
       if (!mocks.current) {
         throw new Error("Run authority closed");
@@ -26,8 +27,12 @@ vi.mock("./environments.session.js", () => ({
     },
   }),
 }));
-vi.mock("./sessions-shared.js", () => ({
-  loadAccessorSessionEntryForGatewayTarget: () => ({ entry: { sessionId: "conversation" } }),
+vi.mock("../../config/sessions/session-entry-current-check.js", () => ({
+  captureSessionEntryCurrentCheckInternal: async () => ({
+    entry: { sessionId: "conversation" },
+    assertCurrent() {},
+    release() {},
+  }),
 }));
 vi.mock("../../agents/exec-defaults.js", () => ({ resolveExecDefaults: () => mocks.policy }));
 vi.mock("./environments.session-exec-approval.js", () => ({

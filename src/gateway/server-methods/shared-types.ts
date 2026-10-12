@@ -504,6 +504,14 @@ export type GatewayRequestOptions = {
 
 /** Commit-time guard captured by the pre-dispatch session participation check. */
 export type SessionMutationAuthorization = {
+  /** Release the request's retained sharing facts after its final effect. */
+  release?: () => void;
+  /** Transfer retained facts to admitted work; request cleanup then leaves them with that owner. */
+  takeRelease?: () => () => void;
+  bindCreation?: (
+    target: { sessionKey?: string; key?: string; agentId?: string },
+    operation: import("../../config/sessions/session-accessor.sqlite-entry-cache.types.js").SessionEntryCreationOperation,
+  ) => void;
   /** Consume fresh durable facts while their physical reader remains retained. */
   withCurrent?: <T>(consume: () => T) => Promise<T>;
   withPreparedCurrent?: <T>(
@@ -540,6 +548,7 @@ export type SessionMutationAuthorization = {
   admittedInputAuthority?: import("../../config/sessions/session-pending-input-authority.js").SessionPendingInputAuthority;
   /** Creation-owner notification after COMMIT; binds only this request's previously absent row. */
   recordCreatedSession?: (target: {
+    entry?: import("../../config/sessions/types.js").SessionEntry;
     agentId: string;
     sessionKey: string;
     storePath: string;

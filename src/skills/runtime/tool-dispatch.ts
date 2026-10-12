@@ -128,6 +128,7 @@ export async function resolveSkillDispatchTools(
     cfg: params.cfg,
     agentId: resolvedAgentId,
     sessionKey: params.sessionKey,
+    preparedSessionEntry: params.sessionEntry ?? null,
   });
   const sandboxPolicy = sandboxRuntime.sandboxed ? sandboxRuntime.toolPolicy : undefined;
   const ownerOnlyCoreToolPolicy = !params.senderIsOwner

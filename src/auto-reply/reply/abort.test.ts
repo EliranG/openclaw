@@ -394,7 +394,7 @@ describe("abort detection", () => {
       sessionId,
       sessionKey: canonicalKey,
     });
-    vi.mocked(resolveSessionAbortTarget).mockReturnValueOnce({
+    vi.mocked(resolveSessionAbortTarget).mockResolvedValueOnce({
       entry: {
         sessionId,
         updatedAt: 10,
@@ -422,7 +422,7 @@ describe("abort detection", () => {
     const sessionKey = "telegram:missing-persistence-target";
     const { cfg } = await createAbortConfig();
     vi.mocked(markSessionAbortTarget).mockResolvedValueOnce(null);
-    vi.mocked(resolveSessionAbortTarget).mockReturnValueOnce(null);
+    vi.mocked(resolveSessionAbortTarget).mockResolvedValueOnce(null);
 
     const result = await runStopCommand({
       cfg,
@@ -465,7 +465,7 @@ describe("abort detection", () => {
             };
           }),
       );
-      vi.mocked(resolveSessionAbortTarget).mockReturnValueOnce({
+      vi.mocked(resolveSessionAbortTarget).mockResolvedValueOnce({
         entry: {
           sessionId,
           updatedAt: 10,

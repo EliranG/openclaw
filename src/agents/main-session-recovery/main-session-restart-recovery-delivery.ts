@@ -1,11 +1,13 @@
 import { isDeepStrictEqual } from "node:util";
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import type { SessionEntry } from "../../config/sessions.js";
+import { resolveRestartRecoveryChannelAuthority } from "../../config/sessions/restart-recovery-state.js";
 import { retainPreparedSessionEntryPredicate } from "../../config/sessions/session-accessor.sqlite-entry-cache-publication-state.js";
 import { resolveSqliteSessionKey } from "../../config/sessions/session-accessor.sqlite-scope.js";
 import { withSessionEntryReadOnlyInWorker } from "../../config/sessions/session-entry-read-runtime.js";
 import { captureIncognitoSessionSource } from "../../config/sessions/session-incognito-binding.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import { isTrustedMessageActionTurnIngress } from "../../gateway/message-action-turn-capability.js";
 import type { GatewayRecoveryRuntime } from "../../gateway/server-instance-runtime.types.js";
 import { getAgentEventLifecycleGeneration } from "../../infra/agent-events.js";
 import { resolveSendPolicy } from "../../sessions/send-policy.js";
@@ -18,6 +20,22 @@ import {
 import { isDeliverableMessageChannel } from "../../utils/message-channel.js";
 import type { MainSessionRecoveryStoreTarget } from "./main-session-recovery-store.js";
 import { mainSessionRecoveryLog } from "./main-session-restart-recovery-shared.js";
+
+export function hasRestartRecoveryMessageActionAuthority(entry: SessionEntry): boolean {
+  const authority = resolveRestartRecoveryChannelAuthority(entry);
+  // Keep the pre-dispatch gate identical to recovered capability minting.
+  return (
+    authority !== undefined && isTrustedMessageActionTurnIngress(authority.deliveryContext.channel)
+  );
+}
+
+/** Internal continuations never inherit channel authority; every other message-tool recovery must. */
+export function requiresRestartRecoveryMessageActionAuthority(entry: SessionEntry): boolean {
+  return (
+    entry.restartRecoverySourceReplyDeliveryMode === "message_tool_only" &&
+    entry.restartRecoverySourceIngress !== "internal"
+  );
+}
 
 export function resolveRestartRecoveryDeliveryContext(params: {
   cfg?: OpenClawConfig;

@@ -16,11 +16,9 @@ import type {
 } from "../../config/sessions/session-accessor.js";
 import { mutateSessionAtMessageWithPreconditions } from "../../config/sessions/session-accessor.sqlite-message-cut.js";
 import {
-  captureSessionActorStorageOwner,
   getSessionActorStorageBinding,
   runWithSessionActorStorage,
 } from "../../config/sessions/session-actor-storage-binding.js";
-import { captureSessionEntryMetadataRead } from "../../config/sessions/session-entry-source-authority.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { isIncognitoSessionKey } from "../../routing/session-key.js";
 import { ModelSelectionLockedError } from "../../sessions/model-overrides.js";
@@ -57,13 +55,14 @@ import { resolveVisibleActiveSessionRunState } from "./session-active-runs.js";
 import { emitSessionsChanged } from "./session-change-event.js";
 import { prepareSessionForkFilesystemRoot } from "./session-create-root.js";
 import { resolveEditorMediaAttachments } from "./session-rewind-editor-media.js";
+import { prepareRewindRepositoryEntries } from "./session-rewind-repository-entries.js";
 import { waitForTerminalSessionRunSettlement } from "./session-run-settlement.js";
 import { listSessionBranchesForGateway } from "./sessions-branches-list.js";
 import {
   prepareUpstreamForkCurrentGuard,
   resolveUpstreamForkHarness,
 } from "./sessions-fork-runtime-guard.js";
-import { loadAccessorSessionEntryForGatewayTarget, sessionLog } from "./sessions-shared.js";
+import { sessionLog } from "./sessions-shared.js";
 import type { GatewayRequestHandlerOptions, GatewayRequestHandlers } from "./types.js";
 import { defineValidatedGatewayHandler } from "./validation.js";
 
@@ -432,32 +431,10 @@ async function mutatePreparedSessionAtMessage({
             source: ReturnType<typeof captureOpenClawStateWorkerContext>;
           }
         | undefined;
-      const repositoryEntrySource = captureSessionEntryMetadataRead({
-        agentId: current.agentId,
-        sessionKey: current.canonicalKey,
-        storePath: current.storePath,
-      });
-      const memoryOwner = memory && captureSessionActorStorageOwner(memory);
-      const readRepositoryEntry = (key: string) => {
-        if (memory) {
-          return memoryOwner?.owner?.readSession(key, memory.authority)?.entry;
-        }
-        if (repositoryEntrySource) {
-          if (key === current.canonicalKey) {
-            return repositoryEntrySource.readCurrent();
-          }
-          return captureSessionEntryMetadataRead({
-            agentId: current.agentId,
-            sessionKey: key,
-            storePath: current.storePath,
-          })?.readCurrent();
-        }
-        return loadAccessorSessionEntryForGatewayTarget({
-          key,
-          cfg,
-          agentId: current.agentId,
-        }).entry;
-      };
+      using repositoryEntries =
+        action === "fork" && current.entry.repositoryWorkspaceId
+          ? await prepareRewindRepositoryEntries(current, targetKey, assertMutationCurrent)
+          : undefined;
       const mutationParams = {
         agentId: current.agentId,
         commitGuard: assertMutationCurrent,
@@ -501,7 +478,7 @@ async function mutatePreparedSessionAtMessage({
           const assertRepositoryCurrent = () => {
             assertRepositoryOwnerCurrent();
             assertLocalUpstreamCurrent();
-            const sourceEntry = readRepositoryEntry(current.canonicalKey);
+            const sourceEntry = repositoryEntries?.readSource();
             if (
               sourceEntry?.sessionId !== initialSessionId ||
               sourceEntry.lifecycleRevision !== initialLifecycleRevision ||
@@ -559,13 +536,12 @@ async function mutatePreparedSessionAtMessage({
       } finally {
         if (forkRepository) {
           const { workspaceId, store, source } = forkRepository;
-          const forkEntry = () => readRepositoryEntry(targetKey);
-          if (forkEntry()?.repositoryWorkspaceId !== workspaceId) {
+          if (repositoryEntries?.isForkUnclaimed(workspaceId)) {
             await store.delete({
               workspaceId,
               assertCurrent: () => {
                 source.admission.assertCurrent();
-                if (forkEntry()?.repositoryWorkspaceId === workspaceId) {
+                if (!repositoryEntries?.isForkUnclaimed(workspaceId)) {
                   throw new Error("Repository fork was committed before cleanup");
                 }
               },

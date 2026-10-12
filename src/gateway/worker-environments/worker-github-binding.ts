@@ -27,6 +27,8 @@ export async function prepareWorkerGitHubBinding(params: {
       return undefined;
     }
     const currentWorkspace = await prepareGitHubPublicationWorkspaceOwner(params);
+    using _ = { [Symbol.dispose]: () => currentWorkspace.release() };
+
     const workspace = currentWorkspace.initial;
     if (params.assertCurrent?.() === false) {
       return undefined;

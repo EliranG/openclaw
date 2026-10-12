@@ -197,6 +197,8 @@ const defaultPublicDeprecatedExportsByEntrypointBudget = Object.freeze({
   // +2: approved released upstream-link writes retained during worker migration.
   "session-catalog": 2,
   "session-store-runtime": 7,
+  // Released synchronous sandbox lookup remains while plugins adopt async or prepared reads.
+  sandbox: 1,
   // +2: shipped Slack and Discord setup helpers retained through their package migration window.
   "setup-runtime": 2,
   "reply-history": 6,
@@ -245,7 +247,8 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +1: preview adapters strip only normalization-owned response decoration.
       // +1: shared stale-read cache replaces board, preview, search, and credential cache policies.
       // +24: approved async approval-routing replacements and delivery facts across four public facades.
-      3720,
+      // +2: async sandbox lookup and pure prepared-session classification.
+      3722,
       env,
     ),
     publicFunctionExports: readPluginSdkSurfaceBudgetEnv(
@@ -271,7 +274,8 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +1: stripReplyPayloadResponsePrefix preserves durable text while assembling previews.
       // +1: the same bounded stale-read cache factory on collection-runtime.
       // +22: the same async approval-routing functions; two delivery-fact exports are types.
-      2179,
+      // +2: the same sandbox replacements.
+      2181,
       env,
     ),
     publicDeprecatedExports: readPluginSdkSurfaceBudgetEnv(
@@ -285,7 +289,8 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +15: retained synchronous auth, model, and TTS compatibility exports.
       // +7: retained synchronous session, command-menu, model-override, TTS-path, and list exports.
       // +17: eleven synchronous approval-routing APIs retained across four public facades.
-      200,
+      // +1: released synchronous sandbox lookup retained until the next Plugin SDK major.
+      201,
       env,
     ),
     publicWildcardReexports: readPluginSdkSurfaceBudgetEnv(

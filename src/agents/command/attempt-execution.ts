@@ -197,6 +197,7 @@ export async function runAgentAttempt(
         cfg: params.cfg,
         sessionKey: params.sessionKey,
         agentId: params.sessionAgentId,
+        preparedSessionEntry: params.sessionEntry ?? null,
       })
     : undefined;
   const completionCapabilityProfile = completionRequestsMessageDelivery

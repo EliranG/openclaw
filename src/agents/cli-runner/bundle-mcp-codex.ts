@@ -22,7 +22,7 @@ import { prepareConversationCapabilityProfile } from "../conversation-capability
 import { requiresMcpBearerProjection, resolveMcpBearerBundleConfig } from "../mcp-auth-profile.js";
 import { partitionMcpServersByConnectionScope } from "../mcp-connection-resolver.js";
 import { applyPreparedNativeMcpPolicy, prepareNativeMcpPolicy } from "../native-mcp-policy.js";
-import { resolveSandboxRuntimeStatus } from "../sandbox/runtime-status.js";
+import { resolveSandboxRuntimeStatusAsync } from "../sandbox/runtime-status.js";
 import { projectNativeMcpRunContext } from "./native-mcp-context.js";
 import { serializeTomlInlineValue } from "./toml-inline.js";
 
@@ -205,7 +205,7 @@ export async function buildCodexUserMcpServersThreadConfigPatchForRun(params: {
     agentId: run.sandboxAgentId,
     fallbackAgentId: agentId,
   });
-  const sandboxStatus = resolveSandboxRuntimeStatus({
+  const sandboxStatus = await resolveSandboxRuntimeStatusAsync({
     cfg: run.config,
     sessionKey: policySessionKey,
     agentId: policyAgentId,

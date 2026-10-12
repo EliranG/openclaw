@@ -157,15 +157,14 @@ function resolveReplyToolSandboxParams(execution: ReplyToolAuthorityInput["run"]
 
 export function resolveReplyToolAuthorityContext(
   snapshot: ReplyToolAuthorityInput,
-  route?: ReplyToolAuthorityRoute,
-  preparedSandbox?: ReturnType<typeof resolveSandboxRuntimeStatus>,
+  route: ReplyToolAuthorityRoute | undefined,
+  preparedSandbox: ReturnType<typeof resolveSandboxRuntimeStatus>,
 ) {
   const execution = snapshot.run;
   const provider = route?.provider ?? execution.provider;
   const model = route?.model ?? execution.model;
   const policySessionKey = execution.runtimePolicySessionKey ?? execution.sessionKey;
-  const sandboxRuntime =
-    preparedSandbox ?? resolveSandboxRuntimeStatus(resolveReplyToolSandboxParams(execution));
+  const sandboxRuntime = preparedSandbox;
   const capabilityProfile = resolveConversationCapabilityProfile({
     config: execution.config,
     sessionId: execution.sessionId,
@@ -260,14 +259,13 @@ function assertCurrentOperatorAuthority(authority: AdmittedRunOperatorAuthority 
 }
 
 /** Fingerprints the complete model-facing tool authority owned by one queued turn. */
-export function resolveFollowupRunToolAuthorityFingerprint(
+function resolveFollowupRunToolAuthorityFingerprint(
   snapshot: ReplyToolAuthorityInput,
-  route?: ReplyToolAuthorityRoute,
-  preparedContext?: ReturnType<typeof resolveReplyToolAuthorityContext>,
+  route: ReplyToolAuthorityRoute | undefined,
+  preparedContext: ReturnType<typeof resolveReplyToolAuthorityContext>,
 ): string {
   const execution = snapshot.run;
-  const { provider, model, capabilityProfile } =
-    preparedContext ?? resolveReplyToolAuthorityContext(snapshot, route);
+  const { provider, model, capabilityProfile } = preparedContext;
   const authority = snapshot.operatorAuthority;
   assertCurrentOperatorAuthority(authority);
   const { screenTarget, themeProfileId } = resolveReplyPersonalToolTargets(
@@ -705,7 +703,7 @@ export function prepareReplyToolAuthority(
         reads,
         assertPrepared,
         prepareCurrent: () => withSessionEntriesFromStoresInWorker(reads, assertPrepared),
-        retainNative() {
+        retainCurrent() {
           policy.read();
           return { assertCurrent: policy.read, release() {} };
         },

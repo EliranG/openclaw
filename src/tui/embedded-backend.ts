@@ -82,12 +82,14 @@ import {
 } from "../gateway/session-row-projection.js";
 import { capArrayByJsonBytes } from "../gateway/session-transcript-readers.js";
 import { projectSessionPatchResult } from "../gateway/session-utils-model.js";
-import { loadGatewaySessionEntryReadOnlyInWorker } from "../gateway/session-utils-store-worker.js";
+import {
+  loadGatewaySessionEntryReadOnlyInWorker,
+  resolveGatewaySessionStoreTargetInWorker,
+} from "../gateway/session-utils-store-worker.js";
 import {
   getSessionDefaults,
   listAgentsForGateway,
   resolveCanonicalGatewaySessionStoreKey,
-  resolveGatewaySessionStoreTargetWithStore,
   resolveSessionModelRef,
 } from "../gateway/session-utils.js";
 import { projectSessionsPatchEntry } from "../gateway/sessions-patch.js";
@@ -580,11 +582,10 @@ export class EmbeddedTuiBackend implements TuiBackend {
     await this.ready;
     await this.preparedModelRuntime.waitUntilReady();
     const cfg = getRuntimeConfig();
-    const target = resolveGatewaySessionStoreTargetWithStore({
+    const target = await resolveGatewaySessionStoreTargetInWorker({
       cfg,
       key: opts.key,
       agentId: opts.agentId,
-      exactRead: true,
     });
     const applied = await applySessionPatchProjection<{ ok: false; error: ErrorShape }>({
       ...(opts.label === undefined ? { sessionKeys: target.storeKeys } : {}),

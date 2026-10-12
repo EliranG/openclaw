@@ -1059,11 +1059,12 @@ export async function createGatewaySession(
             }
           : {}),
         ...(commitGuard ? { commitGuard } : {}),
-        ...(bindPreparedCreation
+        ...(bindPreparedCreation || params.bindSharingCreation
           ? {
               bindCreation: (operation) => {
                 commitGuard?.();
                 bindPreparedCreation?.(operation);
+                params.bindSharingCreation?.(operation);
                 creationOperation = operation;
               },
             }

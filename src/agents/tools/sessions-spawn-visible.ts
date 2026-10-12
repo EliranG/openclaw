@@ -28,7 +28,10 @@ import { listAgentIds, resolveSessionAgentId } from "../agent-scope.js";
 import { reserveChildAdmissionSlot } from "../child-admission.js";
 import { prepareNativeDelegatedToolPolicy } from "../delegated-tool-policy.js";
 import { resolveAgentIdentity } from "../identity.js";
-import { resolveSandboxRuntimeStatus } from "../sandbox/runtime-status.js";
+import {
+  resolveSandboxRuntimeStatus,
+  resolveSandboxRuntimeStatusAsync,
+} from "../sandbox/runtime-status.js";
 import { resolveSpawnAdmission } from "../spawn-plan.js";
 import { resolveSpawnedWorkspaceInheritance } from "../spawned-context.js";
 import { prepareSubagentSessionListReadCache } from "../subagents/registry/subagent-registry-state.js";
@@ -323,10 +326,13 @@ export async function maybeSpawnVisibleSession(params: {
     cfg,
     runTimeoutSeconds: params.runTimeoutSeconds,
   });
-  const requesterRuntime = resolveSandboxRuntimeStatus({
+  const requesterRuntime = await resolveSandboxRuntimeStatusAsync({
     cfg,
     sessionKey: requesterKey,
     agentId: requesterAgentId,
+    ...(requesterTarget.canonicalKey === requesterKey
+      ? { preparedSessionEntry: requesterEntry ?? null }
+      : {}),
   });
   // Gateway creation inherits the exact parent's requirement before admitting a child run.
   const childRuntimeSandboxed =
@@ -334,6 +340,7 @@ export async function maybeSpawnVisibleSession(params: {
     resolveSandboxRuntimeStatus({
       cfg,
       sessionKey: `agent:${targetAgentId}:dashboard:pending`,
+      preparedSessionEntry: null,
     }).sandboxed;
   const requesterSandboxed = params.options?.sandboxed === true || requesterRuntime.sandboxed;
   if (!childRuntimeSandboxed && (requesterSandboxed || params.sandbox === "require")) {

@@ -15,7 +15,7 @@ import type { CodexComputerUseSetupParams } from "./app-server/computer-use.js";
 import { isJsonObject, type JsonValue } from "./app-server/protocol.js";
 import {
   prepareCodexNativeExecutionBlock,
-  resolveCodexNativeSandboxBlock,
+  prepareCodexNativeSandboxBlock,
 } from "./app-server/sandbox-guard.js";
 import type {
   CodexAppServerBindingIdentity,
@@ -100,15 +100,28 @@ export async function resolveCodexNativeCommandSandboxBlock(
     };
   }
   if (isCodexCliNodeResumeBind(subcommand, args)) {
-    return {
-      block: resolveCodexNativeSandboxBlock({
+    let sandbox: Awaited<ReturnType<typeof prepareCodexNativeSandboxBlock>>;
+    try {
+      sandbox = await prepareCodexNativeSandboxBlock({
         config: ctx.config,
         sessionKey: ctx.sessionKey,
         sessionId: ctx.sessionId,
         surface: `/${["codex", subcommand].join(" ")}`,
-      }),
-      assertCurrent: modelCurrent?.assertCurrent ?? (() => {}),
-      release: modelCurrent?.release ?? (() => {}),
+      });
+    } catch (error) {
+      modelCurrent?.release();
+      throw error;
+    }
+    return {
+      block: sandbox.block,
+      assertCurrent: composeSessionEntryCommitGuards([
+        modelCurrent?.assertCurrent,
+        sandbox.assertCurrent,
+      ]),
+      release: () => {
+        sandbox.release();
+        modelCurrent?.release();
+      },
     };
   }
   let execution: Awaited<ReturnType<typeof prepareCodexNativeExecutionBlock>>;

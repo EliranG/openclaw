@@ -16,7 +16,7 @@ import {
   supportsOpenClawAgentDatabaseExecution,
 } from "../../state/openclaw-agent-execution.js";
 import { captureOpenClawStateWorkerContext } from "../../state/openclaw-state-worker-context.js";
-import { loadSessionEntry, patchSessionEntryCore } from "./session-accessor.entry.js";
+import { patchSessionEntryCore } from "./session-accessor.entry.js";
 import { createSessionEntryWithTranscriptInScope } from "./session-accessor.sqlite-creation.js";
 import { hasPreparedNativeSessionDeletion } from "./session-accessor.sqlite-deletion.js";
 import { prepareSessionEntryReplacementDatabase } from "./session-accessor.sqlite-replacement-worker.js";
@@ -40,6 +40,7 @@ import type {
   SessionEntryCreateWithTranscriptPrepareResult,
   SessionEntryCreateWithTranscriptOptions,
 } from "./session-accessor.types.js";
+import { readSessionEntryReadOnlyInWorker } from "./session-entry-read-runtime.js";
 import { captureIncognitoSessionBinding } from "./session-incognito-binding.js";
 import {
   captureExternalSessionCommitGuard,
@@ -588,10 +589,10 @@ export async function updateSessionEntry(
 }
 
 /** Resolves one abort target identity without exposing the mutable store. */
-export function resolveSessionAbortTarget(
+export async function resolveSessionAbortTarget(
   scope: SessionAccessScope,
-): SessionAbortTargetIdentity | null {
-  const entry = loadSessionEntry(scope);
+): Promise<SessionAbortTargetIdentity | null> {
+  const entry = await readSessionEntryReadOnlyInWorker(scope);
   if (!entry) {
     return null;
   }

@@ -37,16 +37,16 @@ import {
   commitMainSessionRecovery,
   type MainSessionRecoveryStoreTarget,
 } from "./main-session-recovery-store.js";
-import {
-  hasRestartRecoveryMessageActionAuthority,
-  requiresRestartRecoveryMessageActionAuthority,
-  resumeMainSession,
-} from "./main-session-restart-dispatch.js";
+import { resumeMainSession } from "./main-session-restart-dispatch.js";
 import {
   markSessionCompletedAfterRecoveryCheckpoint,
   readMainSessionRecoveryCheckpoint,
   reconcileInvalidHarnessCompletion,
 } from "./main-session-restart-recovery-checkpoint.js";
+import {
+  hasRestartRecoveryMessageActionAuthority,
+  requiresRestartRecoveryMessageActionAuthority,
+} from "./main-session-restart-recovery-delivery.js";
 import {
   skippedMainSessionRecoveryDecision,
   type MainSessionRecoveryDecision,
@@ -240,7 +240,7 @@ export async function recoverStore(params: {
         skip("not_main_session");
         continue;
       }
-      const dispatchTarget = resolveRestartRecoveryDispatchTarget({
+      const dispatchTarget = await resolveRestartRecoveryDispatchTarget({
         agentId: params.expectedTarget?.agentId,
         storeAgentId: params.storeAgentId,
         cfg: params.cfg,

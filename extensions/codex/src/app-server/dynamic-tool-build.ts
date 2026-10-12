@@ -43,7 +43,6 @@ import {
 import {
   resolveCodexNodeExecToolOverrides,
   prepareCodexNativeExecutionPolicyForRun,
-  resolveCodexNativeExecutionPolicyForRun,
   type CodexNativeExecutionPolicy,
   type PreparedCodexNativeExecutionPolicy,
 } from "./native-execution-policy.js";
@@ -507,13 +506,13 @@ export async function buildDynamicTools(
 }
 export function shouldEnableCodexAppServerNativeToolSurface(
   params: EmbeddedRunAttemptParams,
-  sandbox?: OpenClawSandboxContext,
+  sandbox: OpenClawSandboxContext | undefined,
   options: {
     agentId?: string;
     runtimeSessionKey?: string;
     sandboxExecServerEnabled?: boolean;
-    nativeExecutionPolicy?: PreparedCodexNativeExecutionPolicy;
-  } = {},
+    nativeExecutionPolicy: PreparedCodexNativeExecutionPolicy;
+  },
 ): boolean {
   if (
     isCodexResponsesOAuthRun(params) ||
@@ -524,16 +523,7 @@ export function shouldEnableCodexAppServerNativeToolSurface(
   ) {
     return false;
   }
-  if (
-    !(
-      options.nativeExecutionPolicy?.policy ??
-      resolveCodexNativeExecutionPolicyForRun(params, {
-        agentId: options.agentId,
-        runtimeSessionKey: options.runtimeSessionKey,
-        sandbox,
-      })
-    ).nativeToolSurfaceAllowed
-  ) {
+  if (!options.nativeExecutionPolicy.policy.nativeToolSurfaceAllowed) {
     return false;
   }
   const toolsAllow = params.toolsAllow;

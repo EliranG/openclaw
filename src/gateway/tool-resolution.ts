@@ -22,7 +22,7 @@ import {
   createSwarmCollectorWriteAuthority,
   resolveSwarmCollectorToolContext,
 } from "../agents/openclaw-tools.swarm.js";
-import { resolveSandboxRuntimeStatus } from "../agents/sandbox/runtime-status.js";
+import { resolveSandboxRuntimeStatusAsync } from "../agents/sandbox/runtime-status.js";
 import { createScheduledMessageInvocationAdmission } from "../agents/scheduled-message-invocation.js";
 import { resolveScheduledToolCallerContext } from "../agents/scheduled-tool-policy.js";
 import { buildDeclaredToolAllowlistContext } from "../agents/tool-policy-declared-context.js";
@@ -213,7 +213,7 @@ export async function resolveGatewayScopedTools(
     requesterPolicies.inheritedToolPolicySource === "sender"
       ? params.sessionPermissionPolicy
       : undefined;
-  const sandboxRuntime = resolveSandboxRuntimeStatus({
+  const sandboxRuntime = await resolveSandboxRuntimeStatusAsync({
     cfg: params.cfg,
     sessionKey: params.sessionKey,
     agentId: sessionAgentId,
@@ -439,14 +439,17 @@ export async function resolveGatewayScopedTools(
   assertCurrent();
   const execDefaults =
     nodeExecSurface || mediatedToolNames.size > 0
-      ? resolveExecDefaults({
-          cfg: params.cfg,
-          sessionEntry: params.execSession,
-          execOverrides: params.execOverrides,
-          agentId: policyAgentId,
-          sessionKey: runtimePolicySessionKey,
-          sandboxAvailable: sandboxed,
-        })
+      ? resolveExecDefaults(
+          {
+            cfg: params.cfg,
+            sessionEntry: params.execSession,
+            execOverrides: params.execOverrides,
+            agentId: policyAgentId,
+            sessionKey: runtimePolicySessionKey,
+            sandboxAvailable: sandboxed,
+          },
+          sandboxRuntime,
+        )
       : undefined;
   const nodeExecDefaults =
     nodeExecSurface &&

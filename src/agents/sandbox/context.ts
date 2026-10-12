@@ -41,7 +41,11 @@ import { createSandboxFsBridge } from "./fs-bridge.js";
 import { hashTextSha256 } from "./hash.js";
 import { toSandboxProvisioningError } from "./provisioning-error.js";
 import { readRegisteredSandboxRuntimeIds } from "./registry.js";
-import { resolveSandboxRuntimeStatus, withSandboxRuntimeStatusInWorker } from "./runtime-status.js";
+import {
+  resolveSandboxRuntimeStatus,
+  resolveSandboxRuntimeStatusAsync,
+  withSandboxRuntimeStatusInWorker,
+} from "./runtime-status.js";
 import { assertSshSandboxSecretOwnerAvailable } from "./secret-owner.js";
 import { resolveSandboxWorkspaceLayoutPaths } from "./shared.js";
 import { captureSandboxStateOwner, SandboxStateOwnerRequiredError } from "./state-owner.js";
@@ -65,16 +69,19 @@ async function syncSandboxSkillsToWorkspace(params: {
   assertCurrent?: () => void;
 }): Promise<{ eligibility?: SkillEligibilityContext; skillUsagePaths?: SkillUsagePath[] }> {
   try {
-    const [syncWorkspaceSkills, { getRemoteSkillEligibility }, { resolveNodeExecEligibility }] =
-      await Promise.all([
-        loadSyncWorkspaceSkills(),
-        import("../../skills/runtime/remote.js"),
-        import("../exec-defaults.js"),
-      ]);
+    const [
+      syncWorkspaceSkills,
+      { getRemoteSkillEligibility },
+      { resolveNodeExecEligibilityAsync },
+    ] = await Promise.all([
+      loadSyncWorkspaceSkills(),
+      import("../../skills/runtime/remote.js"),
+      import("../exec-defaults.js"),
+    ]);
     params.assertCurrent?.();
     await prepareRemoteSkillConnections();
     params.assertCurrent?.();
-    const nodeSkills = resolveNodeExecEligibility({
+    const nodeSkills = await resolveNodeExecEligibilityAsync({
       cfg: params.config,
       sessionKey: params.rawSessionKey,
       agentId: params.agentId,
@@ -174,20 +181,14 @@ function resolveSandboxSession(params: {
   config?: OpenClawConfig;
   agentId?: string;
   sessionKey?: string;
-  preparedRuntimeStatus?: ReturnType<typeof resolveSandboxRuntimeStatus>;
+  preparedRuntimeStatus: ReturnType<typeof resolveSandboxRuntimeStatus>;
 }) {
   const rawSessionKey = params.sessionKey?.trim();
   if (!rawSessionKey) {
     return null;
   }
 
-  const runtime = params.preparedRuntimeStatus
-    ? { ...params.preparedRuntimeStatus }
-    : resolveSandboxRuntimeStatus({
-        cfg: params.config,
-        agentId: params.agentId,
-        sessionKey: rawSessionKey,
-      });
+  const runtime = { ...params.preparedRuntimeStatus };
   if (!runtime.sandboxed) {
     return null;
   }
@@ -539,7 +540,14 @@ async function resolveProvisionedSandboxContext(
 export async function resolveSandboxContext(
   params: ResolveSandboxContextParams,
 ): Promise<SandboxContext | null> {
-  const resolved = resolveSandboxSession(params);
+  const preparedRuntimeStatus =
+    params.preparedRuntimeStatus ??
+    (await resolveSandboxRuntimeStatusAsync({
+      cfg: params.config,
+      agentId: params.agentId,
+      sessionKey: params.sessionKey,
+    }));
+  const resolved = resolveSandboxSession({ ...params, preparedRuntimeStatus });
   if (!resolved) {
     return null;
   }

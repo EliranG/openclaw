@@ -14,7 +14,7 @@ import type { ModelCatalogSnapshot } from "../../agents/model-catalog.types.js";
 import { splitTrailingAuthProfile } from "../../agents/model-ref-profile.js";
 import { resolveModelRefFromString } from "../../agents/model-selection.js";
 import { publishedModelCatalogOwnerMatchesAgent } from "../../agents/prepared-model-catalog-owner.js";
-import { resolveSandboxRuntimeStatus } from "../../agents/sandbox.js";
+import { resolveSandboxRuntimeStatusAsync } from "../../agents/sandbox.js";
 import { resolveIngressWorkspaceOverrideForSessionRun } from "../../agents/spawned-context.js";
 import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
 import { resolveEffectiveToolFsRootExpansionAllowed } from "../../agents/tool-fs-policy.js";
@@ -1026,12 +1026,15 @@ export async function getReplyFromConfig(
       ctx: sessionCtx,
       sessionKey,
     });
-    const sandboxed = resolveSandboxRuntimeStatus({
-      cfg,
-      agentId,
-      sessionKey,
-      classificationSessionKey: policySessionKey,
-    }).sandboxed;
+    const sandboxed = (
+      await resolveSandboxRuntimeStatusAsync({
+        cfg,
+        agentId,
+        sessionKey,
+        classificationSessionKey: policySessionKey,
+        ...(policySessionKey === sessionKey ? { preparedSessionEntry: sessionEntry } : {}),
+      })
+    ).sandboxed;
     if (
       (sandboxed && stagedAttachmentPaths.size > 0) ||
       (!sandboxed && resolveEffectiveToolFsRootExpansionAllowed({ cfg, agentId }))

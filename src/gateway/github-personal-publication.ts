@@ -14,10 +14,6 @@ import {
   readGitHubPublicationSessionLifecycleInWorker,
 } from "../state/github-publication-session-lifecycles.js";
 import { captureOpenClawStateWorkerContext } from "../state/openclaw-state-worker-context.js";
-import {
-  getSessionRepositoryWorkspaceStore,
-  type PreparedRepositoryWorkspace,
-} from "../state/session-repository-workspaces.js";
 import { readUserGitHubConnection } from "../state/user-github-connections.js";
 import { requestCurrentPersonalGitHubRefresh } from "./github-oauth-lifecycle.js";
 import { personalGitHubStatus, type PersonalGitHubAction } from "./github-personal-oauth.js";
@@ -51,7 +47,10 @@ import {
 } from "./github-publication-store-async.js";
 import { prepareGitHubPublicationTarget } from "./github-publication-target.js";
 import { terminalRepositoryGitHubPublication } from "./github-repository-publication-store.js";
-import { resolveReceiptOwner } from "./github-repository-publication-workspace.js";
+import {
+  prepareReceiptOwner,
+  resolveReceiptOwner,
+} from "./github-repository-publication-workspace.js";
 import type { RepositoryGitHubPublicationStatusRow } from "./github-repository-publication.kernel.js";
 import type { WorkerSessionPlacementStore } from "./worker-environments/placement-store.js";
 
@@ -65,23 +64,31 @@ export type PersonalGitHubSessionAction = PersonalGitHubAction & {
 export type PersonalGitHubSessionActionV2 = PersonalGitHubSessionAction &
   Pick<GitHubPublicationRequesterV2, "version" | "signal" | "prepareSource">;
 type Selection = { generation: string; account: { accountId: number; login: string } };
-type PersonalPublicationWorkspace = { assertCurrent: () => void; assertCustody: () => void };
+type PersonalPublicationWorkspace = {
+  assertCurrent: () => void;
+  assertCustody: () => void;
+  worktree: Awaited<ReturnType<typeof readGitHubPublicationWorktreeOwner>>["worktree"];
+};
 
 export type PreparedRepositoryPublicationStatus = {
   requestId: string;
   workspaceId: string;
-  repository: PreparedRepositoryWorkspace;
+  repository: Awaited<ReturnType<typeof prepareReceiptOwner>>;
+  release: () => void;
 };
 
 export async function preparePersonalRepositoryPublicationStatus(requestId: string) {
   const row = await readRepositoryGitHubPublicationAsync(requestId);
-  return row && row.owner_profile_id !== null && !terminalRepositoryGitHubPublication(row)
-    ? {
-        requestId: row.request_id,
-        workspaceId: row.workspace_id,
-        repository: await getSessionRepositoryWorkspaceStore().prepare(row.workspace_id),
-      }
-    : undefined;
+  if (!row || row.owner_profile_id === null || terminalRepositoryGitHubPublication(row)) {
+    return undefined;
+  }
+  const repository = await prepareReceiptOwner(row);
+  return {
+    requestId: row.request_id,
+    workspaceId: row.workspace_id,
+    repository,
+    release: repository.release,
+  };
 }
 
 /** Source owners supply liveness; personal status never grants execution authority. */
@@ -317,6 +324,8 @@ export function createPersonalGitHubPublicationCoordinator(
     action.assertCurrent();
     return await placements.withLocalWorkspaceReservation(action, async (assertReservation) => {
       const worktreeOwner = await readGitHubPublicationWorktreeOwner(action);
+      using _ = { [Symbol.dispose]: () => worktreeOwner.release() };
+
       const { worktree } = worktreeOwner;
       action.assertCurrent();
       assertReservation();
@@ -339,7 +348,7 @@ export function createPersonalGitHubPublicationCoordinator(
       };
       try {
         assertCurrent();
-        return await run({ assertCurrent, assertCustody });
+        return await run({ assertCurrent, assertCustody, worktree });
       } finally {
         await lease.release();
       }
@@ -481,7 +490,7 @@ export function createPersonalGitHubPublicationCoordinator(
           workspace.assertCurrent();
           bound.assertCurrent();
         };
-        const { worktree } = await readGitHubPublicationWorktreeOwner(action);
+        const { worktree } = workspace;
         assertCurrent();
         const identity = await preparePersonalGitHubPublicationSelection(
           bound,

@@ -265,9 +265,6 @@ export function prepareCodexAttemptResources(prompt: CodexAttemptPrompt) {
         binding: thread,
       });
       const { bindingStore, bindingIdentity } = connection;
-      const assertParentSessionCurrent = () => {
-        parent?.assertCurrent();
-      };
       const submissionStore: CodexNativeSubagentSubmissionStore | undefined =
         historyOwner && thread.lifecycle.preserveExistingBinding !== true
           ? {
@@ -280,7 +277,7 @@ export function prepareCodexAttemptResources(prompt: CodexAttemptPrompt) {
                 ) {
                   throw new Error("Native submission binding is no longer current.");
                 }
-                assertParentSessionCurrent();
+                parent?.assertCurrent();
               },
               read: () => bindingStore.readNativeSubagentSubmissions(bindingIdentity, historyOwner),
               record: (receipt, assertCurrent) =>
@@ -313,7 +310,7 @@ export function prepareCodexAttemptResources(prompt: CodexAttemptPrompt) {
         if (submissionStore) {
           submissionStore.assertCurrent();
         } else {
-          assertParentSessionCurrent();
+          parent?.assertCurrent();
         }
         thread.liveThreadOwnership?.assertCurrent();
         if (
@@ -366,7 +363,12 @@ export function prepareCodexAttemptResources(prompt: CodexAttemptPrompt) {
         try {
           await registration.ready;
           assertRegistrationCurrent();
+          if (!submissionStore) {
+            const unregister = registration.unregister;
+            registration.unregister = () => unregister().finally(parent?.release);
+          }
           state.nativeSubagentMonitor = registration;
+          parentTransferred = true;
         } catch (error) {
           await registration.unregister();
           throw error;

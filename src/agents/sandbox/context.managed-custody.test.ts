@@ -11,7 +11,7 @@ import { nodeFilePath } from "../../test-utils/node-file-path.js";
 import { resolveSandboxConfigForAgent } from "./config.js";
 import { resolveSandboxContext } from "./context.js";
 import type { prepareLocalSandboxWorkspace } from "./local-workspace.js";
-import { resolveSandboxRuntimeStatus } from "./runtime-status.js";
+import { resolvePreparedSandboxRuntimeStatus } from "./runtime-status.js";
 import { resolveSandboxWorkspaceLayoutPaths } from "./shared.js";
 
 const projection = vi.hoisted(() => ({
@@ -102,7 +102,7 @@ it("keeps managed workspace custody through awaited sandbox skill synchronizatio
         config,
         sessionKey,
         workspaceDir,
-        preparedRuntimeStatus: resolveSandboxRuntimeStatus({
+        preparedRuntimeStatus: resolvePreparedSandboxRuntimeStatus({
           cfg: config,
           sessionKey,
           preparedSessionEntry: null,

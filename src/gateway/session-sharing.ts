@@ -37,6 +37,8 @@ import {
   createSessionCreationAuthorizationRecorder,
   assertSessionMutationProjectionCurrent,
   createSessionSharingLookupCaches,
+  findPreparedSharingTarget,
+  resolvePreparedTalkAuthorizationTarget,
   prepareAuthorizedSessionMutationFacts,
   prepareSessionMutationAuthorizationRequest,
   resolveOwnSessionProfileAuthorization,
@@ -77,7 +79,6 @@ import {
   resolveDirectIncognitoTargets,
   resolveDirectSessionTargets,
   resolveSessionMutationTargets,
-  resolveTalkSessionTargetInput,
   type SessionMutationTarget,
 } from "./session-sharing-target-input.js";
 import {
@@ -86,10 +87,6 @@ import {
 } from "./session-sharing-target-read.js";
 import { prepareSessionSharingWorkerGrant } from "./session-sharing-worker-grant.js";
 import { resolveGatewaySessionStoreTarget } from "./session-utils-store-lookup.js";
-import {
-  prepareTalkSessionTargetForEffect,
-  assertTalkSessionStorageTarget,
-} from "./talk/session-target.js";
 import type { PreparedTalkSessionTarget } from "./talk/session-target.types.js";
 
 export { SessionMutationAuthorizationChangedError } from "./session-mutation-authorization-error.js";
@@ -163,10 +160,7 @@ export function resolveSessionMutationAuthorization(request: SessionMutationAuth
   if (params.method === "sessions.list") {
     return { error: null };
   }
-  // Resolve runtime config at most once per request and only when a path needs it. The context
-  // getter reloads/resolves gateway config, so non-session requests (the vast majority) must not
-  // pay it. Group discovery and the authorization loop then share one snapshot, so a mid-request
-  // config change cannot split target discovery from authorization.
+  // Discovery and authorization share one lazily loaded routing snapshot.
   let cachedCfg: OpenClawConfig | undefined;
   const getCfg = (): OpenClawConfig => (cachedCfg ??= params.context.getRuntimeConfig());
   const getPolicyConfig = () => params.context.getCommittedRuntimeConfig?.() ?? getCfg();
@@ -235,8 +229,15 @@ export function resolveSessionMutationAuthorization(request: SessionMutationAuth
   // Each cache pair defines one synchronous freshness epoch: initial authorization shares one,
   // while commit-time guards start fresh after handler work.
   let lookupCaches: SessionSharingLookupCaches | undefined;
-  const resolveAuthorizedTarget = (targetRef: SessionMutationTarget, targetCount: number) =>
-    consuming.sharing
+  const resolveAuthorizedTarget = (targetRef: SessionMutationTarget, targetCount: number) => {
+    if (params.preparedTargets) {
+      const retained = findPreparedSharingTarget(params, targetRef);
+      if (!retained) {
+        return { error: sessionMutationTargetChanged(params.method, targetRef.sessionKey).error };
+      }
+      consuming.sharing = retained.read();
+    }
+    return consuming.sharing
       ? { target: (consuming.sharing.assertCurrent(), consuming.sharing.target) }
       : readSessionMutationTarget({
           ...params,
@@ -245,30 +246,12 @@ export function resolveSessionMutationAuthorization(request: SessionMutationAuth
           targetCount,
           lookupCaches: () => (lookupCaches ??= createSessionSharingLookupCaches()),
         });
-  let talkInput: ReturnType<typeof resolveTalkSessionTargetInput>;
-  let talkSessionTarget: PreparedTalkSessionTarget | undefined;
-  try {
-    talkInput = resolveTalkSessionTargetInput(
-      params.method,
-      params.requestParams,
-      params.client?.connId,
-    );
-    if (talkInput?.kind === "relay") {
-      assertTalkSessionStorageTarget(getCfg(), talkInput.target);
-      talkSessionTarget = talkInput.target;
-    } else {
-      talkSessionTarget =
-        params.preparedTalkSessionTarget ??
-        (talkInput && prepareTalkSessionTargetForEffect(getCfg(), talkInput.sessionKey));
-    }
-  } catch (error) {
-    return {
-      error: errorShape(
-        ErrorCodes.INVALID_REQUEST,
-        String(error instanceof Error ? error.message : error),
-      ),
-    };
+  };
+  const preparedTalk = resolvePreparedTalkAuthorizationTarget(params, getCfg);
+  if (preparedTalk.error) {
+    return { error: preparedTalk.error };
   }
+  const { talkInput, talkSessionTarget } = preparedTalk;
   const talkTargets = talkSessionTarget
     ? [{ sessionKey: talkSessionTarget.canonicalKey, agentId: talkSessionTarget.agentId }]
     : undefined;
@@ -417,8 +400,7 @@ export function resolveSessionMutationAuthorization(request: SessionMutationAuth
     error: null,
     authorization: ((): SessionMutationAuthorization => {
       consuming.sharing = undefined;
-      const targetChanged = (sessionKey: string) =>
-        sessionMutationTargetChanged(params.method, sessionKey);
+      const targetChanged = (key: string) => sessionMutationTargetChanged(params.method, key);
       const assertTalkTargetCurrent = captureSessionSharingTalkAuthority({
         request: params,
         input: talkInput,
@@ -433,7 +415,25 @@ export function resolveSessionMutationAuthorization(request: SessionMutationAuth
         ensuredSessionId?: string,
         prepared?: { target: SessionSharingTarget | null; members: readonly string[] },
         currentTalkTarget?: PreparedTalkSessionTarget,
-      ) => {
+      ): void => {
+        if (!prepared && !consuming.sharing && params.preparedTargets) {
+          const retained = findPreparedSharingTarget(params, targetRef);
+          if (!retained) {
+            throw targetChanged(targetRef.sessionKey);
+          }
+          const read = retained.read();
+          return consumeSharing(read, () =>
+            assertTargetCurrent(
+              targetRef,
+              expected,
+              currentCfg,
+              currentLookupCaches,
+              ensuredSessionId,
+              { target: read.target, members: read.members.map((member) => member.identityId) },
+              currentTalkTarget,
+            ),
+          );
+        }
         if (!prepared && expected?.absentTarget && !expected.created) {
           const currentRoute = consuming.sharing
             ? consuming.sharing.storageTarget
@@ -546,6 +546,12 @@ export function resolveSessionMutationAuthorization(request: SessionMutationAuth
         }
       };
       const authorization: SessionMutationAuthorization = {
+        ...(params.preparedTargets
+          ? {
+              bindCreation: (target, operation) =>
+                findPreparedSharingTarget(params, target)?.bindCreation(operation),
+            }
+          : {}),
         ...(params.method === "sessions.move" ||
         params.method === "sessions.dispatch" ||
         ((params.method === "talk.client.create" ||
@@ -670,11 +676,9 @@ export function resolveSessionMutationAuthorization(request: SessionMutationAuth
         assertTargetCurrent: (targetRef: SessionMutationTarget & { ensuredSessionId?: string }) => {
           // Batch outcomes preserve caller identities, but authorization owns normalized targets.
           // Resolve the same normalized identity so padded aliases cannot escape the snapshot fence.
-          const sessionKey = normalizeOptionalString(targetRef.sessionKey);
-          const agentId = normalizeOptionalString(targetRef.agentId);
           let normalizedTarget: SessionMutationTarget = {
-            sessionKey: sessionKey ?? targetRef.sessionKey,
-            agentId,
+            sessionKey: normalizeOptionalString(targetRef.sessionKey) ?? targetRef.sessionKey,
+            agentId: normalizeOptionalString(targetRef.agentId),
           };
           const currentCfg = params.context.getRuntimeConfig();
           if (params.method === "chat.send") {

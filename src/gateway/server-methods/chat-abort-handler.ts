@@ -11,16 +11,8 @@ import { isIncognitoSessionKey, normalizeAgentId } from "../../routing/session-k
 import { parseAgentSessionKey } from "../../sessions/session-key-utils.js";
 import { resolveStateContentionPresentation } from "../../sessions/session-run-error-presentation.js";
 import { captureWorkerInferenceForSession, createChatAbortOps } from "../chat-abort-ops.js";
-import {
-  abortChatRunById,
-  isChatAbortControllerEntryAbortable,
-  type ChatAbortControllerEntry,
-} from "../chat-abort.js";
-import {
-  abortQueuedChatTurnById,
-  isQueuedChatTurnForSession,
-  type QueuedChatTurnEntry,
-} from "../chat-queued-turns.js";
+import { abortChatRunById, isChatAbortControllerEntryAbortable } from "../chat-abort.js";
+import { abortQueuedChatTurnById, isQueuedChatTurnForSession } from "../chat-queued-turns.js";
 import { chatRunBelongsToAgent } from "../chat-run-owner.js";
 import { formatStopRequest } from "../control-plane-audit.js";
 import { pendingChatSendDedupeKey, type DedupeEntry } from "../server-shared.js";
@@ -36,10 +28,12 @@ import { getWorkerInferenceSessionControl } from "../worker-environments/inferen
 import {
   canRequesterAbortChatRun,
   canRequesterAbortPreRegisteredRun,
+  captureAbortTargetIdentity,
   readPreRegisteredAgentDedupePayloadForSession,
   resolveChatAbortRequester,
   writePreRegisteredAgentAbort,
   writePreRegisteredChatAbort,
+  type ChatAbortTarget,
 } from "./chat-abort-authorization.js";
 import { abortControlledSubagents, descendantAbortError } from "./chat-abort-descendants.js";
 import { abortChatRunsForSessionKeyWithPartials } from "./chat-abort-runtime.js";
@@ -48,6 +42,7 @@ import {
   abortedPartialPersistenceError,
   captureAbortedPartial,
   deferAbortedPartialPersistence,
+  prepareChatAbortSessionSnapshot,
   withAbortedPartialPersistenceWarning,
 } from "./chat-aborted-partial.js";
 import { persistAbortedPartials } from "./chat-transcript-persistence.js";
@@ -62,24 +57,6 @@ type ChatAbortLifecycle = {
   onDescendantsCancelled?: () => void;
   cascadeDescendants?: true;
 };
-
-type ChatAbortTarget = Pick<
-  ChatAbortControllerEntry | QueuedChatTurnEntry,
-  "sessionKey" | "sessionId" | "agentId" | "ownerConnId" | "ownerDeviceId"
->;
-
-function captureAbortTargetIdentity<T extends ChatAbortTarget>(
-  entries: ReadonlyMap<string, T>,
-  runId: string,
-  entry: T,
-) {
-  const { sessionKey, sessionId, agentId } = entry;
-  return () =>
-    entries.get(runId) === entry &&
-    entry.sessionKey === sessionKey &&
-    entry.sessionId === sessionId &&
-    entry.agentId === agentId;
-}
 
 export async function handleChatAbortRequestWithLifecycle(
   options: GatewayRequestHandlerOptions,
@@ -618,13 +595,17 @@ export async function handleChatAbortRequestWithLifecycle(
             runId,
             sessionKey,
             sessionId,
-            agentId: agentId ?? abortAgentId,
             text: partialText,
             abortOrigin: "rpc",
             resolveTerminalProducer: active.resolveTerminalProducer,
-            ...(sessionKey === rawSessionKey || sessionKey === canonicalAbortSessionKey
-              ? { session: abortSession }
-              : {}),
+            session:
+              sessionKey === rawSessionKey || sessionKey === canonicalAbortSessionKey
+                ? abortSession
+                : await prepareChatAbortSessionSnapshot({
+                    cfg: abortCfg,
+                    key: sessionKey,
+                    agentId: agentId ?? abortAgentId,
+                  }),
           })
         : undefined;
     let descendants: Awaited<ReturnType<typeof abortControlledSubagents>>;

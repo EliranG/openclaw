@@ -506,6 +506,7 @@ export const createTalkClient: GatewayRequestHandler = async (request) => {
                     sessionMutationAuthorization?.recordCreatedSession?.({
                       ...sessionTarget,
                       sessionId: entry.sessionId,
+                      entry,
                       lifecycleRevision: entry.lifecycleRevision,
                       readSource,
                     }),

@@ -75,6 +75,8 @@ async function handleChatSendWithOptions(
     sessionMutationAuthorization,
     sessionMutationCommitGuard,
   } = handlerOptions;
+  const releaseSessionAuthorization =
+    sessionMutationAuthorization?.takeRelease?.() ?? sessionMutationAuthorization?.release;
   using diagnostics =
     readChatSendDiagnostics(handlerOptions) ?? startChatSendDiagnostics(context.logGateway);
   const isDirectExternalUser =
@@ -84,11 +86,24 @@ async function handleChatSendWithOptions(
     onAdmissionOwned,
     { ...options, isDirectExternalUser },
     diagnostics,
-  );
+  ).catch((error: unknown) => {
+    releaseSessionAuthorization?.();
+    throw error;
+  });
   if (!setup) {
+    releaseSessionAuthorization?.();
     return;
   }
   const { request, session, admission } = setup;
+  admission.setPendingInputCleanup(() => releaseSessionAuthorization?.());
+  using admittedCleanup = {
+    dispatched: false,
+    [Symbol.dispose]() {
+      if (!this.dispatched) {
+        admission.cleanupAdmittedRun();
+      }
+    },
+  };
   const { p, systemInputProvenance, reconnectResumeRequested } = request;
   const { clientRunId, cfg, storePath, entry, sessionKey, sessionRoutingChanged, selectedAgent } =
     session;
@@ -148,17 +163,6 @@ async function handleChatSendWithOptions(
     turnKind: request.turnKind,
   };
   const cronCreatorAuthority = externalAuthorityAdmission?.resolve(externalAdmissionParams);
-  const dashboardAuthority = createChatSendDashboardAuthority({
-    admission,
-    session,
-    client,
-    context,
-    hasCurrentClientAuthority,
-    sessionMutationCommitGuard,
-    externalAuthorityAdmission,
-    externalAdmissionParams,
-  });
-  const assertDashboardReadCurrent = dashboardAuthority.assertReadCurrent;
 
   const admissionStartedAt = Date.now();
   const terminalizeRestartSafeAdmission = (terminalState: RestartSafeChatTerminalState) =>
@@ -172,6 +176,7 @@ async function handleChatSendWithOptions(
   let inputAdmissionAttempted = false;
   let replyAdmissionTicket: ReturnType<typeof reserveReplyAdmissionTicket>;
   let releaseBeforeDispatch: void | (() => void) = undefined;
+  let dashboardAuthority: Awaited<ReturnType<typeof createChatSendDashboardAuthority>> | undefined;
   try {
     const assertCustodyLifetimeCurrent = () => {
       admission.assertWorkAdmissionCurrent();
@@ -222,7 +227,6 @@ async function handleChatSendWithOptions(
     const persistGatewayUserTurnTranscript = (
       ...args: Parameters<typeof persistUserTurnTranscript>
     ) => admission.withInputCommitPublication(() => persistUserTurnTranscript(...args));
-    dashboardAuthority.bindPromptRecorder(userTurnRecorder);
     bindPreparedMediaRecorder(userTurnRecorder);
     phase?.mark("preparation");
     const preparedUserTurn = prepareChatSendUserTurn({
@@ -262,6 +266,8 @@ async function handleChatSendWithOptions(
         }
         await userTurnRecorder.waitForPendingInputSettlement?.();
       } finally {
+        dashboardAuthority?.release();
+        releaseSessionAuthorization?.();
         void preparedUserTurn
           .discardUnreferencedMedia(userTurnRecorder.getPendingInputMessage?.())
           .catch((error: unknown) =>
@@ -438,6 +444,19 @@ async function handleChatSendWithOptions(
       );
     }
 
+    dashboardAuthority = await createChatSendDashboardAuthority({
+      admission,
+      session,
+      client,
+      context,
+      hasCurrentClientAuthority,
+      sessionMutationCommitGuard,
+      sessionMutationAuthorization,
+      externalAuthorityAdmission,
+      externalAdmissionParams,
+    });
+    const assertDashboardReadCurrent = dashboardAuthority.assertReadCurrent;
+    dashboardAuthority.bindPromptRecorder(userTurnRecorder);
     phase?.mark("preparation");
     if (messageInjectionTarget) {
       invalidateSkillAuthoringForOtherRequester(
@@ -611,7 +630,9 @@ async function handleChatSendWithOptions(
       turn: preparedUserTurn,
       userTurn,
     });
+    admittedCleanup.dispatched = true;
   } catch (err) {
+    dashboardAuthority?.release();
     releaseBeforeDispatch?.();
     replyAdmissionTicket?.release();
     await handleChatSendSetupError({

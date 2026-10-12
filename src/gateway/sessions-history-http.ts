@@ -46,13 +46,14 @@ import {
   SessionHistorySseState,
 } from "./session-history-state.js";
 import { resolveCursorSeq } from "./session-history-tail.js";
+import { prepareSessionMutationFacts } from "./session-sharing-preparation.js";
 import { createSessionListEntryFilter, resolveSessionSharingTarget } from "./session-sharing.js";
-import { resolveSessionStoreKey } from "./session-store-key.js";
+import { resolveSessionStoreIdentity, resolveSessionStoreKey } from "./session-store-key.js";
 import {
   resolveTranscriptPathForComparison,
   resolveTranscriptUpdatePathForComparison,
 } from "./session-transcript-path.js";
-import { resolveGatewaySessionStoreTargetInWorker } from "./session-utils-store-worker.js";
+import type { GatewaySessionStoreTargetWithStore } from "./session-utils-store.types.js";
 import {
   resolveCanonicalSessionEntryFromStoreKeys,
   resolveSessionTranscriptCandidates,
@@ -219,7 +220,16 @@ async function serveAuthorizedSessionHistory(
   assertSourceCurrent: () => void,
 ): Promise<boolean> {
   const { cfg, requestAuth, operatorScopes } = authResult;
-  let target: ReturnType<typeof resolveGatewaySessionStoreTargetWithStore>;
+  let sharing: Awaited<ReturnType<typeof prepareSessionMutationFacts>> | undefined;
+  using sharingLifetime = {
+    transferred: false,
+    [Symbol.dispose]() {
+      if (!this.transferred) {
+        sharing?.release();
+      }
+    },
+  };
+  let target: GatewaySessionStoreTargetWithStore;
   let entry: ReturnType<typeof resolveCanonicalSessionEntryFromStoreKeys>;
   try {
     if (source) {
@@ -248,8 +258,24 @@ async function serveAuthorizedSessionHistory(
         readSource: { agentId: actor.agentId, path: actor.path },
       };
     } else {
-      target = await resolveGatewaySessionStoreTargetInWorker({ cfg, key: sessionKey });
-      entry = resolveCanonicalSessionEntryFromStoreKeys(target.store, target.storeKeys);
+      const { agentId } = resolveSessionStoreIdentity({ cfg, sessionKey });
+      sharing = await prepareSessionMutationFacts({
+        cfg,
+        agentId,
+        sessionKey,
+        allowMissing: true,
+      });
+      const current = sharing.readCurrent(getRuntimeConfig());
+      const resolved = current.target;
+      entry = resolved?.entry;
+      target = {
+        ...sharing.storageTarget,
+        storeKeys: resolved?.storeKeys ?? [sharing.storageTarget.canonicalKey],
+        store: entry ? { [resolved!.storeKey]: entry } : {},
+        readSource: current.sourcePath
+          ? { agentId: current.sourceAgentId ?? agentId, path: current.sourcePath }
+          : undefined,
+      };
     }
   } catch (error) {
     if ((error as { code?: unknown })?.code !== "SESSION_CANONICAL_KEY_MIGRATION_REQUIRED") {
@@ -338,11 +364,18 @@ async function serveAuthorizedSessionHistory(
     } catch {
       return false;
     }
-    const currentTarget = resolveSessionSharingTarget({
-      cfg: currentConfig,
-      sessionKey: target.canonicalKey,
-      agentId: target.agentId,
-    });
+    let currentTarget;
+    try {
+      currentTarget = source
+        ? resolveSessionSharingTarget({
+            cfg: currentConfig,
+            sessionKey: target.canonicalKey,
+            agentId: target.agentId,
+          })
+        : sharing!.readCurrent(currentConfig).target;
+    } catch {
+      return false;
+    }
     if (
       currentTarget === null ||
       currentTarget.agentId !== historyTarget.agentId ||
@@ -477,6 +510,7 @@ async function serveAuthorizedSessionHistory(
       clearInterval(streamResources.heartbeat);
     }
     streamResources.unsubscribe?.();
+    sharing?.release();
     streamClosed.resolve();
   }
 
@@ -664,6 +698,7 @@ async function serveAuthorizedSessionHistory(
       }
     });
   });
+  sharingLifetime.transferred = true;
   if (source) {
     await streamClosed.promise;
     await streamQueue;

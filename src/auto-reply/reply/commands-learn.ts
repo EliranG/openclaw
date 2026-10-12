@@ -9,7 +9,7 @@ import {
   resolveCliRuntimeExecutionProvider,
 } from "../../agents/model-runtime-aliases.js";
 import { supportsModelTools } from "../../agents/model-tool-support.js";
-import { resolveSandboxRuntimeStatus } from "../../agents/sandbox.js";
+import { resolveSandboxRuntimeStatusAsync } from "../../agents/sandbox.js";
 import { isToolAllowedByPolicyName } from "../../agents/tool-policy-match.js";
 import { resolveConfiguredModelCompat } from "../../agents/tools-effective-inventory.js";
 import { buildLearnPrompt, DEFAULT_LEARN_REQUEST } from "../../skills/workshop/learn-prompt.js";
@@ -69,11 +69,17 @@ async function isWorkshopAvailable(params: HandleCommandsParams): Promise<boolea
     ctx: params.ctx,
     sessionKey: params.sessionKey,
   });
-  const sandboxRuntime = resolveSandboxRuntimeStatus({
+  const sandboxRuntime = await resolveSandboxRuntimeStatusAsync({
     cfg: params.cfg,
     agentId: params.agentId,
     sessionKey: params.sessionKey,
     classificationSessionKey: policySessionKey,
+    ...(policySessionKey === params.sessionKey
+      ? {
+          preparedSessionEntry:
+            params.sessionStore?.[params.sessionKey] ?? params.sessionEntry ?? null,
+        }
+      : {}),
   });
   // Workshop skills live on the host under the agent dir, outside a sandboxed workspace.
   if (sandboxRuntime.sandboxed) {

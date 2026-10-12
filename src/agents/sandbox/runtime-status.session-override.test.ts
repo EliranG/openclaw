@@ -5,7 +5,8 @@ import { captureOpenClawAgentDatabaseExecution } from "../../state/openclaw-agen
 import { withOpenClawTestState } from "../../test-utils/openclaw-test-state.js";
 import { resolveSandboxContext } from "./context.js";
 import {
-  resolveSandboxRuntimeStatus,
+  resolvePreparedSandboxRuntimeStatus,
+  resolveSandboxRuntimeStatusAsync,
   resolveSandboxRuntimeStatusesForPersistedSessions,
   withSandboxRuntimeStatusesInWorker,
 } from "./runtime-status.js";
@@ -27,9 +28,11 @@ describe("session sandbox override", () => {
           },
         );
       }
-      expect(resolveSandboxRuntimeStatus({ cfg, sessionKey: "optional" }).sandboxed).toBe(false);
       expect(
-        resolveSandboxRuntimeStatus({
+        (await resolveSandboxRuntimeStatusAsync({ cfg, sessionKey: "optional" })).sandboxed,
+      ).toBe(false);
+      expect(
+        await resolveSandboxRuntimeStatusAsync({
           cfg,
           sessionKey: optional,
           classificationSessionKey: required,
@@ -39,7 +42,7 @@ describe("session sandbox override", () => {
         sandboxRequired: true,
       });
       expect(
-        resolveSandboxRuntimeStatus({
+        await resolveSandboxRuntimeStatusAsync({
           cfg,
           sessionKey: required,
           classificationSessionKey: optional,
@@ -101,19 +104,20 @@ describe("session sandbox override", () => {
         { agentId: "main", sessionKey },
         { sessionId: "candidate", updatedAt: 1 },
       );
-      expect(resolveSandboxRuntimeStatus({ cfg, sessionKey }).sandboxed).toBe(true);
+      expect((await resolveSandboxRuntimeStatusAsync({ cfg, sessionKey })).sandboxed).toBe(true);
       expect(
-        resolveSandboxRuntimeStatus({
+        resolvePreparedSandboxRuntimeStatus({
           cfg,
           sessionKey,
           preparedSessionEntry: { sandboxMode: "off" },
         }).sandboxed,
       ).toBe(false);
       expect(
-        resolveSandboxRuntimeStatus({ cfg, sessionKey, preparedSessionEntry: null }).sandboxed,
+        resolvePreparedSandboxRuntimeStatus({ cfg, sessionKey, preparedSessionEntry: null })
+          .sandboxed,
       ).toBe(true);
       expect(
-        resolveSandboxRuntimeStatus({
+        resolvePreparedSandboxRuntimeStatus({
           cfg,
           sessionKey,
           preparedSessionEntry: {

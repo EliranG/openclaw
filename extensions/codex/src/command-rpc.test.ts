@@ -206,6 +206,7 @@ describe("Codex command RPC helpers", () => {
     const options = { config, authProfileId: "openai:selected" };
     const startOptions = { transport: "stdio" as const, command: "codex", args: [], headers: {} };
     await expect(prepareCodexControlSessionAuth(options, startOptions)).resolves.toEqual({
+      release: expect.any(Function),
       authProfileId: "openai:selected",
       clientOptions: { authProfileId: "openai:selected" },
     });

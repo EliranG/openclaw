@@ -3,7 +3,6 @@ import { isMainSessionRecoveryReconciliationCandidate } from "../../agents/main-
 import { resolveSessionWorkStartError } from "../../config/sessions.js";
 import { SESSION_ROUTING_CHANGED_ERROR_REASON } from "../../config/sessions/main-session.js";
 import { hasRestartRecoveryTerminalRun } from "../../config/sessions/restart-recovery-state.js";
-import { loadExactSessionEntryCandidates } from "../../config/sessions/session-accessor.js";
 import { isSessionTranscriptProjectionUnavailableError } from "../../config/sessions/session-transcript-projection-error.js";
 import { resolveSendPolicy } from "../../sessions/send-policy.js";
 import { sessionDeliveryChannel } from "../../utils/delivery-context.read.js";
@@ -17,8 +16,7 @@ import { tryResolveSessionCompatibilityOwnerAgentId } from "../session-request-a
 import { withGatewaySessionEntry } from "../session-utils-store.js";
 import {
   loadGatewaySessionEntryReadOnlyInWorker,
-  loadSessionEntry,
-  resolveGatewaySessionStoreTarget,
+  resolveGatewaySessionStoreTargetInWorker,
 } from "../session-utils.js";
 import { resolveSessionWorkerPlacementContext } from "../session-worker-placement-context.js";
 import { formatForLog } from "../ws-log.js";
@@ -34,10 +32,7 @@ import {
   withAbortedPartialPersistenceWarning,
 } from "./chat-aborted-partial.js";
 import { resolveDurableChatClaim } from "./chat-restart-recovery.js";
-import {
-  ACTIVE_LEAF_CHANGED_ERROR_REASON,
-  assertExpectedLeafActive,
-} from "./chat-send-active-leaf.js";
+import { ACTIVE_LEAF_CHANGED_ERROR_REASON } from "./chat-send-active-leaf.js";
 import { prepareGoalChatSendRetry } from "./chat-send-goal-retry.js";
 import type { ChatSendPreAdmissionParams } from "./chat-send-pre-admission.types.js";
 import type { NormalizedChatSendRequest } from "./chat-send-request.js";
@@ -47,10 +42,7 @@ import {
   readChatSendRetryComparison,
   type ChatSendRetryComparison,
 } from "./chat-send-retry-comparison.js";
-import {
-  captureAdmittedChatSendSessionSettings,
-  SESSION_SETTINGS_CHANGED_ERROR_REASON,
-} from "./chat-send-session-settings.js";
+import { SESSION_SETTINGS_CHANGED_ERROR_REASON } from "./chat-send-session-settings.js";
 import type { LoadedChatSendSession } from "./chat-send-session.js";
 import type { GatewayRequestHandlerOptions } from "./types.js";
 
@@ -483,24 +475,6 @@ export async function runChatSendPreAdmission(
       }
       try {
         params.assertCurrent?.();
-        if (request.p.queueMode !== "steer" && session.expectedLeafEntryId !== undefined) {
-          assertExpectedLeafActive(
-            {
-              canonicalKey: sessionKey,
-              storePath: stopStorePath,
-              entry: loadExactSessionEntryCandidates({
-                ...(session.readSource
-                  ? { readSource: session.readSource }
-                  : { storePath: stopStorePath, agentId: session.agentId }),
-                sessionKeys: [sessionKey],
-                readOnly: true,
-              })[0]?.entry,
-            },
-            session.agentId,
-            session.expectedLeafEntryId,
-            session.requestedSessionId,
-          );
-        }
       } catch (error) {
         guard.failure = { error };
         throw error;
@@ -583,13 +557,9 @@ export async function runChatSendPreAdmission(
     try {
       const recoveryEntry = entry;
       if (recoveryEntry) {
-        const comparison = await prepareChatSendRetryComparison({
-          ...params,
-          session: { ...session, entry: recoveryEntry },
-        });
         await reconcileOrphanedGatewaySessionRecovery({
           cfg,
-          target: resolveGatewaySessionStoreTarget({
+          target: await resolveGatewaySessionStoreTargetInWorker({
             cfg,
             key: sessionKey,
             agentId: session.agentId,
@@ -601,37 +571,6 @@ export async function runChatSendPreAdmission(
             if (sessionRoutingChanged(context.getRuntimeConfig())) {
               throw new Error(SESSION_ROUTING_CHANGED_ERROR_REASON);
             }
-            const current = loadSessionEntry(sessionLoadKey, sessionLoadOptions);
-            const conflict = resolveChatSendRequestConflict(
-              { ...params, session: { ...session, entry: current.entry } },
-              comparison,
-            );
-            if (conflict) {
-              throw new Error(conflict.message);
-            }
-            const workStartError = resolveSessionWorkStartError(sessionKey, current.entry, {
-              allowPendingWorkspace: true,
-              providerReviewAcknowledgment: request.providerReviewAcknowledgment,
-              runId: session.clientRunId,
-              expectedSessionId: session.requestedSessionId ?? session.backingSessionId,
-            });
-            if (workStartError) {
-              throw new Error(workStartError);
-            }
-            if (request.p.queueMode !== "steer" && session.expectedLeafEntryId !== undefined) {
-              assertExpectedLeafActive(
-                current,
-                session.agentId,
-                session.expectedLeafEntryId,
-                session.requestedSessionId,
-              );
-            }
-            captureAdmittedChatSendSessionSettings({
-              commit: false,
-              entry: current.entry,
-              expectedPermissionMode: request.p.expectedPermissionMode,
-              expectedToolOverrides: request.p.expectedToolOverrides,
-            });
           },
           workerPlacementContext: resolveSessionWorkerPlacementContext(context),
         });

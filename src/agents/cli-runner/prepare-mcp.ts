@@ -3,7 +3,7 @@ import type { resolveMcpLoopbackScopedTools } from "../../gateway/mcp-http.runti
 import type { ResolvedCliBackend } from "../cli-backends.js";
 import { prepareConversationCapabilityProfile } from "../conversation-capability-profile.js";
 import { resolveExecConfigState } from "../exec-defaults.js";
-import { resolveSandboxRuntimeStatus } from "../sandbox/runtime-status.js";
+import { resolveSandboxRuntimeStatusAsync } from "../sandbox/runtime-status.js";
 import { normalizeToolPolicyName } from "../tool-policy.js";
 import { finalizeCliMcpGrant } from "./mcp-grant-context.js";
 import { projectNativeMcpRunContext } from "./native-mcp-context.js";
@@ -28,10 +28,12 @@ export async function resolveCliNativeMcpPolicy(
   },
 ) {
   const requesterSessionKey = run.sessionKey ?? options.policySessionKey;
-  const sandboxStatus = resolveSandboxRuntimeStatus({
+  const sandboxStatus = await resolveSandboxRuntimeStatusAsync({
     cfg: options.config,
     sessionKey: options.policySessionKey,
     agentId: options.policyAgentId,
+    preparedSessionEntry:
+      options.policySessionKey === run.sessionKey ? run.sessionEntry : undefined,
   });
   return prepareConversationCapabilityProfile({
     ...projectNativeMcpRunContext(run),

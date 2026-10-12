@@ -559,6 +559,7 @@ export async function executeSessionPatchMutations(params: {
                             sessionKey: primaryKey,
                             storePath: target.storePath,
                             sessionId: replacement.outcome.entry.sessionId,
+                            entry: replacement.outcome.entry,
                             lifecycleRevision: replacement.outcome.entry.lifecycleRevision,
                           });
                         }
