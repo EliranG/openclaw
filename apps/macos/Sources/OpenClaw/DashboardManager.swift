@@ -554,7 +554,18 @@ final class DashboardManager {
                 path: path,
                 search: search,
                 fallbackURL: fallbackURL))
-            if waitForLoad { try await destination.waitForDocumentLoad(at: fallbackURL) }
+            if waitForLoad {
+                do {
+                    try await destination.waitForDocumentLoad(at: fallbackURL)
+                } catch {
+                    if self.navigationIntents[target]?.id == intent {
+                        // Retire the document too, so cancelled setup cannot continue behind native onboarding.
+                        self.retireNavigation(for: target, from: destination)
+                        destination.closeDashboard()
+                    }
+                    throw error
+                }
+            }
             guard isCurrent() else { return .failure(CancellationError()) }
             return .success(())
         } catch {
