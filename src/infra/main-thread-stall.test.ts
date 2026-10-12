@@ -50,6 +50,17 @@ describe("main-thread stall attribution", () => {
     });
   });
 
+  it("starts a fresh observation when reset interrupts an active callback", () => {
+    const { monitor, elapse } = fixture();
+    runWithMainThreadTask("maintenance", () => elapse(1_200));
+    runWithMainThreadTask("host-thaw", () => {
+      elapse(90_000);
+      monitor.reset();
+      elapse(20);
+    });
+    expect(monitor.drain()).toEqual({ stalls: [], dropped: 0, delayMaxMs: 20 });
+  });
+
   it("bounds retained stalls and releases observation with the Gateway lifetime", () => {
     const { monitor, elapse } = fixture();
     for (let index = 0; index < 12; index++) {

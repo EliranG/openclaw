@@ -136,6 +136,14 @@ export function createMainThreadStallMonitor(now: () => number = () => performan
       delayMaxMs = 0;
       return { stalls, dropped: omitted, delayMaxMs: maximum };
     },
+    reset() {
+      pending.length = 0;
+      dropped = 0;
+      delayMaxMs = 0;
+      startedAt = segmentAt = now();
+      longestMs = 0;
+      longestTask = task;
+    },
     stop: () => observer.stop(),
   };
 }

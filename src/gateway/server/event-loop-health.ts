@@ -397,7 +397,7 @@ export function createGatewayEventLoopHealthMonitor(
   }
 
   const reset = () => {
-    stalls.drain();
+    stalls.reset();
     unattributedDelayMs = 0;
     histogram?.reset();
     lastWallAt = nowMs();
