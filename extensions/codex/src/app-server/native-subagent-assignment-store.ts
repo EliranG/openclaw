@@ -23,11 +23,17 @@ export function createNativeSubagentSessionAuthority(
       parent.source.assertScopeCurrent();
     }
   };
+  const entryCurrent = parent.entryCurrent;
   return {
     ...createNativeSessionBindingAuthority([], assertCurrent),
     prepareMutation: async () => ({
       assertCurrent,
-      sessionEntryCurrent: parent.entryCurrent,
+      sessionEntryCurrent: entryCurrent
+        ? {
+            sources: [entryCurrent.source],
+            assertCurrent: ([entry]) => entryCurrent.assertCurrent(entry),
+          }
+        : undefined,
     }),
   };
 }

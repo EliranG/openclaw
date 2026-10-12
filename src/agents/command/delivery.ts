@@ -30,6 +30,7 @@ import { createReplyPrefixContext } from "../../channels/reply-prefix.js";
 import { formatUnknownChannelMessage } from "../../cli/error-format.js";
 import { createOutboundSendDeps, type CliDeps } from "../../cli/outbound-send-deps.js";
 import type { SessionEntry } from "../../config/sessions.js";
+import type { SessionSourceAssertion } from "../../config/sessions/session-source-authority.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { toErrorObject } from "../../infra/errors.js";
 import {
@@ -95,7 +96,7 @@ type DeliverAgentCommandResultParams = {
   payloads: ReplyPayload[] | undefined;
   /** Channel plugin already selected and bootstrapped by the caller. */
   preparedPlugin?: ChannelPlugin;
-  assertDeliveryCurrent?: () => void;
+  assertDeliveryCurrent?: SessionSourceAssertion;
   onDeliveryResult?: (result: AgentCommandDeliveryResult) => void;
 } & FreshSessionDeliveryRefreshParams;
 
@@ -722,6 +723,7 @@ export async function deliverAgentCommandResult(
       const restartAbort = createRestartOnlyAbortSignal(opts.abortSignal);
       let send: DurableSendResult;
       try {
+        await assertPlatformSendCurrent.prepare();
         send = await sendDurableMessageBatchCore({
           cfg,
           channel: deliveryChannel,
@@ -755,7 +757,7 @@ export async function deliverAgentCommandResult(
           durability: bestEffortDeliver ? "best_effort" : "required",
           signal: restartAbort.signal,
           onDeliveryIntent: restartAbort.dispose,
-          onPlatformSendDispatch: async () => assertPlatformSendCurrent(),
+          onPlatformSendDispatch: assertPlatformSendCurrent.prepare,
           assertDirectAdapterHandoff: assertPlatformSendCurrent,
           onError: logDeliveryError,
           onPayload: logPayload,
@@ -763,6 +765,7 @@ export async function deliverAgentCommandResult(
         });
       } finally {
         restartAbort.dispose();
+        await assertPlatformSendCurrent.release();
       }
       if (restartAbort.signal?.aborted && send.status === "failed") {
         throw restartAbort.signal.reason;

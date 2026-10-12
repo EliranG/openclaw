@@ -14,6 +14,7 @@ import {
   withOpenClawAgentDatabaseReadOnly,
   type OpenClawAgentReadOnlyDatabase,
 } from "../../state/openclaw-agent-db-readonly.js";
+import { SessionMetadataUnavailableError } from "../../state/session-metadata-unavailable-error.js";
 import {
   readExactSessionEntryRow,
   readSessionEntryByIdInDatabase,
@@ -23,6 +24,7 @@ import { createSessionEntryRevisionGuard } from "./session-accessor.sqlite-entry
 import {
   assertCanonicalSessionKeyWrite,
   readWithCanonicalSessionAdmission,
+  readWithCanonicalSessionReaderContinuation,
 } from "./session-canonical-key.js";
 import { projectSessionEntryCapabilityFacts } from "./session-entry-capability-facts.js";
 import type {
@@ -30,6 +32,11 @@ import type {
   SessionEntryCurrentFacts,
   SessionEntryCurrentSource,
 } from "./session-entry-current.types.js";
+import { captureSessionEntryReadSource } from "./session-entry-read-source.js";
+import type {
+  SessionEntryCurrentWorkerInput,
+  SessionEntryCurrentWorkerResult,
+} from "./session-transcript-worker.types.js";
 
 // One last-key/read-policy projection per native handle; the revision owner invalidates its facts.
 const currentEntryReads = new WeakMap<
@@ -213,4 +220,47 @@ export function requestSessionEntriesCurrentAdmission(
     requestSessionEntryCurrentAdmission(source, current, {}, (next) => enter(index + 1, next));
   };
   enter(0, request);
+}
+
+/** Canonical entry currency reuses parsed facts only at the same native connection revision. */
+export function readSessionEntryCurrentFacts(
+  request: SessionEntryCurrentWorkerInput,
+): SessionEntryCurrentWorkerResult {
+  const sessionKey = request.scope.sessionKey;
+  assertCanonicalSessionKeyWrite(sessionKey, request.scope.agentId);
+  if (request.source) {
+    if (
+      request.source.path !== request.database.path ||
+      request.source.agentId !== request.database.agentId ||
+      request.source.sessionKey !== sessionKey
+    ) {
+      throw new Error("Session currency request differs from its captured source");
+    }
+    assertSessionEntryCurrentNativeSource(request.source);
+  }
+  const result = withOpenClawAgentDatabaseReadOnly(
+    (database) =>
+      readWithCanonicalSessionReaderContinuation(database, request.continuation, () => {
+        const source = captureSessionEntryReadSource(
+          database,
+          undefined,
+          "Session currency read requires its current durable owner",
+        );
+        if (request.source) {
+          assertSessionEntryCurrentNativeSource(request.source, database);
+        }
+        return {
+          entry: readSessionEntryCurrentFactsInDatabase(database, sessionKey),
+          source,
+        };
+      }),
+    { ...request.database, env: request.scope.env },
+  );
+  if (!result.found && result.reason !== "database-missing") {
+    throw new SessionMetadataUnavailableError(result.reason);
+  }
+  return {
+    kind: "session-entry-current",
+    ...(result.found ? result.value : { entry: undefined }),
+  };
 }

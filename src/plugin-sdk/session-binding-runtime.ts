@@ -11,6 +11,8 @@ import {
 import { warnPluginSdkDeprecation } from "../plugins/sdk-deprecation.js";
 import { projectPluginSessionEntry } from "./session-store-runtime-internal.js";
 
+export type { PreparedSessionSourceAssertion } from "../config/sessions/session-source-authority.js";
+
 /** @deprecated Use captureSessionEntryCurrentCheckAsync; removed in the next Plugin SDK major. */
 export async function captureSessionEntryCurrentCheck(
   params: Parameters<typeof captureSessionEntryCurrentCheckInternal>[0],

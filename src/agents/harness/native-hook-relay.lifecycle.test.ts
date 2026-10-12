@@ -132,8 +132,8 @@ it.each(["deferred outcome", "rejection"] as const)(
 it.each(["policy rejection", "owner closure"] as const)(
   "refuses a native allow after awaited %s",
   async (failure) => {
-    const entered = createDeferredCore<void>();
-    const release = createDeferredCore<void>();
+    const entered = createDeferredCore();
+    const release = createDeferredCore();
     let active = true;
     const relay = registerNativeHookRelay({
       ...relayParams("async-execution-policy"),

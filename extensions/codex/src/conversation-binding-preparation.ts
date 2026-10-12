@@ -407,7 +407,12 @@ async function writeThreadBindingFromResponse(
           networkProxyConfigFingerprint: resolved.runtime.networkProxy?.configFingerprint,
         },
       },
-      composeSessionEntryCommitGuards([requestOptions().assertCurrent, resolved.source]),
+      composeSessionEntryCommitGuards([
+        () => {
+          requestOptions();
+        },
+        resolved.source,
+      ]),
     );
     if (!committed) {
       throw new Error("Codex conversation binding changed while storing its thread.");
