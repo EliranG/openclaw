@@ -96,7 +96,12 @@ test("bounds tool metric series across collections while preserving span paramet
         ] as const) {
           const tool = { toolName: "read", paramsSummary };
           emit({ type: "tool.execution.completed", ...tool, durationMs: 17 });
-          emit({ type: "tool.execution.blocked", ...tool, deniedReason: "policy" });
+          emit({
+            type: "tool.execution.blocked",
+            ...tool,
+            deniedReason: "policy",
+            reason: "Blocked by synthetic policy",
+          });
         }
         await waitForDiagnosticEventsDrained();
         const { resourceMetrics } = await reader.collect();
