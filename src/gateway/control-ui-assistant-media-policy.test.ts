@@ -33,7 +33,8 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("./session-utils.js", () => ({ loadGatewaySessionEntryReadOnly: state.loaded }));
 vi.mock("./http-utils.js", () => ({ authorizeControlUiReadRequestOrReply: state.auth }));
-vi.mock("./session-worker-placement-context.js", () => ({
+vi.mock("./session-worker-placement-context.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./session-worker-placement-context.js")>()),
   resolveSessionWorkerPlacementContext: () => ({
     workerSessionPlacementService: {
       getMany: state.placements,

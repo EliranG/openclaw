@@ -227,7 +227,10 @@ describe("terminal-receipt steer fence isolated-gateway proof (#128971)", () => 
           idempotencyKey: `slow-steer-${durationMs}`,
           queueMode: "steer",
         })) as WireResponse;
-        expect(response).toMatchObject({ ok: true, payload: { status: "started" } });
+        expect(response, JSON.stringify(response.error)).toMatchObject({
+          ok: true,
+          payload: { status: "started" },
+        });
         expect(queueMessage).toHaveBeenCalledOnce();
         expect(dispatchCapture.calls).toBe(0);
         clock = durationMs;
@@ -316,7 +319,7 @@ describe("terminal-receipt steer fence isolated-gateway proof (#128971)", () => 
           20_000,
         )) as WireResponse;
 
-        expect(res.ok).toBe(true);
+        expect(res.ok, JSON.stringify(res.error)).toBe(true);
         expect(res.payload?.status).toBe("started");
         expect(res.payload?.runId).toBe(runId);
         expect(queueMessage).not.toHaveBeenCalled();
@@ -372,7 +375,7 @@ describe("terminal-receipt steer fence isolated-gateway proof (#128971)", () => 
         20_000,
       )) as WireResponse;
 
-      expect(res.ok).toBe(true);
+      expect(res.ok, JSON.stringify(res.error)).toBe(true);
       expect(res.payload?.status).toBe("started");
       expect(queueMessage).toHaveBeenCalledOnce();
       expect(queueMessage.mock.calls[0]?.[0]).toContain("unrelated-tombstone inbound");
