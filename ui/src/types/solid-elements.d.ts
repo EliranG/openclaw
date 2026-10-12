@@ -51,7 +51,7 @@ declare module "@solidjs/web" {
         "prop:measureRatio": () => number;
         "prop:measureSize": () => number;
         onResize: (event: CustomEvent<{ splitRatio: number }>) => void;
-        "onResize-end": () => void;
+        "onResize-end"?: () => void;
       };
       "wa-switch": LegacyAttributes<WaSwitch> & {
         size?: WaSwitch["size"];
@@ -84,6 +84,21 @@ declare module "@solidjs/web" {
           Pick<
             HTMLElementTagNameMap["openclaw-link-reader-hovercard-provider"],
             "client" | "readers" | "agentId" | "previewSeeds"
+          >
+        >;
+      "openclaw-session-owner-chip": HTMLAttributes<
+        HTMLElementTagNameMap["openclaw-session-owner-chip"]
+      > &
+        ElementProperties<Pick<HTMLElementTagNameMap["openclaw-session-owner-chip"], "owner">> & {
+          size?: HTMLElementTagNameMap["openclaw-session-owner-chip"]["size"];
+        };
+      "openclaw-chat-pdf-preview": HTMLAttributes<
+        HTMLElementTagNameMap["openclaw-chat-pdf-preview"]
+      > &
+        ElementProperties<
+          Pick<
+            HTMLElementTagNameMap["openclaw-chat-pdf-preview"],
+            "src" | "sourceIdentity" | "label" | "mimeType" | "sizeBytes"
           >
         >;
       "openclaw-agent-row-chip": HTMLAttributes<HTMLElement> & {

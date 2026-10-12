@@ -183,9 +183,12 @@ export function createControlUiCodeSplitting(options: { includeBootGroups?: bool
                 // them (and therefore other routes) into its eagerly imported chunk.
                 priority: 8 - index,
                 includeDependenciesRecursively: true,
-                // Keep shared chunks together without exceeding the compressed-size budget.
-                minSize: 16 * 1024,
-                maxSize: (route === "shared" ? 1440 : 1408) * 1024,
+                // Shared boot needs a smaller partition cap because its dense chat
+                // modules can exceed the compressed-size budget after regrouping.
+                // Fold small post-port partitions back into their boot parents;
+                // route membership and the maximum chunk size stay unchanged.
+                minSize: 128 * 1024,
+                maxSize: (route === "shared" ? 1280 : 1408) * 1024,
               };
             }),
             ...(["shared", "new", "chat"] as const).map((route) => {

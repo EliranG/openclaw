@@ -36,7 +36,6 @@ import type { SessionOwnerOption } from "./session-owner-chip.ts";
 import type { SidebarMenusController } from "./sidebar-menus-controller.tsx";
 import type { AgentAvatarProps } from "./solid/agent-avatar.tsx";
 import type { ChannelAvatarProps } from "./solid/channel-avatar.tsx";
-import type { SessionOwnerChipProps } from "./solid/session-owner-chip.tsx";
 import type { ViewerAvatarProps, ViewerFacepileProps } from "./solid/viewer-facepile.tsx";
 import "./tooltip.ts";
 
@@ -264,8 +263,6 @@ declare module "@solidjs/web" {
           "prop:replacementCompanion"?: HTMLElementTagNameMap["openclaw-plugin-view"]["replacementCompanion"];
           "prop:defaultHost"?: HTMLElementTagNameMap["openclaw-plugin-view"]["defaultHost"];
         };
-      "openclaw-session-owner-chip": BridgeAttributes<SessionOwnerChipProps> &
-        Partial<Pick<SessionOwnerChipProps, "size" | "attribution">>;
       "openclaw-theme-mode-toggle": HTMLAttributes<
         HTMLElementTagNameMap["openclaw-theme-mode-toggle"]
       > &
