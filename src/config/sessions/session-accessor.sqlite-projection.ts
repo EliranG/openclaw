@@ -20,7 +20,6 @@ import type {
 import {
   captureNativeSessionWorkerDeletion,
   hasPreparedNativeSessionDeletion,
-  runPreparedSqliteSessionWrite,
   runSqliteSessionDeletionTransaction as runOpenClawAgentWriteTransaction,
 } from "./session-accessor.sqlite-deletion.js";
 import { emitArchivedTranscriptUpdates } from "./session-accessor.sqlite-events.js";
@@ -37,6 +36,7 @@ import {
   applySessionEntryMaintenance,
   finalizeSessionEntryMaintenancePlansAfterWriterReleaseBestEffort,
 } from "./session-accessor.sqlite-maintenance.js";
+import { runPreparedSqliteSessionWrite } from "./session-accessor.sqlite-prepared-write.js";
 import { commitProjectedSessionEntryLifecycleMutationInDatabase } from "./session-accessor.sqlite-projection-state.js";
 import { runSqliteSessionReclamation } from "./session-accessor.sqlite-reclamation-run.js";
 import { resolveSessionReclamationDatabaseOptions } from "./session-accessor.sqlite-reclamation.js";
@@ -84,8 +84,6 @@ export async function applySessionEntryLifecycleMutation(
     !params.allowCanonicalRepair &&
     !params.afterUpsertsInTransaction &&
     !params.afterFreshUpsertsInTransaction &&
-    !params.beforeCommitInTransaction &&
-    !params.afterCommitted &&
     supportsOpenClawAgentDatabaseExecution(databaseOptions);
   const reclamationOptions = useWorker
     ? resolveSessionReclamationDatabaseOptions(databaseOptions)
@@ -221,9 +219,12 @@ export async function applySessionEntryLifecycleMutation(
                       assertPrepared: () => {
                         preparedPreservation?.capture();
                       },
-                      assertCandidate: (candidate) =>
-                        assertPreservationCurrent(candidate.result.maintenancePlans),
+                      assertCandidate: (candidate) => {
+                        assertPreservationCurrent(candidate.result.maintenancePlans);
+                        params.beforeCommitInTransaction?.();
+                      },
                       onLifecycleCommitted: params.onLifecycleCommitted,
+                      afterCommitted: params.afterCommitted,
                       input: {
                         agentId: resolved.agentId,
                         projected,
@@ -240,6 +241,7 @@ export async function applySessionEntryLifecycleMutation(
                   assertCommitAllowed: () => {
                     assertCurrent();
                     assertPreservationCurrent();
+                    params.beforeCommitInTransaction?.();
                   },
                   onWorkerResult: (completed) => {
                     if (completed.kind === "lifecycle-projection-commit") {
@@ -263,6 +265,12 @@ export async function applySessionEntryLifecycleMutation(
                   throw new Error(
                     "SQLite lifecycle projection returned an unexpected commit result",
                   );
+                }
+                if (params.afterCommitted && execution) {
+                  await params.afterCommitted({
+                    env: Object.freeze({ ...resolved.env }),
+                    assertCurrent: () => execution.assertCurrent(),
+                  });
                 }
                 return withArchivePublication(result.value);
               }

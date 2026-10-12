@@ -40,6 +40,12 @@ export type {
   UserGitHubDevice,
 } from "./user-github-connections.types.js";
 
+export class UserGitHubConnectionAuthorityChangedError extends Error {
+  constructor() {
+    super("My GitHub connection changed; reload its status.");
+  }
+}
+
 const connectionAuthorities = new Map<string, Map<string, { current: boolean }>>();
 observeUserGitHubConnectionAuthority(({ databasePath, changedOwners }) => {
   const authorities = connectionAuthorities.get(databasePath);
@@ -73,7 +79,7 @@ export async function prepareUserGitHubConnection(owner: string) {
   const assertCurrent = () => {
     context.admission.assertCurrent();
     if (!capturedAuthority.current) {
-      throw new Error("My GitHub connection changed; reload its status.");
+      throw new UserGitHubConnectionAuthorityChangedError();
     }
   };
   const connection = await runOpenClawStateWorkerOperation(

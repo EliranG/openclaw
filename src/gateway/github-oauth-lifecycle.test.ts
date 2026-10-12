@@ -419,12 +419,21 @@ describe("GitHub OAuth authorization lifecycle", () => {
     const lifecycle = createLifecycle();
     const started = await startAuthorization(lifecycle, "system");
     const upstream = deferred<{ status: "authorization_pending" }>();
-    mocks.pollDeviceToken.mockReturnValue(upstream.promise);
+    const pollStarted = deferred();
+    mocks.pollDeviceToken.mockImplementation(() => {
+      pollStarted.resolve();
+      return upstream.promise;
+    });
     await advanceToPoll(started.requestId);
 
     const first = lifecycle.pollAuthorization(started.requestId);
     const second = lifecycle.pollAuthorization(started.requestId);
     expect(second).toBe(first);
+    await awaitGateBeforeSettlement(
+      pollStarted.promise,
+      first,
+      "Device poll settled before exchange",
+    );
     expect(mocks.pollDeviceToken).toHaveBeenCalledOnce();
     upstream.resolve({ status: "authorization_pending" });
     await expect(first).resolves.toMatchObject({ status: "pending" });
@@ -434,10 +443,19 @@ describe("GitHub OAuth authorization lifecycle", () => {
     const lifecycle = createLifecycle();
     const started = await startAuthorization(lifecycle, "system");
     const upstream = deferred<{ status: "authorized"; tokens: typeof TOKENS }>();
-    mocks.pollDeviceToken.mockReturnValue(upstream.promise);
+    const pollStarted = deferred();
+    mocks.pollDeviceToken.mockImplementation(() => {
+      pollStarted.resolve();
+      return upstream.promise;
+    });
     await advanceToPoll(started.requestId);
 
     const result = lifecycle.pollAuthorization(started.requestId);
+    await awaitGateBeforeSettlement(
+      pollStarted.promise,
+      result,
+      "Device poll settled before exchange",
+    );
     expect(await lifecycle.cancelAuthorizationAsync(started.requestId)).toBe(true);
     upstream.resolve({ status: "authorized", tokens: TOKENS });
 
@@ -789,10 +807,19 @@ describe("GitHub OAuth refresh and maintenance", () => {
     currentConfig = configForScope("system", configured);
     await writeGitHubOAuthRecord(oauthRecord(OLD_PROFILE));
     const upstream = deferred<{ status: "refreshed"; tokens: typeof TOKENS }>();
-    mocks.refreshToken.mockReturnValue(upstream.promise);
+    const refreshStarted = deferred();
+    mocks.refreshToken.mockImplementation(() => {
+      refreshStarted.resolve();
+      return upstream.promise;
+    });
     const lifecycle = createLifecycle();
 
     const refresh = lifecycle.refreshEffectiveIdentity("main");
+    await awaitGateBeforeSettlement(
+      refreshStarted.promise,
+      refresh,
+      "Refresh settled before exchange",
+    );
     expect(mocks.refreshToken).toHaveBeenCalledOnce();
     setSelectedIdentity("system", "main", identity(OTHER_PROFILE, { oauth: true }));
     upstream.resolve({ status: "refreshed", tokens: TOKENS });
@@ -863,12 +890,21 @@ describe("GitHub OAuth refresh and maintenance", () => {
     currentConfig = configForScope("system", configured);
     await writeGitHubOAuthRecord(oauthRecord(OLD_PROFILE));
     const upstream = deferred<{ status: "error"; code: "bad_refresh_token" }>();
-    mocks.refreshToken.mockReturnValue(upstream.promise);
+    const refreshStarted = deferred();
+    mocks.refreshToken.mockImplementation(() => {
+      refreshStarted.resolve();
+      return upstream.promise;
+    });
     const lifecycle = createLifecycle();
     const uninstall = installActiveGitHubOAuthLifecycle(lifecycle);
 
     const first = requestCurrentGitHubOAuthRefresh("main");
     const second = requestCurrentGitHubOAuthRefresh("main");
+    await awaitGateBeforeSettlement(
+      refreshStarted.promise,
+      first,
+      "Refresh settled before exchange",
+    );
     expect(mocks.refreshToken).toHaveBeenCalledOnce();
     upstream.resolve({ status: "error", code: "bad_refresh_token" });
     await Promise.all([first, second]);
@@ -938,10 +974,19 @@ describe("GitHub OAuth refresh and maintenance", () => {
     currentConfig = configForScope("system", configured);
     await writeGitHubOAuthRecord(oauthRecord(OLD_PROFILE));
     const upstream = deferred<{ status: "refreshed"; tokens: typeof TOKENS }>();
-    mocks.refreshToken.mockReturnValue(upstream.promise);
+    const refreshStarted = deferred();
+    mocks.refreshToken.mockImplementation(() => {
+      refreshStarted.resolve();
+      return upstream.promise;
+    });
     const lifecycle = createLifecycle();
 
     const refresh = lifecycle.refreshEffectiveIdentity("main");
+    await awaitGateBeforeSettlement(
+      refreshStarted.promise,
+      refresh,
+      "Refresh settled before exchange",
+    );
     expect(mocks.refreshToken).toHaveBeenCalledOnce();
     let stopped = false;
     const stop = lifecycle.stop().then(() => {
