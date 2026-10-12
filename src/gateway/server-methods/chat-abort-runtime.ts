@@ -549,9 +549,6 @@ function prepareChatSessionAbort(
         recordRun(runId);
       }
     }
-    // Hidden and preserved side runs must also block broad cleanup: authorization
-    // alone must not let the callback abort work intentionally excluded above.
-    abortAdditional();
     params.assertCurrent?.();
     if (commands.cancel()) {
       result.aborted = true;
@@ -582,6 +579,9 @@ function prepareChatSessionAbort(
         recordRun(runId);
       }
     }
+    // Commit Gateway cancellation before reply cleanup can make its controller
+    // non-abortable. Protected owners still fence broad lifecycle cleanup.
+    abortAdditional();
     const endedAt = Date.now();
     const stopReason = params.stopReason ?? "rpc";
     for (const [kind, plan] of [
@@ -615,21 +615,20 @@ function prepareChatSessionAbort(
       cancelWorker();
     }
   };
-  const hasOtherWork =
-    [activePlan, queuedPlan, pendingAgent, pendingChat].some((plan) =>
-      plan.matchedRunIds.some((runId) => runId !== selectedRunId),
-    ) ||
-    (hasWorkerRun && (!selectedRunId || !workerCancellation?.runIds.includes(selectedRunId)));
   return {
     canCascade: canRunLifecycleCleanup && !hasUnauthorizedLifecycleOwner,
     commands,
     sessionOrigin,
-    hasOtherWork,
+    hasOtherWork:
+      [activePlan, queuedPlan, pendingAgent, pendingChat].some((plan) =>
+        plan.matchedRunIds.some((runId) => runId !== selectedRunId),
+      ) ||
+      (hasWorkerRun && (!selectedRunId || !workerCancellation?.runIds.includes(selectedRunId))),
     result,
     abort: abortAuthorizedRuns,
     async finish() {
       const abortedRunIds = new Set(result.runIds);
-      const [worker, partial, exec, embedded, ...admitted] = await Promise.allSettled([
+      const settlements = await Promise.allSettled([
         workerCancellationPersistence,
         result.aborted && snapshots.length > 0
           ? persistAbortedPartials({
@@ -642,15 +641,13 @@ function prepareChatSessionAbort(
         ...admittedAbortPersistence,
       ]);
       // A captured session failure can also surface through partial persistence.
-      const failures = new Set<unknown>();
-      for (const settled of [worker, partial, exec, embedded, ...admitted]) {
-        if (settled.status === "rejected") {
-          failures.add(settled.reason);
-        }
-      }
+      const failures = new Set(
+        settlements.flatMap((settled) => (settled.status === "rejected" ? [settled.reason] : [])),
+      );
       if (params.session && !params.session.ok) {
         failures.add(params.session.error);
       }
+      const partial = settlements[1];
       const warning = partial.status === "fulfilled" ? partial.value : undefined;
       if (failures.size > 0) {
         const errors = [...failures];
@@ -726,9 +723,7 @@ export async function abortChatRunsForSessionKeyWithPartials(
     ...result,
     aborted:
       result.aborted ||
-      Boolean(descendants?.killed) ||
-      Boolean(descendants?.continuationRetired) ||
-      Boolean(descendants?.execAborted),
+      Boolean(descendants?.killed || descendants?.continuationRetired || descendants?.execAborted),
     descendants,
     ...(warning ? { warning } : {}),
   };
