@@ -817,16 +817,13 @@ export async function runMemoryFlushIfNeeded(params: {
   );
 
   const forceFlushTranscriptBytes = memoryFlushPlan.forceFlushTranscriptBytes;
-  const shouldCheckTranscriptSizeForForcedFlush = Boolean(
-    entry && Number.isFinite(forceFlushTranscriptBytes) && forceFlushTranscriptBytes > 0,
-  );
   const sessionLogSnapshot = entry
     ? await readSessionLogSnapshot({
         agentId: params.followupRun.run.agentId,
         sessionId: params.followupRun.run.sessionId,
         sessionKey: params.sessionKey ?? params.followupRun.run.sessionKey,
         storePath: params.storePath,
-        includeByteSize: shouldCheckTranscriptSizeForForcedFlush,
+        includeByteSize: asPositiveFiniteNumber(forceFlushTranscriptBytes) !== undefined,
         includeTurnTaint: true,
         includeUsage: shouldReadTranscript,
         abortSignal,
@@ -1024,6 +1021,7 @@ export async function runMemoryFlushIfNeeded(params: {
       preparedRunAdmission,
       modelResolve: {
         prompt: activeMemoryFlushPlan.prompt,
+        awaitSessionDiffBaseline: params.followupRun.runObservers?.awaitSessionDiffBaseline,
         cwd: maintenanceRun.cwd,
         modelSelectionLocked: maintenanceRun.modelSelectionLocked,
         context: buildModelResolveContext({
@@ -1085,6 +1083,7 @@ export async function runMemoryFlushIfNeeded(params: {
         const result = await runtime.runEmbeddedAgent({
           preparedRunAdmission,
           ...runBaseParams,
+          awaitSessionDiffBaseline: params.followupRun.runObservers?.awaitSessionDiffBaseline,
           ...memorySession,
           agentHarnessId: resolveSessionPinnedHarnessId(entry),
           agentHarnessRuntimeOverride: sessionRuntimeOverride,
