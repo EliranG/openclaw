@@ -73,7 +73,18 @@ export class SidebarPinnedSessions implements ReactiveController {
     }
     for (const row of rows) {
       if (!this.rows.has(row.key) && this.requested.get(row.key) !== "settled") {
-        this.rows.set(row.key, { ...row, kind: "direct", updatedAt: null });
+        this.rows.set(row.key, {
+          key: row.key,
+          kind: "direct",
+          updatedAt: null,
+          agentId: row.agentId,
+          label: row.label,
+          icon: row.icon,
+          color: row.color,
+          pinned: row.pinned,
+          archived: row.archived,
+          boardFace: row.boardFace,
+        });
       }
     }
   }
