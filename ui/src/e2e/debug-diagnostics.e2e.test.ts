@@ -204,7 +204,7 @@ suite.define(() => {
           .toContain("432 MB");
         await expect
           .poll(() => overlay.locator(".gateway-vital--cpu").textContent())
-          .toContain("25%");
+          .toContain("0.25 cores");
         await page.clock.runFor(10_000);
         await expect.poll(() => overlay.locator(".gateway-vital--cpu polyline").count()).toBe(1);
         if (captureUiProof) {
@@ -290,7 +290,7 @@ suite.define(() => {
           .toContain("654 MB");
         await expect
           .poll(() => widget.locator(".gateway-vital--cpu").textContent())
-          .toContain("75%");
+          .toContain("0.75 cores");
         await expect
           .poll(async () =>
             Number.parseInt(
@@ -458,7 +458,7 @@ suite.define(() => {
           await page.clock.runFor(10_000);
           await expect
             .poll(() => widget.locator(".gateway-vital--cpu .sparkline-tile__value").textContent())
-            .toContain(`${Math.round(scenario.total * 100)}%`);
+            .toContain(`${scenario.total.toFixed(2)} cores`);
           await expect
             .poll(() => widget.locator(".sparkline-tile__secondary").textContent())
             .toContain(
@@ -563,12 +563,12 @@ suite.define(() => {
         await page.getByRole("button", { name: /^Open overlay/u }).click();
         await expect
           .poll(() => overlay.locator(".gateway-vital--cpu").textContent())
-          .toContain("50%");
+          .toContain("0.50 cores");
         await overlay.getByRole("button", { name: "Minimize system busyness" }).click();
         await widget.waitFor();
         await gateway.setOnline(false);
         await expect.poll(() => widget.textContent()).toContain("Unavailable");
-        expect(await widget.textContent()).not.toContain("50%");
+        expect(await widget.textContent()).not.toContain("0.50 cores");
         expect(await widget.textContent()).not.toContain("654 MB");
         await expect.poll(() => snapshots.textContent()).toContain("Offline");
         await expect
