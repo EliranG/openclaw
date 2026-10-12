@@ -293,9 +293,9 @@ against a synthetic CLI/service, including explicit runtime activation.
 The welcome screen explains what OpenClaw can do and asks where your assistant
 should live:
 
-- **On this computer** installs the CLI when needed and, on Linux, runs fresh installations
-  on the bundled OpenClaw Bun fork, then starts the Gateway as a systemd user
-  service. Release builds install their matching stable version; development builds ask for a release channel
+- **On this computer** installs the CLI when needed and runs fresh Linux and Windows
+  installations on the bundled OpenClaw Bun fork, then starts the Gateway through
+  the platform's service owner. Release builds install their matching stable version; development builds ask for a release channel
   and preselect Development.
 - **On another computer** connects to an existing Gateway without installing or
   starting a local Gateway service. Select a nearby discovered Gateway, enter a

@@ -85,6 +85,17 @@ fn configure_installer_environment(command: &mut Command) {
     command.env_remove("LD_LIBRARY_PATH");
 }
 
+#[cfg(target_os = "windows")]
+fn configure_installer_environment(command: &mut Command) -> Result<(), String> {
+    // Published package checks compare Bun's temporary Node shim paths. Windows
+    // 8.3 TEMP aliases make the same shim look like a different, persistent Node.
+    let temporary = std::fs::canonicalize(std::env::temp_dir())
+        .map_err(|error| format!("Installer temporary directory is unavailable: {error}"))?;
+    let temporary = crate::runtime_action::windows_process_path(&temporary)?;
+    command.env("TEMP", &temporary).env("TMP", &temporary);
+    Ok(())
+}
+
 pub fn install(app: &AppHandle, channel: InstallChannel, fresh: bool) -> Result<(), String> {
     let prefix = openclaw_home().map_err(|error| error.to_string())?;
     let app_version = app.package_info().version.to_string();
@@ -216,6 +227,7 @@ fn install_at(
         let runtime = crate::bundled_runtime::seed(app)?;
         let package_root = prepare_package_root(&prefix)?;
         let mut command = Command::new(&runtime.bun);
+        configure_installer_environment(&mut command)?;
         // This private root has no dev dependencies; Bun rejects --production with --trust.
         command
             .args(["add", "--exact", "--trust"])

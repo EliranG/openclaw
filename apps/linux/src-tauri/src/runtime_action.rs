@@ -608,17 +608,22 @@ fn quote(path: &Path) -> Result<String, String> {
 }
 
 #[cfg(target_os = "windows")]
-fn cmd_quote(path: &Path) -> Result<String, String> {
+pub(crate) fn windows_process_path(path: &Path) -> Result<String, String> {
     let value = path
         .to_str()
         .filter(|value| !value.contains(['\n', '\r', '\0', '"']))
         .ok_or("Runtime paths must be single-line UTF-8 without quotes.")?;
-    // cmd.exe does not accept the extended path prefix returned by canonicalize.
-    let value = if let Some(unc) = value.strip_prefix(r"\\?\UNC\") {
+    // Windows command interpreters do not accept canonicalize's extended prefix.
+    Ok(if let Some(unc) = value.strip_prefix(r"\\?\UNC\") {
         format!(r"\\{unc}")
     } else {
         value.strip_prefix(r"\\?\").unwrap_or(value).to_string()
-    };
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn cmd_quote(path: &Path) -> Result<String, String> {
+    let value = windows_process_path(path)?;
     Ok(format!("\"{}\"", value.replace('%', "%%")))
 }
 
