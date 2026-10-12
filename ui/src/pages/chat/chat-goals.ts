@@ -424,7 +424,9 @@ async function runGoalOperation(
       }
       // Reconcile a lost ACK within this explicit Resume, preserving its durable identity.
       // Rendering or restoring a saved request never starts this retry.
-      await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 1_000);
+      });
       if (
         !targetIsCurrent() ||
         goalOperationTarget(host)?.operation !== operation ||
