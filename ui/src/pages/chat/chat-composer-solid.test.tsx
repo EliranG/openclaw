@@ -1,39 +1,149 @@
-import { render, nothing } from "lit";
-/* @vitest-environment jsdom */
+import { html, render, nothing } from "lit";
 import { createSignal } from "solid-js";
-import { afterEach, expect, it, vi } from "vitest";
+/* @vitest-environment jsdom */
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
+import { captureI18nStateForTesting } from "../../i18n/lib/translate.test-support.ts";
+import { i18n } from "../../i18n/lib/translate.ts";
 import { mountSolid } from "../../test-helpers/mount-solid.ts";
-import { flush } from "../../test-helpers/solid-settle.ts";
+import { flush, waitForSolid } from "../../test-helpers/solid-settle.ts";
 import {
   createComposerContainer,
   createComposerProps,
   resetComposerFixture,
 } from "./chat-composer.test-support.ts";
+import { solidTemplate } from "./components/chat-composer-controls.ts";
 import { renderComposerDictationSendAction } from "./components/chat-composer-controls.tsx";
-import { ChatComposer } from "./components/chat-composer.tsx";
+import { LitContent } from "./components/chat-composer-interop.tsx";
+import { renderChatComposer } from "./components/chat-composer.tsx";
+import { reviewPrivateComposerDraft } from "./components/private-composer-recovery-dialog.tsx";
 import { ComposerDictationController } from "./composer-dictation.ts";
 
 afterEach(() => resetComposerFixture());
 
-function mountComposer(view: Parameters<typeof mountSolid>[0]) {
-  return mountSolid(view, {
-    container: document.body.appendChild(createComposerContainer()),
+function mountComposer(initial: Parameters<typeof renderChatComposer>[0]) {
+  const container = document.body.appendChild(createComposerContainer());
+  let props = initial;
+  const paint = () => render(renderChatComposer(props), container);
+  onTestFinished(() => {
+    render(nothing, container);
   });
+  paint();
+  return {
+    container,
+    update: (next: (previous: typeof props) => typeof props) => {
+      props = next(props);
+      paint();
+    },
+  };
 }
+
+it("updates composer text on a live locale change without disturbing an IME draft", async () => {
+  onTestFinished(captureI18nStateForTesting());
+  await i18n.setLocale("en");
+  const onDraftChange = vi.fn();
+  const props = createComposerProps({
+    assistantName: "Locale fixture",
+    draft: "Unfinished draft",
+    permissionPicker: { canSelectFull: true, onSelect: vi.fn() },
+    onDraftChange,
+  });
+  const view = mountComposer(props);
+  const textarea = view.container.querySelector("textarea")!;
+  const heading = view.container.querySelector(".chat-controls__permission-heading")!;
+  expect(heading.textContent).toBe("Execution permissions");
+  expect(textarea.placeholder).toBe("Message Locale fixture");
+
+  textarea.focus();
+  textarea.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+  textarea.value = "Unfinished 日本語";
+  textarea.setSelectionRange(11, 14);
+  textarea.dispatchEvent(new InputEvent("input", { bubbles: true, isComposing: true }));
+  const writes = vi.spyOn(HTMLTextAreaElement.prototype, "value", "set");
+
+  await i18n.setLocale("de");
+  flush();
+
+  expect(heading.textContent).toBe("Ausführungsberechtigungen");
+  expect(textarea.placeholder).toBe("Nachricht an Locale fixture");
+  expect(view.container.querySelector(".chat-controls__permission-heading")).toBe(heading);
+  expect(view.container.querySelector("textarea")).toBe(textarea);
+  expect(document.activeElement).toBe(textarea);
+  expect(textarea.value).toBe("Unfinished 日本語");
+  expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([11, 14]);
+  expect(writes).not.toHaveBeenCalled();
+  expect(onDraftChange).not.toHaveBeenCalled();
+});
+
+it("updates an existing private draft recovery error when the locale changes", async () => {
+  onTestFinished(captureI18nStateForTesting());
+  await i18n.setLocale("en");
+  const controller = new AbortController();
+  const review = reviewPrivateComposerDraft({
+    text: "Recover this draft",
+    attachments: [{ id: "unavailable", fileName: "draft.txt", mimeType: "text/plain" }],
+    hasGoal: false,
+    pendingReads: 0,
+    isCurrent: () => true,
+    signal: controller.signal,
+  });
+  onTestFinished(async () => {
+    controller.abort();
+    await review;
+  });
+  const download = await waitForSolid(() => {
+    const button = [...document.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent?.trim() === "Download draft.txt",
+    );
+    expect(button).toBeDefined();
+    return button!;
+  });
+  download.click();
+  flush();
+  const error = document.querySelector('[role="alert"]')!;
+  expect(error.textContent).toBe(
+    "This attachment is no longer available to download. Keep the draft open and recover the original file before discarding it.",
+  );
+
+  await i18n.setLocale("de");
+  flush();
+
+  expect(document.querySelector('[role="alert"]')).toBe(error);
+  expect(error.textContent).toBe(
+    "Dieser Anhang kann nicht mehr heruntergeladen werden. Lassen Sie den Entwurf geöffnet und stellen Sie die Originaldatei wieder her, bevor Sie ihn verwerfen.",
+  );
+});
+
+it("mounts nested Solid content when opaque Lit content changes after mount", async () => {
+  const Label = (props: { text: string }) => <b class="nested-label">{props.text}</b>;
+  const [value, setValue] = createSignal<unknown>(html`<i>initial</i>`);
+  const view = mountSolid(() => <LitContent value={value()} />);
+
+  // Composer updates reach LitContent from its render effect, where nested
+  // directives must not create roots without an owner.
+  setValue(html`${solidTemplate(Label, { text: "attached" })}`);
+  flush();
+  await waitForSolid(() =>
+    expect(view.container.querySelector(".nested-label")?.textContent).toBe("attached"),
+  );
+
+  setValue(html`${solidTemplate(Label, { text: "still reactive" })}`);
+  await waitForSolid(() =>
+    expect(view.container.querySelector(".nested-label")?.textContent).toBe("still reactive"),
+  );
+});
 
 it("retains the native input and IME draft across external composer updates", () => {
   let draft = "hello";
   const onDraftChange = vi.fn((value: string) => {
     draft = value;
   });
-  const [current, setCurrent] = createSignal(
+  const view = mountComposer(
     createComposerProps({
       draft,
       getDraft: () => draft,
       onDraftChange,
     }),
   );
-  const view = mountComposer(() => <ChatComposer {...current()} />);
   const textarea = view.container.querySelector("textarea")!;
   const nativeValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!;
   const setValue = vi.spyOn(HTMLTextAreaElement.prototype, "value", "set");
@@ -45,7 +155,7 @@ it("retains the native input and IME draft across external composer updates", ()
   };
 
   edit("hello there");
-  setCurrent((previous) => ({ ...previous, stream: "Streaming a response", runActive: true }));
+  view.update((previous) => ({ ...previous, stream: "Streaming a response", runActive: true }));
   flush();
   expect(view.container.querySelector("textarea")).toBe(textarea);
   expect(textarea.value).toBe("hello there");
@@ -54,7 +164,7 @@ it("retains the native input and IME draft across external composer updates", ()
   textarea.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
   edit("hello 日本語", true);
   onDraftChange.mockClear();
-  setCurrent((previous) => ({
+  view.update((previous) => ({
     ...previous,
     draft: "stale host snapshot",
     stream: "More response",
@@ -73,20 +183,19 @@ it("retains the native input and IME draft across external composer updates", ()
 it("ends the old IME scope without writing into a newly selected session", () => {
   const onOldDraftChange = vi.fn();
   const onNewDraftChange = vi.fn();
-  const [current, setCurrent] = createSignal(
+  const view = mountComposer(
     createComposerProps({
       sessionKey: "first",
       draft: "first draft",
       onDraftChange: onOldDraftChange,
     }),
   );
-  const view = mountComposer(() => <ChatComposer {...current()} />);
   const oldInput = view.container.querySelector("textarea")!;
   oldInput.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
   oldInput.value = "unfinished composition";
   oldInput.dispatchEvent(new InputEvent("input", { bubbles: true, isComposing: true }));
 
-  setCurrent((previous) => ({
+  view.update((previous) => ({
     ...previous,
     sessionKey: "second",
     draft: "second draft",
@@ -117,7 +226,7 @@ it("updates follow-up controls during IME without replacing or writing the input
     followUpMode: "queue",
     onDraftChange,
   });
-  const view = mountComposer(() => <ChatComposer {...props} />);
+  const view = mountComposer(props);
   const textarea = view.container.querySelector("textarea")!;
   expect(view.container.querySelector(".chat-send-btn--stop")).not.toBeNull();
   textarea.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
@@ -136,13 +245,12 @@ it("updates follow-up controls during IME without replacing or writing the input
 
 it("keeps the open permission picker through parent updates", () => {
   const permissionPicker = { canSelectFull: true, onSelect: vi.fn() };
-  const [current, setCurrent] = createSignal(createComposerProps({ permissionPicker }));
-  const view = mountComposer(() => <ChatComposer {...current()} />);
+  const view = mountComposer(createComposerProps({ permissionPicker }));
   const picker = view.container.querySelector<HTMLElement & { open: boolean }>(
     ".chat-controls__permission-picker",
   )!;
   picker.open = true;
-  setCurrent((previous) => ({
+  view.update((previous) => ({
     ...previous,
     stream: "More response",
     permissionPicker: { ...permissionPicker },

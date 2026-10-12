@@ -1,13 +1,13 @@
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 import { icons } from "../../../components/icons.ts";
-import { t } from "../../../i18n/index.ts";
 import {
   getSkillCommandCompletions,
   getSkillDisplayName,
   getSlashCommandDescription,
   type SlashCommandDef,
 } from "../../../lib/chat/commands.ts";
+import { t } from "../../../lib/reactive/i18n.ts";
 import { solidTemplate } from "./chat-composer-controls.ts";
 import { paneDomId } from "./chat-composer-dom.ts";
 import { LitContent } from "./chat-composer-interop.tsx";
@@ -312,10 +312,6 @@ export function SkillMenu(props: { args: Parameters<typeof renderSkillMenuConten
       </ComposerMenu>
     </Show>
   );
-}
-
-export function renderSkillMenuSolid(...args: Parameters<typeof renderSkillMenuContents>) {
-  return <SkillMenu args={args} />;
 }
 
 export function renderSkillMenu(...args: Parameters<typeof renderSkillMenuContents>) {
