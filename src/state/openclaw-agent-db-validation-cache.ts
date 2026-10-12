@@ -42,7 +42,6 @@ import {
 } from "./openclaw-agent-db-resources.js";
 import {
   agentDatabaseValidationKey,
-  readTransferredAgentSchema,
   type OpenClawAgentDatabaseValidation,
 } from "./openclaw-agent-db-validation-facts.js";
 
@@ -332,22 +331,17 @@ function captureValidationTransfer(
   const wasValid = capturedValidation
     ? Atomics.load(new Int32Array(capturedValidation.valid), 0)
     : undefined;
-  return (identity, received) => {
+  return (identity, value) => {
+    const received = agentDatabaseValidationKey.read(value);
     if (
-      !isRecord(received) ||
+      !received ||
       received.agentId !== database.agentId ||
       received.identity !== identity ||
-      typeof received.birthtime !== "string" ||
-      typeof received.receiptId !== "string" ||
-      received.receiptId.length === 0 ||
-      !(received.valid instanceof SharedArrayBuffer) ||
-      received.valid.byteLength !== Int32Array.BYTES_PER_ELEMENT ||
-      !(received.canonicalReady instanceof SharedArrayBuffer) ||
-      received.canonicalReady.byteLength !== Int32Array.BYTES_PER_ELEMENT
+      received.receiptId.length === 0
     ) {
       return "invalid";
     }
-    const schema = readTransferredAgentSchema(received.schema);
+    const schema = received.schema;
     const valid = Atomics.load(new Int32Array(received.valid), 0);
     const schemaValid = schema && Atomics.load(new Int32Array(schema.valid), 0);
     // A raced capture cannot turn a malformed receipt into a retryable refusal.
@@ -411,17 +405,8 @@ function captureValidationTransfer(
       captured.validation.schema = schema;
       return "accepted";
     }
-    const validation = {
-      agentId: database.agentId,
-      identity,
-      birthtime: received.birthtime,
-      receiptId: received.receiptId,
-      valid: received.valid,
-      canonicalReady: received.canonicalReady,
-      schema,
-    };
     if (hasRevokedOpenClawAgentDatabaseValidation(pathname)) {
-      Atomics.store(new Int32Array(validation.canonicalReady), 0, 0);
+      Atomics.store(new Int32Array(received.canonicalReady), 0, 0);
     }
     const aliases =
       captured.validation?.identity === identity
@@ -439,15 +424,15 @@ function captureValidationTransfer(
       // Worker cleanup can revoke one borrowed receipt while independent aliases remain live.
       for (const alias of aliases) {
         const superseded = validatedPaths.get(alias)?.validation;
-        if (superseded && superseded.receiptId !== validation.receiptId) {
+        if (superseded && superseded.receiptId !== received.receiptId) {
           Atomics.store(new Int32Array(superseded.valid), 0, 0);
         }
       }
     }
-    validatedPaths.set(pathname, { validation, integrityVerified: true });
+    validatedPaths.set(pathname, { validation: received, integrityVerified: true });
     // A verified replacement is one physical receipt, including its already-admitted aliases.
     for (const alias of aliases) {
-      validatedPaths.set(alias, { validation, integrityVerified: true });
+      validatedPaths.set(alias, { validation: received, integrityVerified: true });
     }
     return "accepted";
   };

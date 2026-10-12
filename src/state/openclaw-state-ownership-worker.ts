@@ -10,14 +10,15 @@ import {
 import {
   hydrateOpenClawStateWorkerError,
   retainOpenClawStateWorkerErrorPayload,
+  type OpenClawStateWorkerErrorPayload,
 } from "./openclaw-state-worker-error.js";
 
 type OpenClawStateOwnershipWorkerReply =
   | { ok: true; ownershipJson: string }
-  | { ok: false; workerError: unknown };
+  | { ok: false; workerError: OpenClawStateWorkerErrorPayload | undefined };
 
 function readOwnershipWorkerReply(stdout: string, stderr: string): string {
-  let reply: unknown;
+  let reply: OpenClawStateOwnershipWorkerReply;
   try {
     reply = JSON.parse(stdout);
   } catch {

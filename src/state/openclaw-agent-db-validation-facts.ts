@@ -16,9 +16,7 @@ export type OpenClawAgentDatabaseValidation = {
   schema?: { facts: SqliteSchemaFacts; valid: SharedArrayBuffer };
 };
 
-export function readTransferredAgentSchema(
-  value: unknown,
-): OpenClawAgentDatabaseValidation["schema"] {
+function readTransferredAgentSchema(value: unknown): OpenClawAgentDatabaseValidation["schema"] {
   if (!isRecord(value) || !isRecord(value.facts)) {
     return undefined;
   }
