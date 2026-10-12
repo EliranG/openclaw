@@ -135,7 +135,7 @@ describe("CronService failure repair", () => {
           sendCronFailureAlert,
           runCronFailureRepair,
           enqueueSystemEvent,
-          requestHeartbeat,
+          enqueueSessionEvent,
           addJob,
         }) => {
           const started = Promise.withResolvers<void>();
@@ -165,7 +165,7 @@ describe("CronService failure repair", () => {
           expect(runCronFailureRepair).not.toHaveBeenCalled();
           expect(sendCronFailureAlert).not.toHaveBeenCalled();
           expect(enqueueSystemEvent).not.toHaveBeenCalled();
-          expect(requestHeartbeat).not.toHaveBeenCalled();
+          expect(enqueueSessionEvent).not.toHaveBeenCalled();
           expect(cron.getJob(job.id)?.state.autoDisabled).toBeUndefined();
         },
       );
@@ -276,7 +276,7 @@ describe("CronService failure repair", () => {
           sendCronFailureAlert,
           runCronFailureRepair,
           enqueueSystemEvent,
-          requestHeartbeat,
+          enqueueSessionEvent,
           addJob,
         }) => {
           const alertSettled = Promise.withResolvers<void>();
@@ -314,10 +314,10 @@ describe("CronService failure repair", () => {
           });
           expect(runCronFailureRepair).toHaveBeenCalledTimes(repairs);
           expect(sendCronFailureAlert).toHaveBeenCalledTimes(alerts);
-          expect(enqueueSystemEvent).toHaveBeenCalledTimes(notices);
-          expect(requestHeartbeat).toHaveBeenCalledTimes(notices);
+          expect(enqueueSystemEvent).not.toHaveBeenCalled();
+          expect(enqueueSessionEvent).toHaveBeenCalledTimes(notices);
           if (notices) {
-            expect(enqueueSystemEvent).toHaveBeenCalledWith(
+            expect(enqueueSessionEvent).toHaveBeenCalledWith(
               expect.stringContaining("auto-disabled"),
               expect.objectContaining({ contextKey: `cron:${job.id}:auto-disabled` }),
             );
@@ -356,10 +356,10 @@ describe("CronService failure repair", () => {
           expect(runScriptJob).toHaveBeenCalledOnce();
           expect(runCronFailureRepair).toHaveBeenCalledTimes(repairs);
           expect(sendCronFailureAlert).toHaveBeenCalledTimes(alerts);
-          expect(enqueueSystemEvent).toHaveBeenCalledTimes(notices);
-          expect(requestHeartbeat).toHaveBeenCalledTimes(notices);
+          expect(enqueueSystemEvent).not.toHaveBeenCalled();
+          expect(enqueueSessionEvent).toHaveBeenCalledTimes(notices);
           if (notices) {
-            expect(enqueueSystemEvent).toHaveBeenCalledWith(
+            expect(enqueueSessionEvent).toHaveBeenCalledWith(
               expect.stringContaining("auto-disabled"),
               expect.objectContaining({ contextKey: `cron:${job.id}:auto-disabled` }),
             );
