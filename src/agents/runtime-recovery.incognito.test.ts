@@ -30,7 +30,7 @@ import {
   setActiveEmbeddedRun,
 } from "./embedded-agent-runner/runs.js";
 import { createEmbeddedRunHandle, testing } from "./embedded-agent-runner/runs.test-support.js";
-import { captureRestartRecoveryDeliveryCurrent } from "./main-session-recovery/main-session-restart-recovery-delivery.js";
+import { prepareRestartRecoveryDeliveryCurrent } from "./main-session-recovery/main-session-restart-recovery-delivery.js";
 import { retryRestartAbortedMainSessionRecovery } from "./main-session-recovery/main-session-restart-recovery-runtime.js";
 import { resolveAgentRunSessionTarget } from "./run-session-target.js";
 
@@ -282,7 +282,7 @@ it("rechecks delivery policy and exact actor lifetime in retained notice callbac
     restartRecoveryDeliveryContext: deliveryContext,
   });
   await withIncognitoSessionActor(actor, async () => {
-    const isCurrent = captureRestartRecoveryDeliveryCurrent({
+    const { isCurrent, release } = await prepareRestartRecoveryDeliveryCurrent({
       ...target,
       recoveryRunId: "notice-run",
       lifecycleGeneration: getAgentEventLifecycleGeneration(),
@@ -297,6 +297,7 @@ it("rechecks delivery policy and exact actor lifetime in retained notice callbac
       lifecycleRevision: "successor",
     }));
     expect(() => isCurrent()).toThrow("generation is no longer current");
+    release();
   });
 });
 

@@ -83,6 +83,7 @@ describe("repository checkpoint GitHub publication", () => {
       const retiredCoordinator = person.coordinator;
       await restartPersonalPublicationFixture(person);
       const preparedStatus = await person.coordinator.preparePersonalStatus(first.requestId);
+      using _ = { [Symbol.dispose]: () => preparedStatus?.release() };
       const pending = person.coordinator.personalStatus(
         person.action,
         person.action,

@@ -31,7 +31,7 @@ import {
 import type { ChatSessionAbortParams, ChatSessionAbortResult } from "./chat-abort-runtime.types.js";
 import { prepareChatSessionAbort } from "./chat-abort-session-plan.js";
 import {
-  abortedPartialPersistenceError,
+  settleChatAbortPersistence,
   withQueuedCollectorWarning,
   type QueuedCollectorAbortOutcome,
   type ChatAbortSessionSnapshot,
@@ -332,20 +332,7 @@ export async function abortChatRunsForSessionKeyWithPartials(
     failure = { error };
   }
   // Cancellation consumed these buffers before awaited descendant work could fail.
-  let warning: string | undefined;
-  try {
-    warning = await plan.finish();
-  } catch (error) {
-    if (!failure) {
-      throw error;
-    }
-    throw new AggregateError([failure.error, error], "Chat cancellation and persistence failed", {
-      cause: error,
-    });
-  }
-  if (failure) {
-    throw abortedPartialPersistenceError(failure.error, warning);
-  }
+  const warning = await settleChatAbortPersistence(plan.finish, failure);
   return {
     ...result,
     aborted:

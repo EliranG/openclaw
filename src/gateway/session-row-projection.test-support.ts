@@ -248,6 +248,21 @@ export function createSessionRowProjectionFixture(params: {
           }
         : null;
     },
+    readCapabilityEntry(query) {
+      if (query.key !== undefined) {
+        const row = describe(query);
+        return { entry: row?.key === query.key ? row.entry : undefined };
+      }
+      const candidates = [...rows.values()]
+        .filter(
+          (row) => row.agentId === query.agentId && row.storeTarget.storePath === query.storePath,
+        )
+        .toSorted((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
+      const row =
+        candidates.find((candidate) => candidate.entry.sessionId === query.sessionId) ??
+        candidates.find((candidate) => candidate.entry.sessionId.trim() === query.sessionId);
+      return { entry: row?.entry };
+    },
     sharingTargetState(query) {
       const target = projection.sharingTarget(query);
       return target ? { status: "ready", target } : { status: "missing" };

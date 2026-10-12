@@ -54,6 +54,7 @@ export function createRuntime(
 export function setupSessionFixture(request: WorkerSessionPlacementIdentity) {
   beforeEach(async () => {
     const { runtimeFactoryMocks, moveDestinationMocks } = getWorkerPlacementStartupMocks();
+    moveDestinationMocks.prepareGatewaySessionTarget.mockReset();
     const actual = await vi.importActual<
       typeof import("./worker-environments/placement-dispatch.js")
     >("./worker-environments/placement-dispatch.js");
@@ -79,18 +80,20 @@ export function setupSessionFixture(request: WorkerSessionPlacementIdentity) {
       entry,
     );
     const worktree = { id: "workspace", ownerId: request.sessionKey, path: support.testState.root };
-    moveDestinationMocks.getRuntimeConfig.mockReturnValue(support.testState.config);
+    const config = { ...support.testState.config, session: { store: target.storePath } };
+    moveDestinationMocks.getRuntimeConfig.mockReturnValue(config);
     moveDestinationMocks.resolveGatewaySessionTarget.mockReturnValue(target);
     moveDestinationMocks.resolveCanonicalSession.mockReturnValue(entry);
     moveDestinationMocks.findManagedWorktree.mockReturnValue(worktree);
     moveDestinationMocks.resolveSessionTarget.mockResolvedValue({
       assertCurrent: () => {},
       assertBindingCurrent: () => {},
-      config: support.testState.config,
+      config,
       target,
       entry,
       worktree,
       workspace: { kind: "local", path: worktree.path },
+      [Symbol.dispose]: () => {},
     });
   });
   // Later teardown hooks run first, before the service fixture removes this directory.

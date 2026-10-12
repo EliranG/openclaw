@@ -20,6 +20,7 @@ import {
 import { resolveDefaultModelForAgent } from "../agents/model-selection.js";
 import { resolveConfiguredThinkingDefault } from "../agents/model-thinking-default.js";
 import { listOpenAIAuthProfileProvidersForAgentRuntime } from "../agents/openai-routing.js";
+import { resolveSandboxRuntimeStatusAsync } from "../agents/sandbox.js";
 import { resolveSessionRuntimeOverrideForProvider } from "../agents/session-runtime-compat.js";
 import {
   resolveInternalSessionKey,
@@ -610,8 +611,15 @@ export async function buildStatusReplyParts(
           .catch(() => null)
       : undefined,
   ]);
+  const preparedSandboxRuntime = await resolveSandboxRuntimeStatusAsync({
+    cfg,
+    sessionKey,
+    agentId: statusAgentId,
+    preparedSessionEntry: sessionEntry,
+  });
   return buildStatusMessageParts({
     config: cfg,
+    preparedSandboxRuntime,
     preparedTtsPreferences: params.preparedTtsPreferences ?? (await prepareTtsPreferences()),
     agent: {
       ...agentDefaults,

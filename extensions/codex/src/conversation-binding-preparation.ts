@@ -20,8 +20,8 @@ import { readVisibleSessionTranscriptMessageEntries } from "openclaw/plugin-sdk/
 import { resolveCodexAppServerForModelProvider } from "./app-server/app-server-policy.js";
 import { closeCodexStartupClientBestEffort } from "./app-server/attempt-client-cleanup.js";
 import {
-  isCodexAppServerNativeAuthProfile,
   normalizeCodexAppServerBindingModelProvider,
+  resolveModelBackedReviewerPolicyProvider,
   type CodexAppServerAuthProfileLookup,
 } from "./app-server/auth-profile.js";
 import {
@@ -52,7 +52,10 @@ import type {
   CodexThreadStartParams,
   CodexThreadStartResponse,
 } from "./app-server/protocol.js";
-import { resolveCodexNativeExecutionBlock } from "./app-server/sandbox-guard.js";
+import {
+  assertNativeConversationApprovalPolicySupported,
+  resolveCodexNativeExecutionBlock,
+} from "./app-server/sandbox-guard.js";
 import {
   assertCodexBindingMayBeReplaced,
   sessionBindingIdentity,
@@ -94,9 +97,6 @@ import {
   buildCodexConversationAgentLookup,
   resolveThreadRequestModelProvider,
 } from "./conversation-control.js";
-
-const NATIVE_CONVERSATION_INTERACTIVE_APPROVALS_UNAVAILABLE =
-  "OpenClaw native Codex conversation binding cannot route interactive approvals yet; use the Codex harness or explicit /acp spawn codex for that workflow.";
 
 export type CodexConversationConfig = CodexAppServerAuthProfileLookup["config"];
 export async function resolveConversationAppServerRuntime(params: {
@@ -153,6 +153,9 @@ export async function resolveConversationAppServerRuntime(params: {
           ...(selectedById ? { expected: selectedById.entry } : {}),
         })
       : undefined;
+  let transferred = false;
+  using currentCleanup = { [Symbol.dispose]: () => !transferred && current?.release() };
+  void currentCleanup;
   const storedEntry = current?.entry;
   const entry = !source || storedEntry?.sessionId === source.sessionId ? storedEntry : undefined;
   if (source && !entry) {
@@ -169,7 +172,7 @@ export async function resolveConversationAppServerRuntime(params: {
       config: params.config,
       agentId,
       sessionKey,
-      sessionEntry: entry,
+      sessionEntry: entry ?? null,
       readRuntimeSessionEntry: false,
     }),
     surface: "conversation binding",
@@ -202,6 +205,7 @@ export async function resolveConversationAppServerRuntime(params: {
           workspaceDir: agentWorkspaceDir,
         })
       : undefined;
+  using _ = { [Symbol.dispose]: () => sandboxForPolicy?.[Symbol.dispose]?.() };
   const configuredRuntime = resolveCodexAppServerRuntimeOptions({
     pluginConfig: params.pluginConfig,
     execPolicy,
@@ -228,10 +232,10 @@ export async function resolveConversationAppServerRuntime(params: {
     requirementsToml: readCodexRequirementsToml({}),
     execMode: execPolicy.mode,
   });
-  const assertCurrent = current?.assertCurrent ?? (() => {});
-  assertCurrent();
-  return {
-    assertCurrent,
+  current?.assertCurrent();
+  const resolved = {
+    release: current?.release ?? (() => {}),
+    assertCurrent: current?.assertCurrent ?? (() => {}),
     incognito:
       source || sessionKey
         ? entry?.incognito === true || isIncognitoSessionKey(sessionKey)
@@ -252,6 +256,8 @@ export async function resolveConversationAppServerRuntime(params: {
       fallbackCwd: params.workspaceDir,
     }),
   };
+  transferred = true;
+  return resolved;
 }
 
 export const CODEX_CONVERSATION_THREAD_DEVELOPER_INSTRUCTIONS =
@@ -289,11 +295,13 @@ async function resolveThreadBindingRuntime(params: CodexThreadBindingParams) {
     modelProvider: params.modelProvider,
     ...agentLookup,
   });
-  const { runtime, workspaceDir, assertCurrent, incognito } =
+  const { runtime, workspaceDir, assertCurrent, incognito, release } =
     await resolveConversationAppServerRuntime({
       ...params,
       modelProvider: reviewerModelProvider,
     });
+  let transferred = false;
+  using _ = { [Symbol.dispose]: () => !transferred && release() };
   assertNativeConversationApprovalPolicySupported(runtime);
   const clientOptions = {
     assertCurrent,
@@ -302,7 +310,9 @@ async function resolveThreadBindingRuntime(params: CodexThreadBindingParams) {
     authProfileId: params.authProfileId,
     ...agentLookup,
   } satisfies CodexAppServerClientOptions;
+  transferred = true;
   return {
+    release,
     assertCurrent,
     incognito: incognito ?? params.incognito,
     runtime,
@@ -316,7 +326,10 @@ async function resolveThreadBindingRuntime(params: CodexThreadBindingParams) {
 
 export async function buildConversationThreadRequestForClient(
   client: CodexAppServerClient,
-  resolved: ConversationAppServerRuntime & { model?: string; modelProvider?: string },
+  resolved: Omit<ConversationAppServerRuntime, "release"> & {
+    model?: string;
+    modelProvider?: string;
+  },
   serviceTier: CodexServiceTier | null | undefined,
   requestOptions: () => CodexAppServerLeasedRequestOptions,
 ): Promise<CodexThreadStartParams> {
@@ -425,6 +438,8 @@ async function bindThread(params: CodexThreadBindingParams, threadId?: string) {
   const current = await params.bindingStore.readAsync(params.identity);
   assertCodexBindingMayBeReplaced(current, "binding a conversation-bound Codex thread");
   const resolved = await resolveThreadBindingRuntime(params);
+  let transferred = false;
+  using _ = { [Symbol.dispose]: () => !transferred && resolved.release() };
   const clientLease: CodexAppServerClientLease = {
     client: await getLeasedSharedCodexAppServerClient(resolved.clientOptions),
   };
@@ -497,18 +512,8 @@ async function bindThread(params: CodexThreadBindingParams, threadId?: string) {
   } finally {
     releaseCodexAppServerClientLease(clientLease);
   }
-  return resolved.assertCurrent;
-}
-
-export function assertNativeConversationApprovalPolicySupported(
-  runtime: Pick<
-    ReturnType<typeof resolveCodexAppServerRuntimeOptions>,
-    "approvalPolicy" | "approvalsReviewer"
-  >,
-): void {
-  if (runtime.approvalPolicy !== "never" && runtime.approvalsReviewer === "user") {
-    throw new Error(NATIVE_CONVERSATION_INTERACTIVE_APPROVALS_UNAVAILABLE);
-  }
+  transferred = true;
+  return { assertCurrent: resolved.assertCurrent, release: resolved.release };
 }
 
 export async function prepareCodexConversationBinding(
@@ -579,10 +584,12 @@ export async function prepareCodexConversationBinding(
       // Harness threads retain immutable tools, developer instructions, and app
       // policy. Transfer bounded visible history into a fresh bound-only thread.
       const threadId = requested?.threadId;
-      const assertSourceCurrent = await bindThread(
+      const sourceAuthority = await bindThread(
         bindingParams,
         options.forceNew ? undefined : threadId,
       );
+      using _ = { [Symbol.dispose]: sourceAuthority.release };
+      const assertSourceCurrent = sourceAuthority.assertCurrent;
       assertSourceCurrent();
       const stored = await params.bindingStore.readAsync(identity);
       if (!stored) {
@@ -716,17 +723,4 @@ async function projectConversationSourceHistory(
   } finally {
     await clientLease.release();
   }
-}
-
-export async function resolveModelBackedReviewerPolicyProvider(params: {
-  authProfileId?: string;
-  modelProvider?: string;
-  agentDir?: string;
-  config?: CodexAppServerAuthProfileLookup["config"];
-}): Promise<string | undefined> {
-  const modelProvider = params.modelProvider?.trim();
-  if (modelProvider && modelProvider.toLowerCase() !== "codex") {
-    return modelProvider.toLowerCase() === "openai" ? "openai" : modelProvider;
-  }
-  return (await isCodexAppServerNativeAuthProfile(params)) ? "openai" : undefined;
 }

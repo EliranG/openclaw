@@ -10,7 +10,10 @@ import {
   retireUnsafeCodexTurnClientBestEffort,
   unsubscribeCodexThreadBestEffort,
 } from "./app-server/attempt-client-cleanup.js";
-import { normalizeCodexAppServerBindingModelProvider } from "./app-server/auth-profile.js";
+import {
+  normalizeCodexAppServerBindingModelProvider,
+  resolveModelBackedReviewerPolicyProvider,
+} from "./app-server/auth-profile.js";
 import {
   consumeCodexAppServerLiveThread,
   isCodexAppServerClientRuntimeLive,
@@ -28,6 +31,7 @@ import {
   CodexThreadDirectInputError,
 } from "./app-server/protocol-validators.js";
 import type { CodexTurnStartResponse } from "./app-server/protocol.js";
+import { assertNativeConversationApprovalPolicySupported } from "./app-server/sandbox-guard.js";
 import {
   assertCodexBindingMayBeReplaced,
   type CodexAppServerBindingStore,
@@ -57,12 +61,10 @@ import {
 } from "./app-server/turn-router.js";
 import type { CodexAppServerConversationBindingData } from "./conversation-binding-data.js";
 import {
-  assertNativeConversationApprovalPolicySupported,
   buildConversationThreadRequestForClient,
   CODEX_CONVERSATION_THREAD_DEVELOPER_INSTRUCTIONS,
   prepareCodexConversationBinding,
   resolveConversationAppServerRuntime,
-  resolveModelBackedReviewerPolicyProvider,
   type CodexConversationConfig,
 } from "./conversation-binding-preparation.js";
 import {
@@ -118,6 +120,7 @@ async function runBoundTurn(params: {
         runtime,
         workspaceDir,
         assertCurrent,
+        release,
         incognito: sourceIncognito,
       } = await resolveConversationAppServerRuntime({
         pluginConfig: params.pluginConfig,
@@ -130,6 +133,7 @@ async function runBoundTurn(params: {
         model: binding.model,
         agentDir: params.data.agentDir,
       });
+      using _ = { [Symbol.dispose]: release };
       const incognito = sourceIncognito ?? params.incognito;
       const { sessionRoot, approvalPolicy, sandbox } = runtime;
       const permissionProfile = runtime.networkProxy?.profileName;

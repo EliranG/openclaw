@@ -21,6 +21,10 @@ import {
   readActiveTranscriptEntryAnchor,
   replaceSessionEntry,
 } from "../config/sessions/session-accessor.js";
+import {
+  bindPreparedSessionSourceAssertion,
+  prepareSessionSourceAuthority,
+} from "../config/sessions/session-source-authority.js";
 import { runWithSessionTranscriptReadFence } from "../config/sessions/session-transcript-read-fence.js";
 import type { SessionEntry } from "../config/sessions/types.js";
 import { registerChatAbortController } from "../gateway/chat-abort.js";
@@ -41,6 +45,7 @@ import {
   createOperationalRunInstanceRef,
   prepareAgentRunAdmission,
   resolveAdmittedRunActiveAssertion,
+  runWithPreparedRunSourceScope,
 } from "./admitted-run-context.js";
 import {
   buildCurrentRunRestartRecoveryClaim,
@@ -146,11 +151,16 @@ function appendCompletionSource({ target, entry }: Pick<AdmittedCompletion, "tar
   );
 }
 
-function prepareCompletionAdmission(
+async function prepareCompletionAdmission(
   { claim, target }: Pick<AdmittedCompletion, "claim" | "target">,
   operationalRunId = announceId,
 ) {
-  return prepareAgentRunAdmission({
+  const assertion = createHarnessCompletionSourceAssertion({ claim, storePath: target.storePath });
+  const source = bindPreparedSessionSourceAssertion(
+    assertion,
+    await prepareSessionSourceAuthority(assertion),
+  );
+  const admission = prepareAgentRunAdmission({
     cfg: {},
     facts: {
       agentId: "main",
@@ -158,11 +168,15 @@ function prepareCompletionAdmission(
       ingress: { kind: "system", boundary: "test-harness-completion", state: "present" },
     },
     operationalRunInstance: createOperationalRunInstanceRef(operationalRunId),
-    assertSourceCurrent: createHarnessCompletionSourceAssertion({
-      claim,
-      storePath: target.storePath,
-    }),
+    assertSourceCurrent: source,
   });
+  return {
+    ...admission,
+    async close() {
+      admission.close();
+      await source.release();
+    },
+  };
 }
 
 describe("host-owned harness completion recovery", () => {
@@ -178,14 +192,18 @@ describe("host-owned harness completion recovery", () => {
           ...entry,
           restartRecoveryDeliveryRunId: recoveryRunId,
         });
-        const admission = prepareCompletionAdmission({ claim, target }, recoveryRunId);
+        const admission = await prepareCompletionAdmission({ claim, target }, recoveryRunId);
         try {
           const context = await admission.admit("embedded");
-          const effect = resolveAdmittedRunActiveAssertion(context);
-          if (!effect) {
+          const assertEffect = resolveAdmittedRunActiveAssertion(context);
+          if (!assertEffect) {
             throw new Error("Source effect was not captured.");
           }
-          effect();
+          const effect = () =>
+            runWithPreparedRunSourceScope({ admittedRunContext: context }, async () =>
+              assertEffect(),
+            );
+          await effect();
           if (phase === "reset") {
             await appendTranscriptEvent(transcript, {
               type: "reset",
@@ -208,17 +226,17 @@ describe("host-owned harness completion recovery", () => {
             if (!anchor) {
               throw new Error("Missing admission fence anchor.");
             }
-            expect(() =>
+            await expect(
               runWithSessionTranscriptReadFence(
                 { ...anchor, logicalTurnId: recoveryRunId, role: "user" },
                 effect,
               ),
-            ).not.toThrow();
+            ).resolves.toBeUndefined();
           } else {
-            expect(effect).toThrow();
+            await expect(effect()).rejects.toThrow();
           }
         } finally {
-          admission.close();
+          await admission.close();
         }
       });
     },
@@ -229,24 +247,28 @@ describe("host-owned harness completion recovery", () => {
     async (phase) => {
       await withOpenClawTestState({ scenario: "minimal" }, async (state) => {
         const { claim, target, entry } = await admit(state);
-        const admission = prepareCompletionAdmission({ claim, target });
+        const admission = await prepareCompletionAdmission({ claim, target });
         try {
           if (phase === "before-admission") {
             await replaceSessionEntry(target, { ...entry, lifecycleRevision: "revoked-revision" });
             await expect(admission.admit("embedded")).rejects.toThrow();
           } else {
             const context = await admission.admit("embedded");
-            const effect = resolveAdmittedRunActiveAssertion(context);
-            expect(effect).toBeDefined();
-            if (!effect) {
+            const assertEffect = resolveAdmittedRunActiveAssertion(context);
+            expect(assertEffect).toBeDefined();
+            if (!assertEffect) {
               throw new Error("Source effect was not captured.");
             }
-            effect();
+            const effect = () =>
+              runWithPreparedRunSourceScope({ admittedRunContext: context }, async () =>
+                assertEffect(),
+              );
+            await effect();
             await replaceSessionEntry(target, { ...entry, lifecycleRevision: "revoked-revision" });
-            expect(effect).toThrow();
+            await expect(effect()).rejects.toThrow();
           }
         } finally {
-          admission.close();
+          await admission.close();
         }
       });
     },

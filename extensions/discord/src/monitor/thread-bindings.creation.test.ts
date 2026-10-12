@@ -208,7 +208,7 @@ describe("thread binding creation and ACP startup reconciliation", () => {
       metadata: { pluginBindingOwner: "plugin", pluginId: "owner" },
     });
     hoisted.readAcpSessionEntry.mockImplementation(
-      ({ sessionKey: key }: { sessionKey: string }) => {
+      async ({ sessionKey: key }: { sessionKey: string }) => {
         const entry = session(key);
         return key === sessionKey("healthy")
           ? { ...entry, acp: { ...entry.acp, state: "error" } }

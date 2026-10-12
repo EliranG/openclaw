@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   ErrorCodes,
   errorShape,
@@ -13,7 +14,9 @@ import {
   type SkillLibrarySelection,
 } from "../../../packages/gateway-protocol/src/index.js";
 import { patchSessionEntryCore } from "../../config/sessions/session-accessor.js";
+import { retainPreparedSessionEntryPredicate } from "../../config/sessions/session-accessor.sqlite-entry-cache-publication-state.js";
 import { getSessionActorStorageBinding } from "../../config/sessions/session-actor-storage-binding.js";
+import { captureSessionEntryCurrentCheckInternal } from "../../config/sessions/session-entry-current-check.js";
 import { captureSessionEntrySourceAssertion } from "../../config/sessions/session-entry-source-authority.js";
 import { captureIncognitoSessionBinding } from "../../config/sessions/session-incognito-binding.js";
 import {
@@ -21,6 +24,7 @@ import {
   composeSessionSourceAssertion,
   type SessionSourceAssertion,
 } from "../../config/sessions/session-source-authority.js";
+import { isIncognitoSessionKey } from "../../routing/session-key.js";
 import { importSkillLibrary, uploadSkillLibrary } from "../../skills/library/import.js";
 import {
   assertPreparedSkillLibrarySelection,
@@ -35,20 +39,28 @@ import { captureSkillLibraryAccess } from "../../skills/library/store-access.js"
 import { projectSkillLibraryList, type SkillLibraryAuthority } from "../../skills/library/store.js";
 import { SkillLibraryError } from "../../skills/skill-library-error.js";
 import { resolvePluginSessionOwnershipError } from "../session-plugin-ownership.js";
+import { resolveSessionMutationAuthorizationAsync } from "../session-sharing-authorization-async.js";
 import {
   captureIncognitoSessionMutationFacts,
   captureSessionActorMutationFacts,
 } from "../session-sharing-incognito.js";
 import type { SessionSharingTarget } from "../session-sharing-policy.js";
-import { captureSessionMutationRouting } from "../session-sharing-preparation.js";
+import {
+  captureSessionMutationRouting,
+  prepareSessionMutationFacts,
+} from "../session-sharing-preparation.js";
+import {
+  prepareProjectedSessionSharing,
+  prepareSessionSharingProfiles,
+} from "../session-sharing-read.js";
 import { prepareSessionSharingSource } from "../session-sharing-source.js";
 import {
   authorizeSessionSharingTarget,
-  resolveSessionMutationAuthorization,
   resolveSessionSharingTargetAsync,
   resolveSessionSharingTarget,
   SessionMutationAuthorizationChangedError,
 } from "../session-sharing.js";
+import { resolveSessionStoreIdentity } from "../session-store-key.js";
 import { captureGatewayClientUploadCommitGuard } from "../upload-policy.js";
 import type { GatewayRequestHandlerOptions, GatewayRequestHandlers } from "./types.js";
 import { defineValidatedGatewayHandler } from "./validation.js";
@@ -93,7 +105,7 @@ export async function activateLibrarySelection(
   params: SkillsLibraryActivateParams,
 ) {
   const { client, context } = options;
-  const authorization = resolveSessionMutationAuthorization({
+  const authorization = await resolveSessionMutationAuthorizationAsync({
     client,
     context,
     method: "skills.library.activate",
@@ -102,32 +114,15 @@ export async function activateLibrarySelection(
   if (authorization.error) {
     throw new SessionMutationAuthorizationChangedError(authorization.error);
   }
-  const resolveTarget = () =>
-    resolveSessionSharingTarget({
-      cfg: context.getRuntimeConfig(),
-      sessionKey: params.sessionKey,
-    });
-  const selected =
-    getSessionActorStorageBinding({ sessionKey: params.sessionKey }) ||
-    captureIncognitoSessionBinding({ sessionKey: params.sessionKey })
-      ? await selectedSession(options, params.sessionKey)
-      : undefined;
+  const selected = await selectedSession(options, params.sessionKey);
   try {
-    const target =
-      selected?.target ??
-      (await resolveSessionSharingTargetAsync({
-        cfg: context.getRuntimeConfig(),
-        sessionKey: params.sessionKey,
-      }));
-    if (!target) {
-      throw new SkillLibraryError("NOT_FOUND", "Session not found.");
-    }
+    const target = selected.target;
     const authority = libraryAuthority(options);
     let plannedSelections: SkillLibrarySelection[] | undefined;
     const sessionChanged = () =>
       new SkillLibraryError("CONFLICT", "Session changed before activation; refresh and retry.");
     const source =
-      selected?.source ??
+      selected.source ??
       captureSessionEntrySourceAssertion({
         scope: {
           agentId: target.agentId,
@@ -141,7 +136,10 @@ export async function activateLibrarySelection(
           throw sessionChanged();
         },
         assertCurrent: () => {
-          const current = resolveTarget();
+          const current = resolveSessionSharingTarget({
+            cfg: context.getRuntimeConfig(),
+            sessionKey: params.sessionKey,
+          });
           if (
             !current ||
             current.entry.sessionId !== target.entry.sessionId ||
@@ -151,14 +149,14 @@ export async function activateLibrarySelection(
           ) {
             throw sessionChanged();
           }
-          const ownershipError = resolvePluginSessionOwnershipError({
+          const error = resolvePluginSessionOwnershipError({
             action: "patch",
             entry: current.entry,
             key: current.canonicalKey,
             pluginOwnerId: client?.internal?.pluginRuntimeOwnerId,
           });
-          if (ownershipError) {
-            throw new SessionMutationAuthorizationChangedError(ownershipError);
+          if (error) {
+            throw new SessionMutationAuthorizationChangedError(error);
           }
         },
       });
@@ -201,6 +199,98 @@ async function selectedSession(options: SkillLibraryRequestOwner, sessionKey: st
   const sourceCfg = options.context.getRuntimeConfig();
   const memory = getSessionActorStorageBinding({ sessionKey });
   const binding = memory ? undefined : captureIncognitoSessionBinding({ sessionKey });
+  if (!memory && !binding && !isIncognitoSessionKey(sessionKey)) {
+    const profiles = await prepareSessionSharingProfiles(options.client);
+    const { agentId } = resolveSessionStoreIdentity({ cfg: sourceCfg, sessionKey });
+    const facts = await prepareSessionMutationFacts({ cfg: sourceCfg, sessionKey, agentId });
+    let entryRead: Awaited<ReturnType<typeof captureSessionEntryCurrentCheckInternal>> | undefined;
+    let pins: ReturnType<typeof retainPreparedSessionEntryPredicate> | undefined;
+    try {
+      const identity = facts.readCurrent(sourceCfg).target;
+      entryRead = await captureSessionEntryCurrentCheckInternal({
+        agentId: identity.agentId,
+        sessionKey: identity.storeKey,
+        storePath: identity.readSource?.path ?? identity.storePath,
+        fields: ["pluginOwnerId"],
+        errorMessage: "Session selection changed; refresh and retry.",
+      });
+      const entry = entryRead.entry;
+      const readSource = identity.readSource;
+      if (!entry || !readSource || typeof readSource.databaseIdentity !== "string") {
+        throw new SkillLibraryError("NOT_FOUND", "Session not found.");
+      }
+      pins = retainPreparedSessionEntryPredicate({
+        databaseIdentity: `file:${readSource.databaseIdentity}`,
+        sessionKey: identity.storeKey,
+        entry,
+        matches: (_before, after) =>
+          isDeepStrictEqual(entry.skillLibrarySelections, after?.skillLibrarySelections),
+      });
+      const currentTarget = () => {
+        entryRead!.assertCurrent();
+        const cfg = options.context.getRuntimeConfig();
+        const current = facts.readCurrent(cfg);
+        if (
+          !current.target ||
+          current.target.entry.sessionId !== entry.sessionId ||
+          current.target.entry.lifecycleRevision !== entry.lifecycleRevision
+        ) {
+          throw new SkillLibraryError("CONFLICT", "Session selection changed; refresh and retry.");
+        }
+        const sharing = prepareProjectedSessionSharing({
+          cfg,
+          client: options.client,
+          profiles,
+          isMember: (_target, id) => current.membership.has(id),
+        });
+        const error = sharing.authorizeTarget(current.target);
+        if (error) {
+          throw new SessionMutationAuthorizationChangedError(error);
+        }
+        return { ...current.target, entry };
+      };
+      const target = currentTarget();
+      const assertMutationCurrent = () => {
+        const current = currentTarget();
+        const error = resolvePluginSessionOwnershipError({
+          action: "patch",
+          entry: current.entry,
+          key: current.canonicalKey,
+          pluginOwnerId: options.client?.internal?.pluginRuntimeOwnerId,
+        });
+        if (error) {
+          throw new SessionMutationAuthorizationChangedError(error);
+        }
+      };
+      const source = composeSessionSourceAssertion([entryRead.assertCurrent], (assertSources) => {
+        assertSources();
+        assertMutationCurrent();
+      });
+      return {
+        target,
+        source,
+        assertCurrent() {
+          currentTarget();
+          if (!pins!.isCurrent()) {
+            throw new SkillLibraryError(
+              "CONFLICT",
+              "Session selection changed; refresh and retry.",
+            );
+          }
+        },
+        release() {
+          pins!.release();
+          entryRead!.release();
+          facts.release();
+        },
+      };
+    } catch (error) {
+      pins?.release();
+      entryRead?.release();
+      facts.release();
+      throw error;
+    }
+  }
   const actorFacts = memory
     ? captureSessionActorMutationFacts(memory, sessionKey, true)
     : binding && captureIncognitoSessionMutationFacts(binding, sessionKey, true);

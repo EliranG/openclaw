@@ -2,9 +2,10 @@ import {
   getReplyPayloadMetadata,
   isReplyPayloadSessionWriterDeliveryAuthorized,
   type ReplyPayload,
+  type SessionWriterDeliveryAuthority,
 } from "../../auto-reply/reply-payload.js";
+import { prepareSessionWriterDeliveryAuthority } from "../../auto-reply/reply/session-writer-delivery-authority.js";
 import type { ChatAbortControllerEntry } from "../chat-abort.types.js";
-import { loadSessionEntry } from "../session-utils.js";
 import { captureWebchatReplyMediaScope } from "./chat-reply-media.js";
 import type { PreparedChatSendSession } from "./chat-send-session.js";
 import type { GatewayRequestContext } from "./types.js";
@@ -19,27 +20,48 @@ export type ChatSendReplyFinalizationParams = {
   session: Pick<
     PreparedChatSendSession,
     "agentId" | "backingSessionId" | "cfg" | "clientRunId" | "sessionKey" | "sessionLoadOptions"
-  >;
+  > & { storePath?: string };
 };
 
-export function createChatSendReplyFinalizationAuthority(
+export async function createChatSendReplyFinalizationAuthority(
   params: ChatSendReplyFinalizationParams & { isCurrent?: () => boolean },
   payloads: readonly ReplyPayload[],
   onUnauthorized?: () => void,
 ) {
   const { cfg, sessionKey, agentId, sessionLoadOptions } = params.session;
+  const prepared = new Map<
+    SessionWriterDeliveryAuthority,
+    Awaited<ReturnType<typeof prepareSessionWriterDeliveryAuthority>>
+  >();
+  try {
+    for (const payload of payloads) {
+      const authority = getReplyPayloadMetadata(payload)?.sessionWriterDeliveryAuthority;
+      if (authority && !prepared.has(authority)) {
+        const ownerAgentId = authority.agentId ?? agentId;
+        prepared.set(
+          authority,
+          await prepareSessionWriterDeliveryAuthority(
+            { ...authority, agentId: ownerAgentId },
+            ownerAgentId === agentId ? params.session.storePath : undefined,
+          ),
+        );
+      }
+    }
+  } catch (error) {
+    for (const current of prepared.values()) {
+      current.release();
+    }
+    throw error;
+  }
+  const mediaScopes: Awaited<ReturnType<typeof captureWebchatReplyMediaScope>>[] = [];
   const deliveryAuthorized = () =>
     (!params.isCurrent || params.isCurrent()) &&
     payloads.every((payload) => {
       const authority = getReplyPayloadMetadata(payload)?.sessionWriterDeliveryAuthority;
-      if (!authority) {
-        return true;
-      }
-      const current = loadSessionEntry(authority.sessionKey, {
-        ...sessionLoadOptions,
-        ...(authority.agentId || agentId ? { agentId: authority.agentId ?? agentId } : {}),
-      }).entry;
-      return isReplyPayloadSessionWriterDeliveryAuthorized(payload, current);
+      return isReplyPayloadSessionWriterDeliveryAuthorized(
+        payload,
+        authority ? prepared.get(authority)?.authority?.readCurrentSession?.() : undefined,
+      );
     });
   return {
     deliveryAuthorized,
@@ -53,8 +75,16 @@ export function createChatSendReplyFinalizationAuthority(
       onUnauthorized?.();
       return false;
     },
-    captureMediaScope: () =>
-      captureWebchatReplyMediaScope({
+    release: () => {
+      for (const scope of mediaScopes) {
+        scope.release();
+      }
+      for (const current of prepared.values()) {
+        current.release();
+      }
+    },
+    captureMediaScope: async () => {
+      const scope = await captureWebchatReplyMediaScope({
         cfg,
         sessionKey,
         agentId,
@@ -66,6 +96,9 @@ export function createChatSendReplyFinalizationAuthority(
             throw new Error("Chat media delivery is no longer authorized.");
           }
         },
-      }),
+      });
+      mediaScopes.push(scope);
+      return scope;
+    },
   };
 }

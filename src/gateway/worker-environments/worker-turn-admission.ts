@@ -34,7 +34,7 @@ import {
 import { ActiveTurnClaimError } from "./placement-turn-claims.js";
 import type { WorkerRuntimeRefreshInFlight } from "./provider-runtime-refresh.js";
 import type { WorkerEnvironmentService } from "./service.js";
-import { captureWorkerTurnTranscriptSource } from "./worker-turn-transcript-target.js";
+import { prepareWorkerTurnTranscriptSource } from "./worker-turn-transcript-target.js";
 import {
   projectWorkspaceResultConflict,
   type WorkerWorkspaceResultConflict,
@@ -178,7 +178,11 @@ export async function waitForInitialWorkerPlacement(params: {
     signal?: AbortSignal,
   ) => Promise<WorkerSessionPlacementRecord>;
   assertRunCurrent?: () => void;
-}): Promise<{ placement: ActiveWorkerPlacement; assertCurrent: () => void }> {
+}): Promise<{
+  placement: ActiveWorkerPlacement;
+  assertCurrent: () => void;
+  release: () => Promise<void>;
+}> {
   const identity = resolvePlacementIdentity(params.turn, params.placement);
   const target = {
     ...identity,
@@ -195,7 +199,7 @@ export async function waitForInitialWorkerPlacement(params: {
     throw createAbortError("Session changed while waiting for worker setup");
   };
   const source = original
-    ? captureWorkerTurnTranscriptSource(target, {
+    ? await prepareWorkerTurnTranscriptSource(target, {
         fields: ["sessionId", "archivedAt", "lifecycleRevision", "activeWriterRunId"],
         expected: {
           sessionId: identity.sessionId,
@@ -205,36 +209,42 @@ export async function waitForInitialWorkerPlacement(params: {
         },
         refuse: refuseSession,
       })
-    : refuseSession;
-  const assertSessionCurrent = composeSessionSourceAssertion(
-    [params.assertRunCurrent, source],
-    (assertSources) => {
-      params.turn.abortSignal?.throwIfAborted();
-      assertSources();
-    },
-  );
-  const completed = await params.wait(params.placement, params.turn.abortSignal);
-  // Setup completion is a notification, not authority: read the durable owner again.
-  let placement = completed;
-  const assertCurrent = composeSessionSourceAssertion([assertSessionCurrent], (assertSession) => {
-    assertSession();
-    const current = params.placements.get(identity.sessionId);
-    if (
-      !current ||
-      !matchesWorkerPlacementTarget(current, completed) ||
-      current.sessionKey !== identity.sessionKey ||
-      current.agentId !== identity.agentId ||
-      current.executionMode !== params.placement.executionMode
-    ) {
-      throw createAbortError("Worker placement changed while waiting for setup");
-    }
-    placement = current;
-  });
-  assertCurrent();
-  return {
-    placement: requireActivePlacement(placement),
-    assertCurrent,
-  };
+    : refuseSession();
+  try {
+    const assertSessionCurrent = composeSessionSourceAssertion(
+      [params.assertRunCurrent, source],
+      (assertSources) => {
+        params.turn.abortSignal?.throwIfAborted();
+        assertSources();
+      },
+    );
+    const completed = await params.wait(params.placement, params.turn.abortSignal);
+    // Setup completion is a notification, not authority: read the durable owner again.
+    let placement = completed;
+    const assertCurrent = composeSessionSourceAssertion([assertSessionCurrent], (assertSession) => {
+      assertSession();
+      const current = params.placements.get(identity.sessionId);
+      if (
+        !current ||
+        !matchesWorkerPlacementTarget(current, completed) ||
+        current.sessionKey !== identity.sessionKey ||
+        current.agentId !== identity.agentId ||
+        current.executionMode !== params.placement.executionMode
+      ) {
+        throw createAbortError("Worker placement changed while waiting for setup");
+      }
+      placement = current;
+    });
+    assertCurrent();
+    return {
+      placement: requireActivePlacement(placement),
+      assertCurrent,
+      release: () => source.release(),
+    };
+  } catch (error) {
+    await source.release();
+    throw error;
+  }
 }
 
 export function latestDurableWorkspaceConflict(

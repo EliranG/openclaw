@@ -531,6 +531,7 @@ async function runEmbeddedAttemptOwned(
           }
         });
       } finally {
+        setup[Symbol.dispose]();
         externalAbortController.dispose();
       }
     };

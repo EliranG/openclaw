@@ -36,6 +36,15 @@ extension/provider adapters share the session-persistence warning budget.
 
 ### Retained helper contracts
 
+`openclaw/plugin-sdk/sandbox.resolveSandboxRuntimeStatus` is deprecated. Await
+`resolveSandboxRuntimeStatusAsync` for a session lookup, or use
+`resolvePreparedSandboxRuntimeStatus` with an already selected full session entry
+(or `null` for acknowledged absence). The synchronous adapter retains its old
+behavior and emits one bounded `sandbox-runtime-status` warning per plugin. It
+will be removed in the next Plugin SDK major. Bundled execution paths prepare
+policy through the session worker and retain its authority through the effect;
+this migration changes no schema, retention, or update behavior.
+
 Transcript append and lock preparation now uses
 [`preparation.prepareMessage`, `preparation.source`, and `withSessionTranscriptWrite`](/plugins/sdk-migration/how-to-migrate#await-locked-transcript-preparation).
 The `transcript-lock-sync-message-preparation` and

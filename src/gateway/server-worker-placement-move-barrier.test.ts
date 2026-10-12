@@ -127,6 +127,7 @@ describe("worker placement move destination", () => {
           target,
           worktree: { id: "research-worktree", path: "/gateway/research" },
           workspace: { kind: "local", path: "/gateway/research" },
+          [Symbol.dispose]: () => {},
         });
         const entered = createDeferred();
         const release = createDeferred();

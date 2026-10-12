@@ -238,6 +238,8 @@ export function createGitHubPublicationCoordinatorMethods(params: {
       sessionKey: input.sessionKey,
       agentId: input.agentId,
     });
+    using _ = { [Symbol.dispose]: () => initialAuthority.release() };
+
     const loaded = initialAuthority.loaded;
     const lifecycleRevision = loaded.entry?.lifecycleRevision ?? null;
     const session = {
@@ -314,11 +316,7 @@ export function createGitHubPublicationCoordinatorMethods(params: {
       );
     }
     const deferred = placement !== undefined && placement.state !== "local";
-    const worktreeOwner = await readGitHubPublicationWorktreeOwner({
-      sessionId,
-      sessionKey: session.sessionKey,
-      agentId: session.agentId,
-    });
+    const worktreeOwner = initialAuthority;
     const { worktree } = worktreeOwner;
     assertRequester();
     const requestDigest = digestRequest({
@@ -333,7 +331,10 @@ export function createGitHubPublicationCoordinatorMethods(params: {
         idempotencyKey: input.idempotencyKey,
       });
     const existing = workerRequester
-      ? await readGitHubPublicationRequestAsync({ sessionId, idempotencyKey: input.idempotencyKey })
+      ? await readGitHubPublicationRequestAsync({
+          sessionId,
+          idempotencyKey: input.idempotencyKey,
+        })
       : readRequest();
     if (existing) {
       if (existing.request_digest !== requestDigest || !sameWorktree(existing, worktree)) {

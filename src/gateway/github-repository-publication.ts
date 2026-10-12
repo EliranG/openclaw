@@ -217,6 +217,8 @@ export function createRepositoryGitHubPublicationCoordinator(params: {
       agentId: input.agentId,
     };
     const currentOwner = await prepareRepositoryOwner(session);
+    using _ = { [Symbol.dispose]: () => currentOwner.release() };
+
     const initial = currentOwner();
     const assertCurrent = () => {
       requester.assertCurrent();
@@ -319,8 +321,7 @@ export function createRepositoryGitHubPublicationCoordinator(params: {
   };
   const methods = {
     async requestForClaim(input: GitHubPublicationClaimRequest) {
-      const expected = input.expectedPublisher;
-      if (expected?.source === "personal") {
+      if (input.expectedPublisher?.source === "personal") {
         throw new Error("My GitHub publication requires direct personal authorization.");
       }
       const row = await admitShared(
@@ -328,12 +329,12 @@ export function createRepositoryGitHubPublicationCoordinator(params: {
           ...input,
           selection: {
             source: "shared",
-            ...(expected
+            ...(input.expectedPublisher
               ? {
                   expected: {
-                    source: expected.source,
-                    accountId: expected.accountId,
-                    login: expected.login,
+                    source: input.expectedPublisher.source,
+                    accountId: input.expectedPublisher.accountId,
+                    login: input.expectedPublisher.login,
                   },
                 }
               : {}),
@@ -413,6 +414,8 @@ export function createRepositoryGitHubPublicationCoordinator(params: {
       if (existing) {
         assertPersonalGitHubPublicationReplay(existing, input, selected);
         const prepared = await preparePersonalStatus(existing.request_id);
+        using _ = { [Symbol.dispose]: () => prepared?.release() };
+
         const row =
           "version" in action
             ? await readRepositoryGitHubPublicationAsync(existing.request_id)
@@ -436,6 +439,8 @@ export function createRepositoryGitHubPublicationCoordinator(params: {
         action,
         async (assertReservation) => {
           const currentOwner = await prepareRepositoryOwner(action);
+          using _ = { [Symbol.dispose]: () => currentOwner.release() };
+
           const initial = currentOwner();
           const assertCurrent = () => {
             action.assertCurrent();
@@ -546,6 +551,8 @@ export function createRepositoryGitHubPublicationCoordinator(params: {
         return null;
       }
       const prepared = await preparePersonalStatus(row.request_id);
+      using _ = { [Symbol.dispose]: () => prepared?.release() };
+
       const current = await readRepositoryGitHubPublicationAsync(row.request_id);
       action.assertCurrent();
       if (!current) {

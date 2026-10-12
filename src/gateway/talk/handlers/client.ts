@@ -199,6 +199,7 @@ export const talkClientHandlers: GatewayRequestHandlers = {
                   sessionKey: target.canonicalKey,
                   storePath: target.storePath,
                   sessionId: entry.sessionId,
+                  entry,
                   lifecycleRevision: entry.lifecycleRevision,
                   readSource,
                 }),

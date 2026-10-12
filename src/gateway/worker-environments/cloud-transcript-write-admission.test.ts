@@ -25,9 +25,23 @@ import {
   turn,
   unusedEnvironments,
 } from "./worker-turn-launcher.test-support.js";
+import { withWorkerTurnTranscriptDatabase } from "./worker-turn-transcript-target.js";
 import { createWorkerWorkspaceOperationCoordinator } from "./workspace-operation-coordinator.js";
-import { reconcileWorkspaceAfterTurn } from "./workspace-result-finalize.js";
+import { reconcileWorkspaceAfterTurn as reconcileWorkspaceAfterTurnCore } from "./workspace-result-finalize.js";
 import * as resultStaging from "./workspace-result-staging.js";
+
+function reconcileWorkspaceAfterTurn(
+  params: Parameters<typeof reconcileWorkspaceAfterTurnCore>[0],
+) {
+  return withWorkerTurnTranscriptDatabase(
+    { ...params.transcriptTarget, sessionTarget: params.transcriptTarget },
+    {
+      assertCurrent() {},
+      prepareAuthority: () => params.placements.prepareTurnClaimAuthority(params.turnClaim),
+    },
+    (transcriptTarget) => reconcileWorkspaceAfterTurnCore({ ...params, transcriptTarget }),
+  );
+}
 
 afterAll(closeStateDatabaseForTest);
 

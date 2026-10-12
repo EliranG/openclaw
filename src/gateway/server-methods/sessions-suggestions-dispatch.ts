@@ -8,11 +8,9 @@ import {
 import { isIncognitoSessionKey } from "../../routing/session-key.js";
 import { withReadySessionRows } from "../session-row-prepared-read.js";
 import { requireSessionRowProjection } from "../session-row-projection-access.js";
+import { resolveSessionMutationAuthorizationAsync } from "../session-sharing-authorization-async.js";
 import type { SessionSharingTarget } from "../session-sharing-policy.js";
-import {
-  resolveSessionMutationAuthorization,
-  SessionMutationAuthorizationChangedError,
-} from "../session-sharing.js";
+import { SessionMutationAuthorizationChangedError } from "../session-sharing.js";
 import { handleChatSend } from "./chat-send-handler.js";
 import { withSessionMutationCommitGuard } from "./session-mutation-guards.js";
 import {
@@ -75,6 +73,7 @@ export async function dispatchSuggestion(params: {
     params.sessionMutationAuthorization?.assertAdmittedInputCurrent ??
     params.sessionMutationAuthorization?.assertCurrent;
   let chatAuthorization: SessionMutationAuthorization | undefined;
+  let releaseChatAuthorization: (() => void) | undefined;
   try {
     assertRequestCurrent();
     const current = params.readCurrent();
@@ -96,19 +95,13 @@ export async function dispatchSuggestion(params: {
       sessionKey: params.target.canonicalKey,
       storePath: current.physicalStorePath,
     });
-    const authorization = binding
-      ? resolveSessionMutationAuthorization({
-          client: chatClient,
-          method: "chat.send",
-          requestParams: chatParams,
-          context: params.context,
-          expectedTarget: {
-            agentId: params.target.agentId,
-            sessionKey: params.target.canonicalKey,
-            storePath: binding.actor.path,
-            sessionId: params.expectedSessionId,
-          },
-        })
+    const expectedTarget = binding
+      ? {
+          agentId: params.target.agentId,
+          sessionKey: params.target.canonicalKey,
+          storePath: binding.actor.path,
+          sessionId: params.expectedSessionId,
+        }
       : await withReadySessionRows(
           requireSessionRowProjection(params.context),
           () => [{ key: params.target.canonicalKey, agentId: params.target.agentId }],
@@ -127,22 +120,24 @@ export async function dispatchSuggestion(params: {
                 "session source changed before suggestion dispatch",
               );
             }
-            return resolveSessionMutationAuthorization({
-              client: chatClient,
-              method: "chat.send",
-              requestParams: chatParams,
-              context: params.context,
-              sessionRowRead,
-              expectedTarget: {
-                agentId: params.target.agentId,
-                sessionKey: params.target.canonicalKey,
-                // Prepared rows retain aliases; the source check above binds the physical store.
-                storePath: row.storeTarget.storePath,
-                sessionId: params.expectedSessionId,
-              },
-            });
+            return {
+              agentId: params.target.agentId,
+              sessionKey: params.target.canonicalKey,
+              // Prepared rows retain aliases; the source check above binds the physical store.
+              storePath: row.storeTarget.storePath,
+              sessionId: params.expectedSessionId,
+            };
           },
         );
+    const authorization = await resolveSessionMutationAuthorizationAsync({
+      client: chatClient,
+      method: "chat.send",
+      requestParams: chatParams,
+      context: params.context,
+      expectedTarget,
+      assertInvocationCurrent: assertRequestCurrent,
+    });
+    releaseChatAuthorization = authorization.authorization?.release;
     assertRequestCurrent();
     params.readCurrent();
     if (authorization.error) {
@@ -155,6 +150,7 @@ export async function dispatchSuggestion(params: {
     );
     chatAuthorization?.assertCurrent();
   } catch (error) {
+    releaseChatAuthorization?.();
     // No chat invocation occurred, so the caller can release its exact claim.
     if (error instanceof SessionMutationAuthorizationChangedError) {
       return { ok: false, error: error.error };
@@ -170,15 +166,19 @@ export async function dispatchSuggestion(params: {
       ),
     };
   }
-  await handleChatSend({
-    req: { ...params.req, method: "chat.send", params: chatParams },
-    params: chatParams,
-    client: chatClient,
-    isWebchatConnect: params.isWebchatConnect,
-    respond: captureResponse,
-    sessionMutationAuthorization: chatAuthorization,
-    sessionMutationCommitGuard: assertRequestCurrent,
-    context: params.context,
-  });
+  try {
+    await handleChatSend({
+      req: { ...params.req, method: "chat.send", params: chatParams },
+      params: chatParams,
+      client: chatClient,
+      isWebchatConnect: params.isWebchatConnect,
+      respond: captureResponse,
+      sessionMutationAuthorization: chatAuthorization,
+      sessionMutationCommitGuard: assertRequestCurrent,
+      context: params.context,
+    });
+  } finally {
+    releaseChatAuthorization?.();
+  }
   return response?.[0] === true ? { ok: true } : { ok: false, error: response?.[2] };
 }

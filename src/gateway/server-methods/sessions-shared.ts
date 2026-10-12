@@ -16,10 +16,9 @@ import {
   resolveCanonicalSessionEntryFromStoreKeys,
   resolveGatewaySessionStoreTargetWithStore,
 } from "../session-utils.js";
-import {
-  resolveWorkerPlacementSessionRuntimeCapabilities,
-  resolveWorkerPlacementSessionRuntimeCapabilitiesAsync,
-} from "../worker-environments/placement-session-runtime.js";
+import { resolveWorkerPlacementCapabilities } from "../worker-environments/placement-capabilities.js";
+import { prepareWorkerPlacementSessionRuntime } from "../worker-environments/placement-session-runtime-preparation.js";
+import { resolveWorkerPlacementSessionRuntimeCapabilitiesAsync } from "../worker-environments/placement-session-runtime.js";
 import {
   readSessionWorkerPlacementAsync,
   resolveWorkerPlacementArchiveRestoreError,
@@ -54,6 +53,36 @@ export async function prepareSessionWorkerPlacementPatchError(
   return resolveSessionWorkerPlacementPatchError(params, { placement, runtime });
 }
 
+/** Prepare inherited model facts once; the commit guard still reads current placement and runtime ownership. */
+export async function prepareSessionWorkerPlacementPatchValidation(
+  params: Parameters<typeof resolveSessionWorkerPlacementPatchError>[0],
+) {
+  const entry = params.entry;
+  const runtime =
+    entry?.sessionId &&
+    params.validateModelRuntime &&
+    (params.patch.model !== undefined ||
+      params.patch.agentRuntime !== undefined ||
+      params.patch.nativeRuntimeConsent !== undefined)
+      ? await prepareWorkerPlacementSessionRuntime({
+          cfg: params.cfg,
+          entry,
+          agentId: params.agentId,
+          sessionKey: params.sessionKey,
+        })
+      : undefined;
+  return {
+    validate: () =>
+      resolveSessionWorkerPlacementPatchError(params, {
+        readRuntime:
+          runtime && entry
+            ? () => resolveWorkerPlacementCapabilities(runtime.read(params.cfg, entry))
+            : undefined,
+      }),
+    release: () => runtime?.[Symbol.dispose](),
+  };
+}
+
 export function resolveSessionWorkerPlacementPatchError(
   params: {
     agentId: string;
@@ -66,17 +95,19 @@ export function resolveSessionWorkerPlacementPatchError(
     validateModelRuntime: boolean;
   },
   prepared?: {
-    placement: Awaited<ReturnType<typeof readSessionWorkerPlacementAsync>>;
-    runtime?: ReturnType<typeof resolveWorkerPlacementSessionRuntimeCapabilities>;
+    placement?: Awaited<ReturnType<typeof readSessionWorkerPlacementAsync>>;
+    runtime?: Awaited<ReturnType<typeof resolveWorkerPlacementSessionRuntimeCapabilitiesAsync>>;
+    readRuntime?: () => ReturnType<typeof resolveWorkerPlacementCapabilities>;
   },
 ): string | undefined {
-  const placement = prepared
-    ? prepared.placement
-    : params.entry?.sessionId
-      ? params.context.workerSessionPlacementService
-          ?.getMany([params.entry.sessionId])
-          .get(params.entry.sessionId)
-      : undefined;
+  const placement =
+    prepared && "placement" in prepared
+      ? prepared.placement
+      : params.entry?.sessionId
+        ? params.context.workerSessionPlacementService
+            ?.getMany([params.entry.sessionId])
+            .get(params.entry.sessionId)
+        : undefined;
   if (!placement || placement.state === "local") {
     return undefined;
   }
@@ -106,14 +137,11 @@ export function resolveSessionWorkerPlacementPatchError(
   ) {
     return undefined;
   }
-  const { executionMode } =
-    prepared?.runtime ??
-    resolveWorkerPlacementSessionRuntimeCapabilities({
-      cfg: params.cfg,
-      entry: params.entry,
-      agentId: params.agentId,
-      sessionKey: params.sessionKey,
-    });
+  const runtime = prepared?.readRuntime?.() ?? prepared?.runtime;
+  if (!runtime) {
+    throw new Error("Session worker placement runtime validation was not prepared");
+  }
+  const { executionMode } = runtime;
   if (executionMode === placement.executionMode) {
     return undefined;
   }

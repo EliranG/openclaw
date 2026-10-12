@@ -30,12 +30,56 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./session-utils.js", () => ({ loadGatewaySessionEntryReadOnly: mocks.session }));
 // mock-isolation: Keep session-worker state outside the worktree-read measurement.
 vi.mock("./session-utils-store-worker.js", () => ({
-  loadGatewaySessionEntryReadOnlyInWorker: mocks.sessionRead,
+  loadGatewaySessionEntryReadOnlyInWorker: async (
+    params: Parameters<
+      typeof import("./session-utils-store-worker.js").loadGatewaySessionEntryReadOnlyInWorker
+    >[0],
+  ) => {
+    const loaded = await mocks.sessionRead(params);
+    params.onSelected?.({
+      ...loaded,
+      storePath: "/synthetic/admitted.sqlite",
+      storeKeys: [loaded.canonicalKey],
+      store: { [loaded.canonicalKey]: loaded.entry },
+      capturedReadSource: {
+        agentId: loaded.agentId,
+        path: "/synthetic/admitted.sqlite",
+        databaseIdentity: "publication-worker-fixture",
+      },
+    });
+    return loaded;
+  },
 }));
 // mock-isolation: Supply fresh row facts from the admitted physical session reader.
 vi.mock("../config/sessions/session-entry-read-runtime.js", () => ({
-  readSessionEntriesFromStoreInWorker: mocks.admittedSessionRead,
-  readSessionEntryReadOnlyInWorker: async () => mocks.session().entry,
+  withSessionEntryReadOnlyInWorker: async <T>(
+    scope: Parameters<
+      typeof import("../config/sessions/session-entry-read-runtime.js").withSessionEntryReadOnlyInWorker
+    >[0],
+    assertCurrent: () => void,
+    consume: Parameters<
+      typeof import("../config/sessions/session-entry-read-runtime.js").withSessionEntryReadOnlyInWorker<T>
+    >[2],
+  ) => {
+    const loaded = await mocks.admittedSessionRead(scope, assertCurrent);
+    return await consume(
+      {
+        ok: true,
+        value: loaded.entries.find(
+          (row: { sessionKey: string }) => row.sessionKey === scope.sessionKey,
+        )?.entry,
+      },
+      {
+        kind: "file",
+        assertCurrent,
+        source: {
+          agentId: scope.agentId ?? "main",
+          path: scope.storePath ?? "/synthetic/admitted.sqlite",
+          databaseIdentity: "publication-worker-fixture",
+        },
+      },
+    );
+  },
 }));
 // mock-isolation: Use the synthetic registry without starting managed-worktree services.
 vi.mock("../agents/worktrees/service.js", () => ({
@@ -170,10 +214,9 @@ it.each(["unbound", "replaced-session", "replaced-lifecycle", "replaced-writer"]
     expect(mocks.admittedSessionRead).toHaveBeenCalledWith(
       expect.objectContaining({
         agentId: session.agentId,
-        sessionKeys: [session.sessionKey],
+        sessionKey: session.sessionKey,
         storePath: "/synthetic/admitted.sqlite",
-        projection: "exact",
-        snapshotFields: [],
+        projection: [],
       }),
       expect.any(Function),
     );

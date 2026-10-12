@@ -15,7 +15,7 @@ import type { CodexComputerUseSetupParams } from "./app-server/computer-use.js";
 import { isJsonObject, type JsonValue } from "./app-server/protocol.js";
 import {
   prepareCodexNativeExecutionBlock,
-  resolveCodexNativeSandboxBlock,
+  prepareCodexNativeSandboxBlock,
 } from "./app-server/sandbox-guard.js";
 import type {
   CodexAppServerBindingIdentity,
@@ -68,17 +68,17 @@ export async function resolveCodexNativeCommandSandboxBlock(
   ctx: PluginCommandContext,
   subcommand: string,
   args: readonly string[],
-): Promise<{ block: string | undefined; assertCurrent: () => void }> {
+): Promise<{ block: string | undefined; assertCurrent: () => void; release: () => void }> {
   if (
     isReadOnlyCodexGoalCommand(subcommand, args) ||
     returnsBeforeNativeCodexExecution(subcommand, args)
   ) {
-    return { block: undefined, assertCurrent() {} };
+    return { block: undefined, assertCurrent() {}, release() {} };
   }
   const sessionKey = ctx.sessionTarget?.sessionKey ?? ctx.sessionKey;
   const checksModelLock = ["bind", "resume", "detach", "unbind", "model"].includes(subcommand);
   if (!checksModelLock && !CODEX_NATIVE_EXECUTION_SUBCOMMANDS.has(subcommand)) {
-    return { block: undefined, assertCurrent() {} };
+    return { block: undefined, assertCurrent() {}, release() {} };
   }
   const agentId = ctx.sessionTarget?.agentId ?? resolveCodexConversationControlScope(ctx).agentId;
   const storePath =
@@ -93,33 +93,61 @@ export async function resolveCodexNativeCommandSandboxBlock(
         })
       : undefined;
   if (!CODEX_NATIVE_EXECUTION_SUBCOMMANDS.has(subcommand)) {
-    return { block: undefined, assertCurrent: modelCurrent?.assertCurrent ?? (() => {}) };
+    return {
+      block: undefined,
+      assertCurrent: modelCurrent?.assertCurrent ?? (() => {}),
+      release: modelCurrent?.release ?? (() => {}),
+    };
   }
   if (isCodexCliNodeResumeBind(subcommand, args)) {
-    return {
-      block: resolveCodexNativeSandboxBlock({
+    let sandbox: Awaited<ReturnType<typeof prepareCodexNativeSandboxBlock>>;
+    try {
+      sandbox = await prepareCodexNativeSandboxBlock({
         config: ctx.config,
         sessionKey: ctx.sessionKey,
         sessionId: ctx.sessionId,
         surface: `/${["codex", subcommand].join(" ")}`,
-      }),
-      assertCurrent: modelCurrent?.assertCurrent ?? (() => {}),
+      });
+    } catch (error) {
+      modelCurrent?.release();
+      throw error;
+    }
+    return {
+      block: sandbox.block,
+      assertCurrent: composeSessionEntryCommitGuards([
+        modelCurrent?.assertCurrent,
+        sandbox.assertCurrent,
+      ]),
+      release: () => {
+        sandbox.release();
+        modelCurrent?.release();
+      },
     };
   }
-  const execution = await prepareCodexNativeExecutionBlock({
-    config: ctx.config,
-    agentId: ctx.agentId,
-    sessionKey,
-    sessionId: ctx.sessionId,
-    storePath,
-    surface: `/${["codex", subcommand].join(" ")}`,
-  });
+  let execution: Awaited<ReturnType<typeof prepareCodexNativeExecutionBlock>>;
+  try {
+    execution = await prepareCodexNativeExecutionBlock({
+      config: ctx.config,
+      agentId: ctx.agentId,
+      sessionKey,
+      sessionId: ctx.sessionId,
+      storePath,
+      surface: `/${["codex", subcommand].join(" ")}`,
+    });
+  } catch (error) {
+    modelCurrent?.release();
+    throw error;
+  }
   return {
     block: execution.block,
     assertCurrent: composeSessionEntryCommitGuards([
       modelCurrent?.assertCurrent,
       execution.assertCurrent,
     ]),
+    release: () => {
+      modelCurrent?.release();
+      execution.release();
+    },
   };
 }
 

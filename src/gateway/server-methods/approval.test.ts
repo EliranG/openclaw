@@ -47,7 +47,21 @@ import type { GatewayRequestHandlerOptions } from "./types.js";
 const prepareApprovalChannelCustodyMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../approval-channel-custody.js", () => ({
-  prepareApprovalChannelCustody: prepareApprovalChannelCustodyMock,
+  prepareApprovalChannelCustody: (...args: unknown[]) => {
+    const custody = prepareApprovalChannelCustodyMock(...args);
+    return (
+      custody && {
+        ...custody,
+        isCurrent:
+          custody.isCurrent ??
+          ((request: unknown) => {
+            const input = args[0] as { cfg: unknown; getCfg?: () => unknown };
+            return (!input.getCfg || input.getCfg() === input.cfg) && custody.authorizes(request);
+          }),
+        [Symbol.dispose]() {},
+      }
+    );
+  },
 }));
 
 function createHandlers(

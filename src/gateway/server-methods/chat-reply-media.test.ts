@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  onTestFinished,
   afterAll,
   afterEach,
   beforeAll,
@@ -138,12 +139,13 @@ describe("normalizeWebchatReplyMediaPathsForDisplay", () => {
     cfg: OpenClawConfig;
     payloads: ReplyMediaPayloads;
   }) {
-    const scope = captureWebchatReplyMediaScope({
+    const scope = await captureWebchatReplyMediaScope({
       cfg: params.cfg,
       sessionKey: TEST_SESSION_KEY,
       agentId: "main",
       sessionLoadOptions: { agentId: "main" },
     });
+    onTestFinished(scope.release);
     const [payload] = await normalizeWebchatReplyMediaPathsForDisplay({
       ...scope,
       payloads: params.payloads,

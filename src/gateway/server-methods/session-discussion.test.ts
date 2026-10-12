@@ -51,8 +51,20 @@ vi.mock("../session-transcript-title-reader.js", () => ({
 vi.mock("./session-change-event.js", () => ({
   emitSessionsChanged: mocks.emitSessionsChanged,
 }));
-vi.mock("./sessions-shared.js", () => ({
-  loadAccessorSessionEntryForGatewayTarget: mocks.loadSessionTarget,
+vi.mock("../session-utils-store-lookup.js", () => ({
+  withGatewaySessionStoreTarget: async (
+    _params: unknown,
+    consume: (target: unknown) => unknown,
+  ) => {
+    const selected = mocks.loadSessionTarget();
+    return consume({
+      ...selected.target,
+      canonicalKey: selected.canonicalKey,
+      storePath: selected.storePath,
+      storeKeys: [selected.canonicalKey],
+      store: selected.entry ? { [selected.canonicalKey]: selected.entry } : {},
+    });
+  },
 }));
 
 const cfg = {

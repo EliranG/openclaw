@@ -1,4 +1,5 @@
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
+import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import {
   ErrorCodes,
   errorShape,
@@ -21,19 +22,24 @@ import type { SessionRowReadView } from "./session-row-prepared-read.js";
 import { getSessionRowProjection } from "./session-row-projection-access.js";
 import {
   authorizeOwnSessionMutation,
+  withSessionSharingTarget,
   type SessionSharingTarget,
 } from "./session-sharing-policy.js";
+import { captureSessionMutationRouting } from "./session-sharing-preparation.js";
 import type {
+  createSessionSharingConsumption,
   PreparedMutationSharing,
   PreparedSessionSharingProfiles,
 } from "./session-sharing-read.js";
 import {
   resolveChatSendAuthorizationParams,
+  resolveTalkSessionTargetInput,
   type SessionMutationTarget,
 } from "./session-sharing-target-input.js";
 import type { GatewaySessionStoreDiscoveryCache } from "./session-utils-store-candidates.js";
 import type { GatewaySessionStoreCache } from "./session-utils-store-lookup.js";
 import type { GatewaySessionStoreTarget } from "./session-utils-store.types.js";
+import { assertTalkSessionStorageTarget } from "./talk/session-target.js";
 import type { PreparedTalkSessionTarget } from "./talk/session-target.types.js";
 
 export type SessionMutationAuthorizationParams = {
@@ -47,6 +53,15 @@ export type SessionMutationAuthorizationParams = {
   sessionScope?: SessionOperatorScope;
   sessionRowRead?: SessionRowReadView;
   preparedSharing?: PreparedMutationSharing;
+  preparedTargets?: ReadonlyArray<{
+    sessionKey: string;
+    agentId?: string;
+    readSource?: import("../config/sessions/session-entry-read-source.types.js").CapturedSessionEntryReadSource;
+    read: () => PreparedMutationSharing;
+    bindCreation: (
+      operation: import("../config/sessions/session-accessor.sqlite-entry-cache.types.js").SessionEntryCreationOperation,
+    ) => void;
+  }>;
   preparedTalkSessionTarget?: PreparedTalkSessionTarget;
   preparedProfiles?: PreparedSessionSharingProfiles;
 };
@@ -302,4 +317,76 @@ export function createSessionCreationAuthorizationRecorder(params: {
     expected.lifecycleRevision = created.lifecycleRevision;
     expected.created = true;
   };
+}
+
+export function resolvePreparedTalkAuthorizationTarget(
+  params: SessionMutationAuthorizationParams,
+  getCfg: () => import("../config/types.openclaw.js").OpenClawConfig,
+) {
+  try {
+    const talkInput = resolveTalkSessionTargetInput(
+      params.method,
+      params.requestParams,
+      params.client?.connId,
+    );
+    const talkSessionTarget =
+      talkInput?.kind === "relay" ? talkInput.target : params.preparedTalkSessionTarget;
+    if (talkInput && !talkSessionTarget) {
+      throw new Error("Talk session authorization requires prepared session facts");
+    }
+    if (talkSessionTarget) {
+      assertTalkSessionStorageTarget(getCfg(), talkSessionTarget);
+    }
+    return { error: null, talkInput, talkSessionTarget };
+  } catch (error) {
+    return {
+      error: errorShape(
+        ErrorCodes.INVALID_REQUEST,
+        String(error instanceof Error ? error.message : error),
+      ),
+    };
+  }
+}
+
+export function findPreparedSharingTarget(
+  params: SessionMutationAuthorizationParams,
+  targetRef: { sessionKey?: string; key?: string; agentId?: string },
+) {
+  const sessionKey = normalizeOptionalString(targetRef.sessionKey ?? targetRef.key);
+  const agentId = normalizeOptionalString(targetRef.agentId);
+  return params.preparedTargets?.find(
+    (target) => target.sessionKey === sessionKey && target.agentId === agentId,
+  );
+}
+
+export async function withCurrentSessionSharingSource<T>(params: {
+  request: SessionMutationAuthorizationParams;
+  target: SessionMutationTarget;
+  changed: () => Error;
+  consumeSharing: ReturnType<typeof createSessionSharingConsumption>["consume"];
+  assertCurrent: () => void;
+  consume: () => T;
+}): Promise<T> {
+  const { request, target } = params;
+  request.preparedProfiles?.readCurrent();
+  const cfg = request.context.getRuntimeConfig();
+  const assertRoutingCurrent = captureSessionMutationRouting(cfg, params.changed, [target]);
+  return withSessionSharingTarget(
+    { cfg, sessionKey: target.sessionKey, agentId: target.agentId },
+    (read) =>
+      params.consumeSharing(
+        {
+          ...read,
+          assertCurrent: () => {
+            read.assertCurrent();
+            assertRoutingCurrent(request.context.getRuntimeConfig());
+          },
+        },
+        () => {
+          params.assertCurrent();
+          return params.consume();
+        },
+      ),
+    request.preparedSharing?.selection,
+  );
 }

@@ -28,8 +28,10 @@ const statusSummaryMocks = vi.hoisted(() => ({
       entry: Record<string, unknown>;
     }>
   >(() => []),
-  loadExactSessionEntryReadOnly:
-    vi.fn<typeof import("../config/sessions/session-accessor.js").loadExactSessionEntryReadOnly>(),
+  withSessionEntriesFromStoresInWorker:
+    vi.fn<
+      typeof import("../config/sessions/session-entry-read-runtime.js").withSessionEntriesFromStoresInWorker
+    >(),
 }));
 
 // mock-isolation: Keep plugin discovery outside this status aggregation fixture.
@@ -110,14 +112,11 @@ vi.mock("../config/sessions/paths.js", () => ({
   resolveSessionStorePathCore: vi.fn(() => "/tmp/sessions.json"),
 }));
 
-vi.mock("../config/sessions/session-accessor.js", () => ({
-  loadExactSessionEntryReadOnly: statusSummaryMocks.loadExactSessionEntryReadOnly,
-}));
-
 vi.mock("../config/sessions/session-entry-read-runtime.js", async () => {
   const { createSessionStoreSummaryReaderStub } =
     await import("../config/sessions/session-store-summary.test-support.js");
   return {
+    withSessionEntriesFromStoresInWorker: statusSummaryMocks.withSessionEntriesFromStoresInWorker,
     withSessionStoreReaderInWorker: createSessionStoreSummaryReaderStub((scope, options) => {
       const entries = statusSummaryMocks
         .listSessionEntriesCore(scope)
@@ -217,14 +216,26 @@ describe("getStatusSummary", () => {
     statusSummaryMocks.resolveProviderStaticModel.mockReset();
     statusSummaryMocks.listSessionEntriesCore.mockReturnValue([]);
     vi.mocked(peekSystemEvents).mockReset().mockReturnValue([]);
-    statusSummaryMocks.loadExactSessionEntryReadOnly.mockImplementation(({ sessionKey }) => {
-      const entry = statusSummaryMocks
-        .listSessionEntriesCore()
-        .find((candidate) => candidate.sessionKey === sessionKey)?.entry;
-      return entry
-        ? { sessionKey, entry: { sessionId: sessionKey, updatedAt: 0, ...entry } }
-        : undefined;
-    });
+    statusSummaryMocks.withSessionEntriesFromStoresInWorker.mockImplementation(
+      async (inputs, consume) =>
+        consume(
+          inputs.map((input) => ({
+            database: { agentId: input.agentId, path: input.storePath, env: {} },
+            assertCurrent: () => {},
+            result: {
+              kind: "session-exact-entries",
+              lifecycleTimestamps: {},
+              entries: statusSummaryMocks
+                .listSessionEntriesCore(input)
+                .filter(({ sessionKey }) => input.sessionKeys?.includes(sessionKey))
+                .map(({ sessionKey, entry }) => ({
+                  sessionKey,
+                  entry: { sessionId: sessionKey, updatedAt: 0, ...entry },
+                })),
+            },
+          })),
+        ),
+    );
     vi.mocked(statusSummaryRuntime.resolveAuthoredModelContextTokens).mockReturnValue(undefined);
     vi.mocked(statusSummaryRuntime.resolveSessionModelRef).mockReturnValue({
       provider: "openai",
@@ -309,13 +320,60 @@ describe("getStatusSummary", () => {
     expect(summary.heartbeat.agents[0]?.waitingForRoute).toBe(empty);
   });
 
+  it("keeps global heartbeat routes separate across agent stores", async () => {
+    vi.mocked(listGatewayAgentsBasic).mockResolvedValue({
+      defaultId: "research",
+      mainKey: "main",
+      scope: "global",
+      agents: [{ id: "research" }, { id: "ops" }],
+      ownership: "explicit",
+      selectionRequired: true,
+    });
+    statusSummaryMocks.listSessionEntriesCore.mockImplementation((scope) => [
+      {
+        sessionKey: "global",
+        entry:
+          scope?.agentId === "research"
+            ? {
+                delivery: normalizeSessionDeliveryState({
+                  context: { channel: "telegram", to: "123" },
+                }),
+              }
+            : {},
+      },
+    ]);
+
+    const summary = await getStatusSummary({
+      config: {
+        agents: {
+          ownership: "explicit",
+          entries: { research: {}, ops: {} },
+          defaults: { heartbeat: { target: "last", every: "30m" } },
+        },
+        session: { scope: "global" },
+      },
+      includeSensitive: false,
+      includeChannelSummary: false,
+    });
+
+    expect(
+      summary.heartbeat.agents.map(({ agentId, waitingForRoute }) => ({
+        agentId,
+        waitingForRoute,
+      })),
+    ).toEqual([
+      { agentId: "research", waitingForRoute: false },
+      { agentId: "ops", waitingForRoute: true },
+    ]);
+  });
+
   it("does not read an unused route for a disabled heartbeat", async () => {
     const summary = await getStatusSummary({
       config: { agents: { defaults: { heartbeat: { target: "owner", every: "0m" } } } },
       includeChannelSummary: false,
     });
     expect(summary.heartbeat.agents[0]).toMatchObject({ enabled: false, waitingForRoute: false });
-    expect(statusSummaryMocks.loadExactSessionEntryReadOnly).not.toHaveBeenCalled();
+    expect(statusSummaryMocks.withSessionEntriesFromStoresInWorker).not.toHaveBeenCalled();
   });
 
   it("skips session model discovery and projection when sensitive output is disabled", async () => {

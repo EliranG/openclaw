@@ -47,7 +47,7 @@ export async function runWorkerPlacementHandoff<T>(
     identities: lifecycleIdentities,
     signal,
     prepare: async () => {
-      const resolved = await resolveWorkerPlacementSessionTarget({
+      using resolved = await resolveWorkerPlacementSessionTarget({
         sessionRuntime,
         config: getRuntimeConfig(),
         sessionId,

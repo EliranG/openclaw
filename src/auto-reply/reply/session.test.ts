@@ -11,7 +11,7 @@ import {
   clearEmbeddedSessionPromptStates,
   retainEmbeddedSessionPromptState,
 } from "../../agents/embedded-agent-runner/session-prompt-state.js";
-import { resolveSandboxRuntimeStatus } from "../../agents/sandbox/runtime-status.js";
+import { resolvePreparedSandboxRuntimeStatus } from "../../agents/sandbox/runtime-status.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { InternalSessionEntry as SessionEntry } from "../../config/sessions.js";
 import {
@@ -638,7 +638,7 @@ describe("initSessionState thread forking", () => {
         loadSessionEntry({ storePath, sessionKey: threadSessionKey })?.nativeRuntimeConsent,
       ).toBeUndefined();
       expect(
-        resolveSandboxRuntimeStatus({
+        resolvePreparedSandboxRuntimeStatus({
           cfg,
           sessionKey: threadSessionKey,
           preparedSessionEntry: result.sessionEntry,
@@ -1278,7 +1278,7 @@ describe("initSessionState RawBody", () => {
       expect(stored.permissionMode).toBe("full");
       expect(stored.nativeRuntimeConsent).toBeUndefined();
       expect(
-        resolveSandboxRuntimeStatus({ cfg, sessionKey, preparedSessionEntry: stored }),
+        resolvePreparedSandboxRuntimeStatus({ cfg, sessionKey, preparedSessionEntry: stored }),
       ).toMatchObject({ sandboxed: required, sandboxRequired: required });
     },
   );

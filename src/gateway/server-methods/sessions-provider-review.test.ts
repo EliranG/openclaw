@@ -28,10 +28,13 @@ vi.mock("../session-sharing.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../session-sharing.js")>();
   return {
     ...actual,
-    resolveSessionSharingTargetAsync: mocks.resolveTarget,
-    resolveSessionMutationAuthorization: mocks.resolveAuthorization,
+    resolveSessionSharingTargetAsync: async (...args: unknown[]) => mocks.resolveTarget(...args),
   };
 });
+vi.mock("../session-sharing-authorization-async.js", () => ({
+  resolveSessionMutationAuthorizationAsync: (...args: unknown[]) =>
+    mocks.resolveAuthorization(...args),
+}));
 
 const sessionKey = "agent:main:provider-review";
 const sessionId = "session-a";

@@ -214,8 +214,10 @@ Schemas, retained bytes, durability, and update behavior are unchanged.
 
 Bundled plugins obtain prepared currentness checks and compose entry commit guards
 through the existing private `session-binding-runtime` facade. Its async capture
-retains the selected session generation and optional conversation alternatives;
-the writer checks all alternatives in one batched conversation read and publishes
+retains the selected session generation and optional conversation alternatives.
+The capture returns `release()`; the operation that owns the guard releases its
+receipt predicate after settlement. Synchronous entry checks consume the initial
+worker read and subsequent in-process write receipts. The writer checks all alternatives in one batched conversation read and publishes
 the matching branches through its existing transaction grant. Host callbacks
 recheck live channel/run facts among those matches through commit, so a finishing
 publisher can yield to a recorded parent without losing a valid title update.

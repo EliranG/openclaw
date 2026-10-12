@@ -1,8 +1,8 @@
 import type { EmbeddedAgentRunResult } from "../../agents/embedded-agent-runner/types.js";
 import { getReplyPayloadMetadata } from "../../auto-reply/reply-payload.js";
 import { extractDeliveryInfo } from "../../config/sessions/delivery-info.js";
-import { loadSessionEntryReadOnly } from "../../config/sessions/session-accessor.js";
 import type { SessionDeliveryGeneration } from "../../config/sessions/session-delivery-generation.types.js";
+import { readSessionEntryReadOnlyInWorker } from "../../config/sessions/session-entry-read-runtime.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { buildOutboundSessionContext } from "../../infra/outbound/session-context.js";
 import { resolveSystemEventQueueKey } from "../../infra/system-event-ownership.js";
@@ -127,20 +127,17 @@ export async function postWorkshopChangeNotice(params: {
   }
   const { generation } = params;
   const { agentId, sessionKey } = generation;
-  const isReviewedGeneration = () => {
-    const current = loadSessionEntryReadOnly({
-      agentId,
-      sessionKey,
-      storePath: generation.storePath,
-      hydrateSkillPromptRefs: false,
-      readConsistency: "latest",
-    });
-    return (
-      current?.sessionId === generation.sessionId &&
-      (current.lifecycleRevision ?? null) === generation.lifecycleRevision
-    );
-  };
-  if (!isReviewedGeneration()) {
+  const current = await readSessionEntryReadOnlyInWorker({
+    agentId,
+    sessionKey,
+    storePath: generation.storePath,
+    hydrateSkillPromptRefs: false,
+    readConsistency: "latest",
+  });
+  if (
+    current?.sessionId !== generation.sessionId ||
+    (current.lifecycleRevision ?? null) !== generation.lifecycleRevision
+  ) {
     log.debug(`skill workshop notice skipped: session ${sessionKey} was reset`);
     return;
   }
@@ -211,10 +208,6 @@ export async function postWorkshopChangeNotice(params: {
       throw new Error(appended.reason);
     }
   } catch (error) {
-    if (!isReviewedGeneration()) {
-      log.debug(`skill workshop notice skipped: session ${sessionKey} was reset`);
-      return;
-    }
     // The system event above still carries the change to the next turn.
     log.warn(`skill workshop notice delivery failed: ${String(error)}`);
   }

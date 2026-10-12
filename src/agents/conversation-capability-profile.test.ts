@@ -14,7 +14,7 @@ import { useSessionStoreTempDirs } from "../test-utils/session-state-cleanup.js"
 import { INTERNAL_MESSAGE_CHANNEL } from "../utils/message-channel.js";
 import { resolveConversationCapabilityProfile } from "./conversation-capability-profile.js";
 import { projectConversationToolNames } from "./conversation-tool-policy-pipeline.js";
-import { resolvePluginHarnessPolicyToolsAllow } from "./harness/execution-environment.js";
+import { preparePluginHarnessPolicyToolsAllow } from "./harness/execution-environment.js";
 import type { ScheduledToolPolicyContext } from "./scheduled-tool-policy.js";
 import { resolveWebSearchToolPolicy } from "./web-search-tool-policy.js";
 
@@ -436,7 +436,7 @@ describe("resolveConversationCapabilityProfile scheduled account authority", () 
     },
   ])(
     "preserves scheduled creator authority for $name across tool consumers",
-    ({ origin, configured, delivery }) => {
+    async ({ origin, configured, delivery }) => {
       const config: OpenClawConfig = {
         channels: { whatsapp: { accounts: configured ? { work: {} } : {} } },
       };
@@ -469,7 +469,7 @@ describe("resolveConversationCapabilityProfile scheduled account authority", () 
       const webSearch = () =>
         resolveWebSearchToolPolicy({ ...params, runtimeToolAllowlist: ["web_search"] });
       const harnessTools = () =>
-        resolvePluginHarnessPolicyToolsAllow({
+        preparePluginHarnessPolicyToolsAllow({
           ...params,
           provider: "fixture",
           modelId: "fixture-model",
@@ -478,14 +478,15 @@ describe("resolveConversationCapabilityProfile scheduled account authority", () 
         });
 
       if (origin === "unknown" || !configured) {
-        for (const resolve of [conversationTools, webSearch, harnessTools]) {
+        for (const resolve of [conversationTools, webSearch]) {
           expect(resolve).toThrow('Scheduled account "work" is unavailable');
         }
+        await expect(harnessTools()).rejects.toThrow('Scheduled account "work" is unavailable');
         return;
       }
       expect(conversationTools()).toEqual(["read"]);
       expect(webSearch()).toEqual({ allowed: true, persistentAllowed: true });
-      expect(harnessTools()).toEqual([]);
+      expect(await harnessTools()).toEqual([]);
     },
   );
 });

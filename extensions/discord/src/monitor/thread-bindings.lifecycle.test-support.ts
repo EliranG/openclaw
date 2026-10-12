@@ -67,7 +67,7 @@ vi.mock("openclaw/plugin-sdk/acp-runtime", async () => {
   );
   return {
     ...actual,
-    readAcpSessionEntry: hoisted.readAcpSessionEntry,
+    readAcpSessionEntryAsync: hoisted.readAcpSessionEntry,
   };
 });
 

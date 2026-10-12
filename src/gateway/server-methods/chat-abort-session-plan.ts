@@ -23,6 +23,7 @@ import {
 } from "./chat-abort-authorization.js";
 import type { ChatSessionAbortParams, ChatSessionAbortResult } from "./chat-abort-runtime.types.js";
 import {
+  ABORTED_PARTIAL_PERSISTENCE_WARNING,
   abortedPartialPersistenceError,
   captureAbortedPartial,
   deferAbortedPartialPersistence,
@@ -167,6 +168,7 @@ export function prepareChatSessionAbort(
   // lifecycle path must preserve hidden or explicitly preserved Gateway runs.
   const canCancelWorkerSession = !isLifecycleAbort || !hasProtectedLifecycleRuns;
   let snapshots: AbortedPartialSnapshot[] = [];
+  let partialSnapshotUnavailable = false;
   let workerCancellationPersistence: Promise<string[]> | undefined;
   let embeddedAbortPersistence: Promise<void> | undefined;
   const admittedAbortPersistence: Promise<void>[] = [];
@@ -266,20 +268,28 @@ export function prepareChatSessionAbort(
     }
     snapshots = authorizedRuns.flatMap(({ runId, entry }) => {
       const text = params.context.chatRunState.resolveBuffer(runId, { final: true }).text;
-      return text?.trim()
-        ? [
-            captureAbortedPartial({
-              runId,
-              sessionKey: params.sessionKey,
-              sessionId: entry.sessionId,
-              agentId: entry.agentId ?? params.agentId,
-              text,
-              abortOrigin: params.abortOrigin,
-              resolveTerminalProducer: entry.resolveTerminalProducer,
-              session: params.session,
-            }),
-          ]
-        : [];
+      if (!text?.trim()) {
+        return [];
+      }
+      if (!params.session) {
+        // A rowless run has no captured incarnation; never append its text to a later reset.
+        partialSnapshotUnavailable = true;
+        params.context.logGateway.warn(
+          "chat.abort transcript metadata unavailable; buffered reply was not saved",
+        );
+        return [];
+      }
+      return [
+        captureAbortedPartial({
+          runId,
+          sessionKey: params.sessionKey,
+          sessionId: entry.sessionId,
+          text,
+          abortOrigin: params.abortOrigin,
+          resolveTerminalProducer: entry.resolveTerminalProducer,
+          session: params.session,
+        }),
+      ];
     });
     // Abort queued owners before any active-work signal can promote a successor.
     // Keep them first in the response to preserve the established runIds ordering.
@@ -406,7 +416,9 @@ export function prepareChatSessionAbort(
       if (params.session && !params.session.ok) {
         failures.add(params.session.error);
       }
-      const warning = partial.status === "fulfilled" ? partial.value : undefined;
+      const warning =
+        (partial.status === "fulfilled" ? partial.value : undefined) ??
+        (partialSnapshotUnavailable ? ABORTED_PARTIAL_PERSISTENCE_WARNING : undefined);
       if (failures.size > 0) {
         const errors = [...failures];
         throw abortedPartialPersistenceError(

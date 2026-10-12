@@ -1,12 +1,12 @@
 import { hasAnyAuthProfileStoreSourceAsync } from "../../agents/auth-profiles/source-check.js";
 import { resolveContextTokensForModel } from "../../agents/context.js";
-import { resolveConversationCapabilityProfile } from "../../agents/conversation-capability-profile.js";
+import { prepareConversationCapabilityProfile } from "../../agents/conversation-capability-profile.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
 import { resolveExecDefaults } from "../../agents/exec-defaults.js";
 import { prepareInstalledSkillCatalog } from "../../agents/installed-skill-runtime.js";
 import { supportsModelTools } from "../../agents/model-tool-support.js";
 import { prepareCoreToolPolicy } from "../../agents/prepared-tool-surface.js";
-import { resolveSandboxRuntimeStatus } from "../../agents/sandbox/runtime-status.js";
+import { resolveSandboxRuntimeStatusAsync } from "../../agents/sandbox/runtime-status.js";
 import { resolveSandboxToolPolicyForAgent } from "../../agents/sandbox/tool-policy.js";
 import { projectEffectiveExecPolicy } from "../../agents/session-permission-exec-mode.js";
 import type { SessionPlacementTurnParams } from "../../agents/session-placement-admission.js";
@@ -36,12 +36,12 @@ export async function resolveWorkerToolAuthority(params: {
   turn.abortSignal?.throwIfAborted();
   const sandboxSessionKey =
     turn.sandboxSessionKey?.trim() || turn.sessionKey?.trim() || turn.sessionId;
-  const sandbox = resolveSandboxRuntimeStatus({
+  const sandbox = await resolveSandboxRuntimeStatusAsync({
     cfg: turn.config,
     sessionKey: sandboxSessionKey,
     agentId: turn.agentId,
   });
-  const capabilityProfile = resolveConversationCapabilityProfile({
+  const capabilityProfile = await prepareConversationCapabilityProfile({
     ...turn,
     sandboxSessionKey,
     sessionKey: sandboxSessionKey,
@@ -81,12 +81,15 @@ export async function resolveWorkerToolAuthority(params: {
     modelId: params.modelRef.model,
     modelContextWindowTokens: Math.min(contextWindow, turn.contextTokenBudget ?? contextWindow),
   });
-  const defaults = resolveExecDefaults({
-    ...turn,
-    cfg: turn.config,
-    sessionEntry: turn.execSession,
-    sessionKey: sandboxSessionKey,
-  });
+  const defaults = resolveExecDefaults(
+    {
+      ...turn,
+      cfg: turn.config,
+      sessionEntry: turn.execSession,
+      sessionKey: sandboxSessionKey,
+    },
+    sandbox,
+  );
   const policy = projectEffectiveExecPolicy({
     base: { ...defaults, host: defaults.effectiveHost },
     scheduledExecTarget: turn.scheduledToolPolicy?.execTarget,

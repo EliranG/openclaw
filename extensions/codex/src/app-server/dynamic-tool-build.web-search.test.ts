@@ -1,12 +1,13 @@
 import fs from "node:fs/promises";
-import "./dynamic-tool-build.test-support.js";
 import os from "node:os";
+import "./dynamic-tool-build.test-support.js";
 import path from "node:path";
 import type { createOpenClawCodingTools } from "openclaw/plugin-sdk/agent-harness";
 import type { EmbeddedRunAttemptParamsV2 as EmbeddedRunAttemptParams } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { shouldEnableCodexAppServerNativeToolSurface } from "./dynamic-tool-build.js";
 import { setCodexTestToolFactory } from "./host-capability.test-support.js";
+import { prepareTestNativeExecutionPolicy } from "./native-execution-policy.test-support.js";
 
 const {
   buildDynamicToolsForTest,
@@ -185,7 +186,9 @@ describe("Codex app-server dynamic tool search policy", () => {
     const allowed = vi.fn();
 
     const tools = await buildDynamicToolsForTest(params, workspaceDir, {
-      nativeToolSurfaceEnabled: shouldEnableCodexAppServerNativeToolSurface(params),
+      nativeToolSurfaceEnabled: shouldEnableCodexAppServerNativeToolSurface(params, undefined, {
+        nativeExecutionPolicy: await prepareTestNativeExecutionPolicy(params),
+      }),
       nativeProviderWebSearchSupport: testCase.nativeProviderWebSearchSupport,
       pluginConfig: { codexDynamicToolsExclude: testCase.excludes },
       onPersistentWebSearchPolicyResolved: persistent,
@@ -221,7 +224,15 @@ describe("Codex app-server dynamic tool search policy", () => {
       const persistent = vi.fn();
       const allowed = vi.fn();
       const sandbox = { enabled: true, backendId: "docker" } as never;
-      const nativeToolSurfaceEnabled = shouldEnableCodexAppServerNativeToolSurface(params, sandbox);
+      const nativeToolSurfaceEnabled = shouldEnableCodexAppServerNativeToolSurface(
+        params,
+        sandbox,
+        {
+          nativeExecutionPolicy: await prepareTestNativeExecutionPolicy(params, {
+            sandbox,
+          }),
+        },
+      );
       const tools = await buildDynamicToolsForTest(params, workspaceDir, {
         ...(searchEnabled ? { sandbox, nativeToolSurfaceEnabled } : {}),
         onPersistentWebSearchPolicyResolved: persistent,

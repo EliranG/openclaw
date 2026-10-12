@@ -7,7 +7,6 @@ import { decodeGitHubPublicationRequester } from "../state/github-publication-re
 import { readGitHubPublicationInWorker } from "../state/github-publication-worker.js";
 import { executeExistingOpenClawStateRead } from "../state/openclaw-state-db-readonly.js";
 import { OpenClawStateLeaseAcquisitionError } from "../state/openclaw-state-lease-error.js";
-import { getSessionRepositoryWorkspaceStore } from "../state/session-repository-workspaces.js";
 import { exactClaimForPlacement } from "./github-publication-coordinator-methods.js";
 import { matchesRepositoryGitHubPublicationClaim } from "./github-publication-defer.kernel.js";
 import { createGitHubPublicationExecutionIdentity } from "./github-publication-execution-identity.js";
@@ -32,6 +31,7 @@ import {
 } from "./github-repository-publication-store.js";
 import {
   assertReceiptOwner,
+  prepareReceiptOwner,
   captureCheckpoint,
   resolveReceiptOwner,
 } from "./github-repository-publication-workspace.js";
@@ -82,7 +82,9 @@ export async function settleDeniedRepositoryGitHubPublication(params: {
         "GitHub publication's recorded effects lack the facts needed for recovery; inspect the original target before requesting another publication.",
       );
     }
-    const preparedOwner = await getSessionRepositoryWorkspaceStore().prepare(row.workspace_id);
+    const preparedOwner = await prepareReceiptOwner(row);
+    using _ = { [Symbol.dispose]: () => preparedOwner.release() };
+
     assertCustody();
     const { assertCurrent, refreshIdentity } = createGitHubPublicationExecutionIdentity({
       row,
@@ -308,7 +310,9 @@ export function createRepositoryGitHubPublicationRecovery(params: {
               // The execution holds this same exclusion until its awaited effect
               // observation is recorded. Only then may recovery retire its authority.
               const workspaceId = row.workspace_id;
-              const preparedOwner = await getSessionRepositoryWorkspaceStore().prepare(workspaceId);
+              const preparedOwner = await prepareReceiptOwner(row);
+              using _ = { [Symbol.dispose]: () => preparedOwner.release() };
+
               row = await requireRepositoryGitHubPublicationInWorker(row.request_id);
               assertCurrent();
               if (terminalRepositoryGitHubPublication(row)) {

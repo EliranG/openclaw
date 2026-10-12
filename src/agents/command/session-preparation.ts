@@ -178,7 +178,7 @@ export async function prepareEmbeddedSessionState(params: {
   ] = await Promise.all([loadSkillsRuntime(), loadExecDefaultsRuntime()]);
   const nodeSkillsEligibility = resolveNodeExecEligibility({
     cfg: params.cfg,
-    sessionEntry,
+    sessionEntry: sessionEntry ?? null,
     sessionKey: params.sessionKey,
     agentId: params.sessionAgentId,
   });

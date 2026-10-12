@@ -4,7 +4,6 @@ import { resolveAgentMainSessionKey } from "../../config/sessions/main-session.j
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { resolveTalkSessionAgentId } from "../../talk/agent-target.js";
 import { resolveSessionStoreIdentity } from "../session-store-key.js";
-import { resolveGatewaySessionStoreTargetWithStore } from "../session-utils-store-lookup.js";
 import { resolveGatewaySessionStoreTargetInWorker } from "../session-utils-store-worker.js";
 import type { PreparedTalkSessionTarget } from "./session-target.types.js";
 
@@ -31,29 +30,6 @@ export async function prepareTalkSessionTarget(
     owner,
   );
   return Object.freeze({ agentId, sessionKey, canonicalKey, storePath });
-}
-
-/** Final effect checks retain exact storage authority when no prepared target is supplied. */
-export function prepareTalkSessionTargetForEffect(
-  cfg: OpenClawConfig,
-  requestedSessionKey?: string,
-): PreparedTalkSessionTarget {
-  const requestedKey = normalizeOptionalString(requestedSessionKey);
-  const owner = resolveTalkSessionAgentId(cfg, requestedKey ?? "main");
-  const sessionKey = requestedKey ?? resolveAgentMainSessionKey({ cfg, agentId: owner });
-  const { agentId, canonicalKey } = resolveSessionStoreIdentity({
-    cfg,
-    sessionKey,
-    agentId: resolveConfiguredAgentId(cfg, owner),
-  });
-  const target = resolveGatewaySessionStoreTargetWithStore({
-    cfg,
-    key: canonicalKey,
-    agentId,
-    readOnly: true,
-    exactRead: true,
-  });
-  return Object.freeze({ agentId, sessionKey, canonicalKey, storePath: target.storePath });
 }
 
 /** Revalidate a retained owner without consulting the current ambient Talk default. */

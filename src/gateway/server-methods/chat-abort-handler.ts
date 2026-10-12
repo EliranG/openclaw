@@ -42,6 +42,7 @@ import {
   abortedPartialPersistenceError,
   captureAbortedPartial,
   deferAbortedPartialPersistence,
+  prepareChatAbortSessionSnapshot,
   withAbortedPartialPersistenceWarning,
 } from "./chat-aborted-partial.js";
 import { persistAbortedPartials } from "./chat-transcript-persistence.js";
@@ -596,13 +597,17 @@ export async function handleChatAbortRequestWithLifecycle(
             runId,
             sessionKey,
             sessionId,
-            agentId: agentId ?? abortAgentId,
             text: partialText,
             abortOrigin: "rpc",
             resolveTerminalProducer: active.resolveTerminalProducer,
-            ...(sessionKey === rawSessionKey || sessionKey === canonicalAbortSessionKey
-              ? { session: abortSession }
-              : {}),
+            session:
+              sessionKey === rawSessionKey || sessionKey === canonicalAbortSessionKey
+                ? abortSession
+                : await prepareChatAbortSessionSnapshot({
+                    cfg: abortCfg,
+                    key: sessionKey,
+                    agentId: agentId ?? abortAgentId,
+                  }),
           })
         : undefined;
     let descendants: Awaited<ReturnType<typeof abortControlledSubagents>>;

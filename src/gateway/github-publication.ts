@@ -18,7 +18,7 @@ import {
   matchesCurrentGitHubPublicationIdentity,
   prepareCurrentGitHubPublicationIdentity,
   readGitHubPublicationWorktreeOwner,
-  prepareGitHubPublicationWorkspaceOwner,
+  hasGitHubPublicationRepositoryWorkspace,
   readGitHubPublicationSession,
 } from "./github-publication-availability.js";
 import {
@@ -133,6 +133,8 @@ export function createGitHubPublicationCoordinator(params: {
       sessionKey: request.sessionKey,
       agentId: request.agentId,
     });
+    using _ = { [Symbol.dispose]: () => admitted.release() };
+
     assertRequester();
     const identity = await prepareCurrentGitHubPublicationIdentity(request.agentId);
     assertRequester();
@@ -159,12 +161,7 @@ export function createGitHubPublicationCoordinator(params: {
               ),
       },
     );
-    const worktreeOwner = await readGitHubPublicationWorktreeOwner({
-      sessionId: request.claim.sessionId,
-      sessionKey: request.sessionKey,
-      agentId: request.agentId,
-      lifecycleRevision: admitted.loaded.entry?.lifecycleRevision ?? null,
-    });
+    const worktreeOwner = admitted;
     const { worktree } = worktreeOwner;
     assertRequester();
     if (!params.placements.validateTurnClaim(request.claim)) {
@@ -521,13 +518,11 @@ export function createGitHubPublicationCoordinator(params: {
         method: "requestForClaim",
         replacement: "requestForClaimV2",
       });
-      return (
-        await prepareGitHubPublicationWorkspaceOwner({
-          sessionId: request.claim.sessionId,
-          sessionKey: request.sessionKey,
-          agentId: request.agentId,
-        })
-      ).initial.kind === "repository"
+      return (await hasGitHubPublicationRepositoryWorkspace({
+        sessionId: request.claim.sessionId,
+        sessionKey: request.sessionKey,
+        agentId: request.agentId,
+      }))
         ? repository.requestForClaim(request)
         : requestForClaim(request);
     },
@@ -536,13 +531,11 @@ export function createGitHubPublicationCoordinator(params: {
         throw new Error("GitHub publication requires a host-prepared V2 requester.");
       }
       assertCurrent();
-      return (
-        await prepareGitHubPublicationWorkspaceOwner({
-          sessionId: request.claim.sessionId,
-          sessionKey: request.sessionKey,
-          agentId: request.agentId,
-        })
-      ).initial.kind === "repository"
+      return (await hasGitHubPublicationRepositoryWorkspace({
+        sessionId: request.claim.sessionId,
+        sessionKey: request.sessionKey,
+        agentId: request.agentId,
+      }))
         ? repository.requestForClaimV2(request)
         : requestForClaim(request, request.requester);
     },
@@ -605,14 +598,14 @@ export function createGitHubPublicationCoordinator(params: {
         method: "requestPersonalForSession",
         replacement: "requestPersonalForSessionV2",
       });
-      return (await prepareGitHubPublicationWorkspaceOwner(args[1])).initial.kind === "repository"
+      return (await hasGitHubPublicationRepositoryWorkspace(args[1]))
         ? repository.requestPersonalForSession(...args)
         : personal.requestPersonalForSession(...args);
     },
     async requestPersonalForSessionV2(
       ...args: Parameters<typeof personal.requestPersonalForSessionV2>
     ) {
-      return (await prepareGitHubPublicationWorkspaceOwner(args[1])).initial.kind === "repository"
+      return (await hasGitHubPublicationRepositoryWorkspace(args[1]))
         ? repository.requestPersonalForSessionV2(...args)
         : personal.requestPersonalForSessionV2(...args);
     },

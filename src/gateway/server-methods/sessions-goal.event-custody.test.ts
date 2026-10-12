@@ -65,9 +65,21 @@ vi.mock("../session-sharing.js", () => ({
     authorization: { assertCurrent: edge.current },
     error: null,
   }),
-  resolveSessionSharingTarget: () => edge.target,
   resolveSessionSharingTargetAsync: async () => edge.target,
   SessionMutationAuthorizationChangedError: class extends Error {},
+}));
+vi.mock("../session-sharing-authorization-async.js", () => ({
+  resolveSessionMutationAuthorizationAsync: async () => ({
+    authorization: { assertCurrent: edge.current },
+    error: null,
+  }),
+}));
+vi.mock("../../config/sessions/session-entry-current-check.js", () => ({
+  captureSessionEntryCurrentCheckInternal: async () => ({
+    entry: edge.target.entry,
+    assertCurrent: edge.current,
+    release() {},
+  }),
 }));
 vi.mock("./gateway-client-identity.js", () => ({
   gatewayClientSessionCreator: () => ({ type: "human", id: "operator" }),

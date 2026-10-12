@@ -26,6 +26,7 @@ import {
   normalizeDeliveryContext,
   resolveAgentConfig,
   resolveSandboxRuntimeStatus,
+  resolveSandboxRuntimeStatusAsync,
 } from "./subagent-spawn.runtime.js";
 
 export async function resolveSubagentChildPlan(params: {
@@ -91,7 +92,7 @@ export async function resolveSubagentChildPlan(params: {
   const childSessionKey = incognito
     ? mintedChildSessionKey.replace(":subagent:", ":subagent:incognito-")
     : mintedChildSessionKey;
-  const requesterRuntime = resolveSandboxRuntimeStatus({
+  const requesterRuntime = await resolveSandboxRuntimeStatusAsync({
     cfg: params.cfg,
     sessionKey: params.requesterInternalKey,
     agentId: params.requesterAgentId,
@@ -106,7 +107,11 @@ export async function resolveSubagentChildPlan(params: {
   // A fresh child has no stored row yet; admission must include its inherited isolation.
   const childRuntimeSandboxed =
     creationPolicy.sandbox === "required" ||
-    resolveSandboxRuntimeStatus({ cfg: params.cfg, sessionKey: childSessionKey }).sandboxed;
+    resolveSandboxRuntimeStatus({
+      cfg: params.cfg,
+      sessionKey: childSessionKey,
+      preparedSessionEntry: null,
+    }).sandboxed;
   const childCwd =
     requestedCwd ?? (senderRestricted && !childRuntimeSandboxed ? requesterRoot : undefined);
   const spawnedCwd = childCwd ? resolveUserPath(childCwd) : undefined;

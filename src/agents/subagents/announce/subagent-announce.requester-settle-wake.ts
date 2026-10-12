@@ -41,7 +41,7 @@ import {
   finalizeRequesterFinalAttachment,
   transferRequesterFinalAttachment,
 } from "../requester-final-attachment.js";
-import { getSubagentDepthFromSessionStore } from "../spawn/subagent-depth.js";
+import { getSubagentDepthFromSessionStoreInWorker } from "../spawn/subagent-depth.js";
 import { isPermanentAnnounceDeliveryError } from "./subagent-announce-delivery-retry.js";
 import {
   deliverSubagentAnnouncement,
@@ -374,7 +374,7 @@ async function maybeWakeRequesterAfterAllChildrenSettledBound(
     const requesterYieldedAfterDelivery =
       selectedState.afterRequesterYield === true ||
       (selectedState.requesterYieldBatch === true && selectedState.rearmGeneration !== undefined);
-    const requesterDepth = getSubagentDepthFromSessionStore(requesterSessionKey, {
+    const requesterDepth = await getSubagentDepthFromSessionStoreInWorker(requesterSessionKey, {
       cfg,
       agentId: requesterAgentId,
     });

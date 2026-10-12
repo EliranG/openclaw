@@ -304,16 +304,7 @@ vi.mock("../gateway/session-utils-store-worker.js", () => ({
     key: string;
     agentId?: string;
   }) => loadSessionEntryMock(key, agentId ? { agentId } : undefined),
-}));
-
-vi.mock("../gateway/session-utils.js", () => ({
-  getSessionDefaults: () => getSessionDefaultsMock(),
-  listAgentsForGateway: () => [],
-  resolveCanonicalGatewaySessionStoreKey: ({ key }: { key: string }) => ({
-    primaryKey: key,
-    target: { storeKeys: [key] },
-  }),
-  resolveGatewaySessionStoreTargetWithStore: ({
+  resolveGatewaySessionStoreTargetInWorker: async ({
     key,
     agentId,
   }: {
@@ -324,6 +315,15 @@ vi.mock("../gateway/session-utils.js", () => ({
     canonicalKey: key,
     storeKeys: [key],
     storePath: "/tmp/openclaw-sessions.json",
+  }),
+}));
+
+vi.mock("../gateway/session-utils.js", () => ({
+  getSessionDefaults: () => getSessionDefaultsMock(),
+  listAgentsForGateway: () => [],
+  resolveCanonicalGatewaySessionStoreKey: ({ key }: { key: string }) => ({
+    primaryKey: key,
+    target: { storeKeys: [key] },
   }),
   resolveSessionModelRef: () => ({ provider: "openai", model: "gpt-5.4" }),
 }));
@@ -2652,6 +2652,7 @@ describe("EmbeddedTuiBackend", () => {
     "scopes selected global patch policy and result to the stored owner: $input.sessionKey",
     async ({ input, owner }) => {
       const sessionUtils = await import("../gateway/session-utils.js");
+      const sessionWorker = await import("../gateway/session-utils-store-worker.js");
       const entry = { sessionId: `session-${owner}`, updatedAt: embeddedEventTimestamp };
       const target = {
         agentId: owner,
@@ -2661,8 +2662,8 @@ describe("EmbeddedTuiBackend", () => {
         store: { global: entry },
       };
       const resolveTarget = vi
-        .spyOn(sessionUtils, "resolveGatewaySessionStoreTargetWithStore")
-        .mockReturnValue(target);
+        .spyOn(sessionWorker, "resolveGatewaySessionStoreTargetInWorker")
+        .mockResolvedValue(target);
       const resolveCanonical = vi
         .spyOn(sessionUtils, "resolveCanonicalGatewaySessionStoreKey")
         .mockReturnValue({ target, primaryKey: "global", entry });

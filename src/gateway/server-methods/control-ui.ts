@@ -12,6 +12,7 @@ import {
   prepareSubagentSessionListReadCache,
 } from "../../agents/subagents/registry/subagent-registry-state.js";
 import { getRuntimeConfigSnapshotMetadata } from "../../config/runtime-snapshot.js";
+import { captureSessionEntryCurrentCheckInternal } from "../../config/sessions/session-entry-current-check.js";
 import { captureIncognitoSessionSource } from "../../config/sessions/session-incognito-binding.js";
 import { redactToolPayloadText } from "../../logging/redact.js";
 import { getActiveSecretsRuntimeConfigSnapshot } from "../../secrets/runtime-state.js";
@@ -35,10 +36,16 @@ import { gitHubPublicApi, type ControlUiGitHubPreviewIdentity } from "../github-
 import { resolveRequestedSessionAgentId as resolveRequestedGlobalAgentId } from "../session-request-agent.js";
 import { withReadySessionRows } from "../session-row-prepared-read.js";
 import { getSessionRowProjection } from "../session-row-projection-access.js";
-import { captureSessionMutationRouting } from "../session-sharing-preparation.js";
+import {
+  captureSessionMutationRouting,
+  prepareSessionMutationFacts,
+} from "../session-sharing-preparation.js";
+import {
+  prepareProjectedSessionSharing,
+  prepareSessionSharingProfiles,
+} from "../session-sharing-read.js";
 import { createSessionListEntryFilter } from "../session-sharing.js";
 import { resolveAgentIdOrRespondError } from "./agent-id-shared.js";
-import { loadAccessorSessionEntryForGatewayTarget } from "./sessions-shared.js";
 import type {
   GatewayClient,
   GatewayRequestContext,
@@ -284,7 +291,7 @@ async function prepareCheckDetailsSession(
   sessionKey: string,
   context: GatewayRequestContext,
   client: GatewayClient | null,
-): Promise<ControlUiSessionPrTarget | null> {
+): Promise<(ControlUiSessionPrTarget & { release: () => void }) | null> {
   const sourceCfg = context.getRuntimeConfig();
   const sourceRequest = resolveRequestedGlobalAgentId(sourceCfg, sessionKey);
   if (!sourceRequest.ok) {
@@ -295,129 +302,178 @@ async function prepareCheckDetailsSession(
     binding.assertCurrent();
     return null;
   }
-  const claim = binding?.actor.sessions.captureCurrent(sessionKey);
-  const assertRoutingCurrent = captureSessionMutationRouting(sourceCfg);
-  const preparedEntry =
-    binding &&
-    (await binding.actor.sessions.read(
-      {
-        assertCurrent() {
-          binding.admissionSignal?.throwIfAborted();
-          claim?.assertCurrent();
-          assertRoutingCurrent(context.getRuntimeConfig());
-        },
-      },
-      { sessionKey },
-      binding.admissionSignal,
-    ));
-  preparedEntry?.snapshot.assertCurrent();
-  const preparedMedia = binding?.actor.sessions.readMedia(sessionKey);
-  const readSelected = () => {
-    const cfg = context.getRuntimeConfig();
-    const requested = resolveRequestedGlobalAgentId(cfg, sessionKey);
-    if (!requested.ok) {
-      return undefined;
+  const profiles = await prepareSessionSharingProfiles(client);
+  const facts = !binding
+    ? await prepareSessionMutationFacts({
+        cfg: sourceCfg,
+        sessionKey,
+        agentId: sourceRequest.agentId,
+      })
+    : undefined;
+  let entryRead: Awaited<ReturnType<typeof captureSessionEntryCurrentCheckInternal>> | undefined;
+  const release = () => {
+    entryRead?.release();
+    facts?.release();
+  };
+  let retained = false;
+  try {
+    if (facts) {
+      const target = facts.readCurrent(sourceCfg).target;
+      entryRead = await captureSessionEntryCurrentCheckInternal({
+        agentId: target.agentId,
+        sessionKey: target.storeKey,
+        storePath: target.readSource?.path ?? target.storePath,
+        fields: [
+          "repositoryWorkspaceId",
+          "worktree",
+          "spawnedCwd",
+          "spawnedWorkspaceDir",
+          "pendingWorktree",
+          "pendingProjectGitUrl",
+        ],
+        errorMessage: "Session pull-request target changed",
+      });
     }
-    if (binding) {
-      binding.admissionSignal?.throwIfAborted();
-      claim?.assertCurrent();
-      assertRoutingCurrent(cfg);
-      const entry = preparedEntry?.entry && {
-        ...preparedEntry.entry,
-        pendingWorktree: preparedMedia?.pendingWorktree,
-        pendingProjectGitUrl: preparedMedia?.pendingProjectGitUrl,
-      };
-      const sharing = binding.actor.sessions.readSharing(sessionKey)?.entry;
-      const media = binding.actor.sessions.readMedia(sessionKey);
-      const entryFilter = createSessionListEntryFilter({ client, cfg });
+    const claim = binding?.actor.sessions.captureCurrent(sessionKey);
+    const assertRoutingCurrent = captureSessionMutationRouting(sourceCfg);
+    const preparedEntry =
+      binding &&
+      (await binding.actor.sessions.read(
+        {
+          assertCurrent() {
+            binding.admissionSignal?.throwIfAborted();
+            claim?.assertCurrent();
+            assertRoutingCurrent(context.getRuntimeConfig());
+          },
+        },
+        { sessionKey },
+        binding.admissionSignal,
+      ));
+    preparedEntry?.snapshot.assertCurrent();
+    const preparedMedia = binding?.actor.sessions.readMedia(sessionKey);
+    const readSelected = () => {
+      const cfg = context.getRuntimeConfig();
+      const requested = resolveRequestedGlobalAgentId(cfg, sessionKey);
+      if (!requested.ok) {
+        return undefined;
+      }
+      if (binding) {
+        binding.admissionSignal?.throwIfAborted();
+        claim?.assertCurrent();
+        assertRoutingCurrent(cfg);
+        const entry = preparedEntry?.entry && {
+          ...preparedEntry.entry,
+          pendingWorktree: preparedMedia?.pendingWorktree,
+          pendingProjectGitUrl: preparedMedia?.pendingProjectGitUrl,
+        };
+        const sharing = binding.actor.sessions.readSharing(sessionKey)?.entry;
+        const media = binding.actor.sessions.readMedia(sessionKey);
+        const entryFilter = createSessionListEntryFilter({ client, cfg });
+        if (
+          !entry ||
+          !sharing ||
+          !media ||
+          requested.agentId !== binding.actor.agentId ||
+          sharing.sessionId !== entry.sessionId ||
+          sharing.lifecycleRevision !== entry.lifecycleRevision ||
+          media.repositoryWorkspaceId !== entry.repositoryWorkspaceId ||
+          media.worktreeId !== entry.worktree?.id ||
+          media.spawnedCwd !== entry.spawnedCwd ||
+          media.spawnedWorkspaceDir !== entry.spawnedWorkspaceDir ||
+          !isDeepStrictEqual(media.pendingWorktree, entry.pendingWorktree) ||
+          media.pendingProjectGitUrl !== entry.pendingProjectGitUrl ||
+          (entryFilter && !entryFilter(sessionKey, sharing))
+        ) {
+          return undefined;
+        }
+        return {
+          cfg,
+          agentId: binding.actor.agentId,
+          canonicalKey: sessionKey,
+          storePath: binding.actor.path,
+          readSource: {
+            agentId: binding.actor.agentId,
+            path: binding.actor.path,
+            databaseIdentity: binding.actor.identity.incarnation,
+          },
+          entry,
+        };
+      }
+      entryRead!.assertCurrent();
+      const current = facts!.readCurrent(cfg);
+      const target = current.target;
+      const entry = entryRead!.entry;
+      const sharing = prepareProjectedSessionSharing({
+        client,
+        cfg,
+        profiles,
+        isMember: (_target, id) => current.membership.has(id),
+      });
       if (
-        !entry ||
-        !sharing ||
-        !media ||
-        requested.agentId !== binding.actor.agentId ||
-        sharing.sessionId !== entry.sessionId ||
-        sharing.lifecycleRevision !== entry.lifecycleRevision ||
-        media.repositoryWorkspaceId !== entry.repositoryWorkspaceId ||
-        media.worktreeId !== entry.worktree?.id ||
-        media.spawnedCwd !== entry.spawnedCwd ||
-        media.spawnedWorkspaceDir !== entry.spawnedWorkspaceDir ||
-        !isDeepStrictEqual(media.pendingWorktree, entry.pendingWorktree) ||
-        media.pendingProjectGitUrl !== entry.pendingProjectGitUrl ||
-        (entryFilter && !entryFilter(sessionKey, sharing))
+        !target ||
+        !entry?.sessionId ||
+        entry.sessionId !== target.entry.sessionId ||
+        entry.lifecycleRevision !== target.entry.lifecycleRevision ||
+        sharing.entryFilter?.(target.canonicalKey, target.entry) === false
       ) {
         return undefined;
       }
       return {
         cfg,
-        agentId: binding.actor.agentId,
-        canonicalKey: sessionKey,
-        storePath: binding.actor.path,
-        readSource: {
-          agentId: binding.actor.agentId,
-          path: binding.actor.path,
-          databaseIdentity: binding.actor.identity.incarnation,
-        },
+        agentId: target.agentId,
+        canonicalKey: target.canonicalKey,
+        storePath: target.storePath,
+        readSource: target.readSource,
         entry,
       };
-    }
-    const { target, entry, storePath } = loadAccessorSessionEntryForGatewayTarget({
-      key: sessionKey,
-      cfg,
-      clone: false,
-      agentId: requested.agentId,
-    });
-    const entryFilter = createSessionListEntryFilter({ client, cfg });
-    if (!entry?.sessionId || (entryFilter && !entryFilter(target.canonicalKey, entry))) {
-      return undefined;
-    }
-    return {
-      cfg,
-      agentId: target.agentId,
-      canonicalKey: target.canonicalKey,
-      storePath,
-      readSource: target.readSource,
-      entry,
     };
-  };
-  const initial = readSelected();
-  if (!initial) {
-    return null;
-  }
-  const workspaceId = initial.entry.repositoryWorkspaceId;
-  const prepared = workspaceId
-    ? await getSessionRepositoryWorkspaceStore().prepare(workspaceId)
-    : undefined;
-  const current = () => {
-    const selected = readSelected();
-    if (
-      !selected ||
-      selected.entry.sessionId !== initial.entry.sessionId ||
-      selected.entry.lifecycleRevision !== initial.entry.lifecycleRevision ||
-      selected.entry.repositoryWorkspaceId !== workspaceId
-    ) {
-      return undefined;
+    const initial = readSelected();
+    if (!initial) {
+      return null;
     }
-    const repository = prepared?.current();
-    return resolveControlUiSessionPrTarget(
-      selected,
-      repository?.workspaceId === workspaceId &&
-        repository?.agentId === selected.agentId &&
-        repository.sessionKey === selected.canonicalKey
-        ? repository
-        : null,
-    );
-  };
-  const target = current();
-  return target
-    ? {
-        ...target,
-        assertCurrent() {
-          if (current()?.identity !== target.identity) {
-            throw new Error("Session pull-request target changed");
-          }
-        },
+    const workspaceId = initial.entry.repositoryWorkspaceId;
+    const prepared = workspaceId
+      ? await getSessionRepositoryWorkspaceStore().prepare(workspaceId)
+      : undefined;
+    const current = () => {
+      const selected = readSelected();
+      if (
+        !selected ||
+        selected.entry.sessionId !== initial.entry.sessionId ||
+        selected.entry.lifecycleRevision !== initial.entry.lifecycleRevision ||
+        selected.entry.repositoryWorkspaceId !== workspaceId
+      ) {
+        return undefined;
       }
-    : null;
+      const repository = prepared?.current();
+      return resolveControlUiSessionPrTarget(
+        selected,
+        repository?.workspaceId === workspaceId &&
+          repository?.agentId === selected.agentId &&
+          repository.sessionKey === selected.canonicalKey
+          ? repository
+          : null,
+      );
+    };
+    const target = current();
+    if (!target) {
+      return null;
+    }
+    retained = true;
+    return {
+      ...target,
+      release,
+      assertCurrent() {
+        if (current()?.identity !== target.identity) {
+          throw new Error("Session pull-request target changed");
+        }
+      },
+    };
+  } finally {
+    if (!retained) {
+      release();
+    }
+  }
 }
 
 type LoadSessionCheckDetails = (
@@ -555,6 +611,7 @@ export function createControlUiHandlers(
         );
         return;
       }
+      let preparedSession: Awaited<ReturnType<typeof prepareCheckDetailsSession>> = null;
       try {
         const reader = client
           ? await prepareControlUiSessionPrRead({
@@ -571,7 +628,11 @@ export function createControlUiHandlers(
           : undefined;
         const binding = client
           ? ((await reader?.()) ?? null)
-          : await prepareCheckDetailsSession(parsed.sessionKey, context, client);
+          : (preparedSession = await prepareCheckDetailsSession(
+              parsed.sessionKey,
+              context,
+              client,
+            ));
         if (!binding) {
           throw new gitHubPublicApi.ControlUiGitHubError(404, "Session CI details unavailable");
         }
@@ -616,6 +677,8 @@ export function createControlUiHandlers(
             ? error.message
             : gitHubPublicApi.formatControlUiGitHubPreviewError(error).message;
         respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, message));
+      } finally {
+        preparedSession?.release();
       }
     },
     "controlUi.sessionPullRequests.subscribe": async ({ params, client, context, respond }) => {

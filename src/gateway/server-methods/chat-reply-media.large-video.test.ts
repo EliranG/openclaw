@@ -4,7 +4,7 @@ import { IncomingMessage } from "node:http";
 import { Socket } from "node:net";
 import path from "node:path";
 import * as mediaMime from "@openclaw/media-core/mime";
-import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { onTestFinished, afterAll, beforeAll, expect, it, vi } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../../test/helpers/temp-dir.js";
 import { parseReplyDirectives } from "../../auto-reply/reply/reply-directives.js";
 import { createReplyMediaPathNormalizer } from "../../auto-reply/reply/reply-media-paths.js";
@@ -106,12 +106,13 @@ it("streams a trusted owner webchat video over 16 MiB into managed storage and s
       }),
     ).rejects.toThrow(/Managed video attachment.*could not be prepared/u);
 
-    const scope = captureWebchatReplyMediaScope({
+    const scope = await captureWebchatReplyMediaScope({
       cfg,
       sessionKey: SESSION_KEY,
       agentId: "main",
       sessionLoadOptions: { agentId: "main" },
     });
+    onTestFinished(scope.release);
     let largestAllocation = 0;
     const allocateSafe = Buffer.alloc.bind(Buffer);
     const allocate = Buffer.allocUnsafe.bind(Buffer);

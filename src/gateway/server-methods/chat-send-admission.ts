@@ -29,6 +29,7 @@ import { registerChatAbortController } from "../chat-abort.js";
 import { retainGatewayOperatorRun } from "../operator-run-cancellation.js";
 import type { DedupeEntry } from "../server-shared.js";
 import { writePreRegisteredChatAbort } from "./chat-abort-authorization.js";
+import type { ChatAbortSessionSnapshot } from "./chat-aborted-partial.js";
 import {
   resolveRestartSafeChatAdmission,
   withRestartSafeChatPlacement,
@@ -164,6 +165,7 @@ export async function admitChatSend(params: ChatSendAdmissionParams) {
   let reservationSuperseded = false;
   let supersedingResult: DedupeEntry | undefined;
   let preparedGoalEntry: Awaited<ReturnType<typeof prepareChatSendSessionEntry>> | undefined;
+  let abortSession: Extract<ChatAbortSessionSnapshot, { ok: true }>["value"] | undefined;
   const placementService = context.workerSessionPlacementService;
   const commitChatWorkAdmission = async (
     acpMeta: SessionEntry["acp"] | null,
@@ -345,6 +347,13 @@ export async function admitChatSend(params: ChatSendAdmissionParams) {
       }
       // A terminal Control UI claim can survive a crash after status commit.
       // The transcript transaction merges its source with fresh tombstones.
+      abortSession = {
+        cfg: latestSession.cfg,
+        storePath: latestSession.storePath,
+        entry: latestEntry ?? initialSessionEntry,
+        canonicalKey: latestSession.canonicalKey,
+        agentId: latestSession.agentId,
+      };
       admittedRunAbort = registerChatAbortController({
         chatAbortControllers: context.chatAbortControllers,
         runId: clientRunId,
@@ -513,6 +522,7 @@ export async function admitChatSend(params: ChatSendAdmissionParams) {
       ...params,
       runId: clientRunId,
       entry: activeRunAbort.entry,
+      abortSession,
     });
     releaseCallerAuthority = () =>
       releaseChatSendCallerAuthority({ operator: capturedOperator, request, session });

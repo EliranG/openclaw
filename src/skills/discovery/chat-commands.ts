@@ -4,8 +4,9 @@ import { listAgentIds, resolveAgentWorkspaceDir } from "../../agents/agent-scope
 import {
   type ExecPolicyOverrides,
   type ExecSessionDefaults,
-  resolveNodeExecEligibility,
+  resolveNodeExecEligibilityAsync,
 } from "../../agents/exec-defaults.js";
+import { resolveNodeExecEligibilityLegacy } from "../../agents/exec-defaults.legacy.js";
 import {
   getAgentWorkspaceAccess,
   isWorkspaceAccessUnavailableError,
@@ -44,8 +45,10 @@ type WorkspaceSkillCommandParams = {
   pluginMetadataSnapshot?: PluginMetadataSnapshot;
 };
 
-function resolveWorkspaceSkillCommandOptions(params: WorkspaceSkillCommandParams) {
-  const nodeSkills = resolveNodeExecEligibility(params);
+function resolveWorkspaceSkillCommandOptions(
+  params: WorkspaceSkillCommandParams,
+  nodeSkills = resolveNodeExecEligibilityLegacy(params),
+) {
   const eligibility = {
     nodeSkills,
     remote: getRemoteSkillEligibility({ advertiseExecNode: nodeSkills.canExec }),
@@ -100,7 +103,7 @@ export async function prepareSkillCommandsForWorkspace(
   const commands = await prepareWorkspaceSkillCommandSpecs(
     params.workspaceDir,
     {
-      ...resolveWorkspaceSkillCommandOptions(params),
+      ...resolveWorkspaceSkillCommandOptions(params, await resolveNodeExecEligibilityAsync(params)),
       reservedNames: listReservedChatSlashCommandNames(),
     },
     assertCurrent,
@@ -115,7 +118,7 @@ export async function prepareBundledSkillCommandForWorkspace(
 ): Promise<SkillCommandSpec | undefined> {
   await prepareRemoteSkillConnections();
   const commands = await prepareWorkspaceSkillCommandSpecs(params.workspaceDir, {
-    ...resolveWorkspaceSkillCommandOptions(params),
+    ...resolveWorkspaceSkillCommandOptions(params, await resolveNodeExecEligibilityAsync(params)),
     reservedNames: listReservedChatSlashCommandNames(),
     bundledSkillName: params.skillName,
   });
@@ -188,21 +191,19 @@ function* resolveAgentSkillCommandWorkspaces(params: AgentSkillCommandParams, al
   for (const { agentId, workspaceDir, skillFilter, gatewayOnly } of workspaceAgents) {
     yield {
       workspaceDir,
-      options: {
-        ...resolveWorkspaceSkillCommandOptions({
-          cfg: params.cfg,
-          agentId,
-          workspaceDir,
-          skillFilter,
-          ...(hasSingleAgentContext
-            ? {
-                sessionEntry: params.sessionEntry,
-                sessionKey: params.sessionKey,
-                execOverrides: params.execOverrides,
-              }
-            : {}),
-        }),
-        gatewayOnly,
+      gatewayOnly,
+      params: {
+        cfg: params.cfg,
+        agentId,
+        workspaceDir,
+        skillFilter,
+        ...(hasSingleAgentContext
+          ? {
+              sessionEntry: params.sessionEntry,
+              sessionKey: params.sessionKey,
+              execOverrides: params.execOverrides,
+            }
+          : {}),
       },
     };
   }
@@ -228,12 +229,15 @@ export function listSkillCommandsForAgents(params: AgentSkillCommandParams): Ski
   });
   const used = listReservedChatSlashCommandNames();
   const entries: SkillCommandSpec[] = [];
-  for (const { workspaceDir, options } of resolveAgentSkillCommandWorkspaces(params)) {
+  for (const { workspaceDir, gatewayOnly, params: workspace } of resolveAgentSkillCommandWorkspaces(
+    params,
+  )) {
     appendSkillCommands(
       entries,
       used,
       buildWorkspaceSkillCommandSpecs(workspaceDir, {
-        ...options,
+        ...resolveWorkspaceSkillCommandOptions(workspace),
+        gatewayOnly,
         reservedNames: used,
       }),
     );
@@ -249,7 +253,14 @@ export async function prepareSkillCommandsForAgents(
   params.signal?.throwIfAborted();
   const used = listReservedChatSlashCommandNames();
   const entries: SkillCommandSpec[] = [];
-  for (const { workspaceDir, options } of resolveAgentSkillCommandWorkspaces(params, true)) {
+  for (const { workspaceDir, params: workspace } of resolveAgentSkillCommandWorkspaces(
+    params,
+    true,
+  )) {
+    const options = resolveWorkspaceSkillCommandOptions(
+      workspace,
+      await resolveNodeExecEligibilityAsync(workspace),
+    );
     const commands = await racePromiseWithAbortSignal(
       prepareWorkspaceSkillCommandSpecs(workspaceDir, {
         ...options,

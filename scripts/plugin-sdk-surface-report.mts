@@ -149,6 +149,11 @@ const defaultPublicDeprecatedExportsByEntrypointBudget = Object.freeze({
   "approval-gateway-runtime": 1,
   "approval-handler-runtime": 1,
   "approval-reply-runtime": 0,
+  // Released synchronous approval routing remains until the next Plugin SDK major.
+  "approval-client-runtime": 1,
+  "approval-delivery-runtime": 1,
+  "approval-native-runtime": 9,
+  "approval-runtime": 6,
   "config-contracts": 0,
   "inbound-reply-dispatch": 21,
   "interactive-runtime": 11,
@@ -192,6 +197,8 @@ const defaultPublicDeprecatedExportsByEntrypointBudget = Object.freeze({
   // +2: approved released upstream-link writes retained during worker migration.
   "session-catalog": 2,
   "session-store-runtime": 7,
+  // Released synchronous sandbox lookup remains while plugins adopt async or prepared reads.
+  sandbox: 1,
   // +2: shipped Slack and Discord setup helpers retained through their package migration window.
   "setup-runtime": 2,
   "reply-history": 6,
@@ -239,7 +246,9 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +7: approved async session, command-menu, model-override, TTS-path, and list replacements.
       // +1: preview adapters strip only normalization-owned response decoration.
       // +1: shared stale-read cache replaces board, preview, search, and credential cache policies.
-      3696,
+      // +24: approved async approval-routing replacements and delivery facts across four public facades.
+      // +2: async sandbox lookup and pure prepared-session classification.
+      3722,
       env,
     ),
     publicFunctionExports: readPluginSdkSurfaceBudgetEnv(
@@ -264,7 +273,9 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +7: the same session, command-menu, model-override, TTS-path, and list replacements.
       // +1: stripReplyPayloadResponsePrefix preserves durable text while assembling previews.
       // +1: the same bounded stale-read cache factory on collection-runtime.
-      2157,
+      // +22: the same async approval-routing functions; two delivery-fact exports are types.
+      // +2: the same sandbox replacements.
+      2181,
       env,
     ),
     publicDeprecatedExports: readPluginSdkSurfaceBudgetEnv(
@@ -277,7 +288,9 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +3: released synchronous skill-command list helpers during async migration.
       // +15: retained synchronous auth, model, and TTS compatibility exports.
       // +7: retained synchronous session, command-menu, model-override, TTS-path, and list exports.
-      183,
+      // +17: eleven synchronous approval-routing APIs retained across four public facades.
+      // +1: released synchronous sandbox lookup retained until the next Plugin SDK major.
+      201,
       env,
     ),
     publicWildcardReexports: readPluginSdkSurfaceBudgetEnv(
