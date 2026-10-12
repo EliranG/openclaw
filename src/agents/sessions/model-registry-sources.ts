@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
-import type { Model, OpenAICompletionsCompat } from "../../llm/types.js";
 import type { ProviderModelCatalog } from "../models-config.merge.js";
 import { loadPersistedPluginModelCatalogs } from "../plugin-model-catalog-execution.js";
 import type { PersistedPluginModelCatalog } from "../plugin-model-catalog.read-operation.js";
@@ -47,19 +46,17 @@ export function cloneMapValues<T extends object>(source: ReadonlyMap<string, T>)
 }
 
 function mergeCompat(
-  baseCompat: Model["compat"],
-  overrideCompat: Model["compat"],
-): Model["compat"] | undefined {
+  baseCompat: ProviderModelCatalog["compat"],
+  overrideCompat: ProviderModelCatalog["compat"],
+): ProviderModelCatalog["compat"] {
   if (!overrideCompat) {
     return baseCompat;
   }
 
-  const baseCompletions = baseCompat as OpenAICompletionsCompat | undefined;
-  const overrideCompletions = overrideCompat as OpenAICompletionsCompat;
-  const merged = { ...baseCompat, ...overrideCompletions };
+  const merged = { ...baseCompat, ...overrideCompat };
   for (const routing of ["openRouterRouting", "vercelGatewayRouting"] as const) {
-    if (baseCompletions?.[routing] || overrideCompletions[routing]) {
-      merged[routing] = { ...baseCompletions?.[routing], ...overrideCompletions[routing] };
+    if (baseCompat?.[routing] || overrideCompat[routing]) {
+      merged[routing] = { ...baseCompat?.[routing], ...overrideCompat[routing] };
     }
   }
   return merged;

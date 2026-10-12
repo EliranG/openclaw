@@ -61,6 +61,7 @@ vi.mock("../agents/agent-scope.js", () => ({
   tryResolveLegacyCompatibilityAgentId: mocks.tryResolveLegacyCompatibilityAgentId,
 }));
 
+// mock-isolation: Hook toggle fixtures own the config snapshot and write receipt without touching operator state.
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.getRuntimeConfig,
   loadConfig: mocks.getRuntimeConfig,

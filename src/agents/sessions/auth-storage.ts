@@ -125,6 +125,13 @@ type StorageBackend = Omit<AuthStorageBackend, "withLockAsync"> & {
   updateAsync?: <T>(fn: (current: string | undefined) => LockResult<T>) => Promise<T>;
 };
 
+function parseStorageData(content: string | undefined): AuthStorageData {
+  if (!content) {
+    return {};
+  }
+  return JSON.parse(content) as AuthStorageData;
+}
+
 function collectStateOnlyAuthProfileIds(store: AuthProfileStore): string[] {
   const referenced = new Set([
     ...Object.values(store.order ?? {}).flat(),
@@ -251,11 +258,7 @@ class SqliteAuthStorageBackend implements StorageBackend {
       const { result, next } = fn(JSON.stringify(materializedData));
       let selectedStore = store;
       if (next !== undefined) {
-        selectedStore = applyAuthStorageData(
-          store,
-          JSON.parse(next) as AuthStorageData,
-          materializedData,
-        );
+        selectedStore = applyAuthStorageData(store, parseStorageData(next), materializedData);
         saveAuthProfileStoreWithPreparedOwner(
           selectedStore,
           this.agentDir,
@@ -297,7 +300,7 @@ class SqliteAuthStorageBackend implements StorageBackend {
         const nextStore =
           next === undefined
             ? store
-            : applyAuthStorageData(store, JSON.parse(next) as AuthStorageData, materializedData);
+            : applyAuthStorageData(store, parseStorageData(next), materializedData);
         selected = { result, store: nextStore, databasePath: owner.databasePath };
         return next === undefined
           ? { save: false }
@@ -423,9 +426,10 @@ export class AuthStorage {
     this.fallbackResolver = resolver;
   }
 
-  private recordError(error: unknown): void {
+  private recordError(error: unknown): Error {
     const normalizedError = error instanceof Error ? error : new Error(String(error));
     this.errors.push(normalizedError);
+    return normalizedError;
   }
 
   private getCanonicalLoadError(): Error | null {
@@ -448,13 +452,6 @@ export class AuthStorage {
     }
   }
 
-  private parseStorageData(content: string | undefined): AuthStorageData {
-    if (!content) {
-      return {};
-    }
-    return JSON.parse(content) as AuthStorageData;
-  }
-
   private setData(data: AuthStorageData): void {
     this.data = data;
     this.credentialSources = new Map(
@@ -472,11 +469,10 @@ export class AuthStorage {
       const content = this.storage.read
         ? this.storage.read()
         : this.storage.withLock((current) => ({ result: current }));
-      this.setData(this.parseStorageData(content));
+      this.setData(parseStorageData(content));
       this.loadError = null;
     } catch (error) {
-      this.loadError = error as Error;
-      this.recordError(error);
+      this.loadError = this.recordError(error);
     }
   }
 
@@ -487,11 +483,10 @@ export class AuthStorage {
         : this.storage.read
           ? this.storage.read()
           : this.storage.withLock((current) => ({ result: current }));
-      this.setData(this.parseStorageData(content));
+      this.setData(parseStorageData(content));
       this.loadError = null;
     } catch (error) {
-      this.loadError = error as Error;
-      this.recordError(error);
+      this.loadError = this.recordError(error);
     }
   }
 
@@ -500,7 +495,7 @@ export class AuthStorage {
     provider: string,
     credential: AuthCredential | undefined,
   ): LockResult<AuthStorageData> {
-    const merged = { ...this.parseStorageData(current) };
+    const merged = { ...parseStorageData(current) };
     if (credential) {
       merged[provider] = credential;
     } else {
@@ -689,7 +684,7 @@ export class AuthStorage {
             : this.storage.withLock(update),
       },
       providerId,
-      parse: (current) => this.parseStorageData(current),
+      parse: parseStorageData,
       commit: (data) => {
         this.setData(data);
         source = this.credentialSources.get(providerId);

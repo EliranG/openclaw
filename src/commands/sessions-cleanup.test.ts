@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   callGateway: vi.fn(),
 }));
 
+// mock-isolation: Cleanup routing fixtures supply config without reading operator state.
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.loadConfig,
   loadConfig: mocks.loadConfig,

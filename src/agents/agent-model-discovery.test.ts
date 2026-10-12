@@ -7,7 +7,6 @@ import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { clearPluginMetadataLifecycleCaches } from "../plugins/plugin-metadata-lifecycle.js";
 import {
   discoverAuthStorageFacts,
-  discoverModels,
   discoverModelsAsync,
   discoverModelsFromCapturedSources,
 } from "./agent-model-discovery.js";
@@ -124,7 +123,7 @@ describe("discoverModels", () => {
       },
     } as unknown as OpenClawConfig;
     const { authStorage } = await discoverAuthStorageFacts(agentDir, { skipCredentials: true });
-    const registry = discoverModels(authStorage, agentDir, { config });
+    const registry = await discoverModelsAsync(authStorage, agentDir, { config });
 
     expect(registry.find("openai", "gpt-5.5")?.api).toBe("openai-completions");
   });

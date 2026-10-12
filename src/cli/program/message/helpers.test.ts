@@ -29,6 +29,7 @@ vi.mock("../../../globals.js", () => ({
 
 const pluginRegistry = createMockPluginRegistry([]);
 const loadPluginRegistryHandleMock = vi.fn(() => pluginRegistry);
+// mock-isolation: Message helper fixtures use empty config without reading operator state.
 vi.mock("../../../config/config.js", () => ({
   getRuntimeConfig: () => ({}),
   loadConfig: () => ({}),

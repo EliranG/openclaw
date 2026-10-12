@@ -126,23 +126,6 @@ export async function discoverAuthStorageFacts(
   return { ...facts, authStorage: AuthStorage.inMemory(facts.credentials) };
 }
 
-/** @deprecated Await discoverModelsAsync for disk discovery; captured sources remain synchronous. */
-export function discoverModels(
-  authStorage: AuthStorage,
-  agentDir: string,
-  options?: DiscoverModelsOptions,
-): ModelRegistry {
-  const registryOptions = prepareModelRegistryOptions(options);
-  const modelsJsonPath = path.join(agentDir, "models.json");
-  const registry = options?.pluginCatalogs
-    ? ModelRegistry.fromCapturedSources(authStorage, modelsJsonPath, {
-        ...registryOptions,
-        pluginCatalogs: options.pluginCatalogs,
-      })
-    : ModelRegistry.create(authStorage, modelsJsonPath, registryOptions);
-  return normalizeOpenClawModelRegistry(registry, agentDir, options);
-}
-
 /** Discover persisted catalogs off the Gateway thread before publishing normalized models. */
 export async function discoverModelsAsync(
   authStorage: AuthStorage,

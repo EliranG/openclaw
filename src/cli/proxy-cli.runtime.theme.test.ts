@@ -7,6 +7,7 @@ const { getRuntimeConfigMock, runProxyValidationMock } = vi.hoisted(() => ({
   runProxyValidationMock: vi.fn(),
 }));
 
+// mock-isolation: Theme fixtures provide config without preparing a real config owner.
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: getRuntimeConfigMock,
   captureRuntimeConfigAsyncReader: () => async () => getRuntimeConfigMock(),

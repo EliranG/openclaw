@@ -73,6 +73,7 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
+// mock-isolation: Node-host fixtures control connection config without reading operator state.
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.getRuntimeConfig,
   captureRuntimeConfigAsyncReader: () => async () => mocks.getRuntimeConfig(),

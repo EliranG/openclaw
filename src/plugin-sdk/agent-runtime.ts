@@ -140,7 +140,6 @@ export {
   loadAuthProfileStoreWithoutExternalProfiles,
   loadAuthProfileStoreWithoutExternalProfilesAsync,
   loadAuthProfileStoreForSecretsRuntime,
-  loadAuthProfileStoreForSecretsRuntimeAsync,
   loadAuthProfileStoreForRuntime,
   loadAuthProfileStoreForRuntimeAsync,
   replaceRuntimeAuthProfileStoreSnapshots,
@@ -159,7 +158,6 @@ export {
   resolveAuthProfileEligibility,
   resolveAuthProfileOrder,
   resolveAuthStorePathForDisplay,
-  resolveAuthStorePathForDisplayAsync,
 } from "../agents/auth-profiles.js";
 export type {
   AuthProfileCredential,

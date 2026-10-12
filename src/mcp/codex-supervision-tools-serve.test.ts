@@ -16,6 +16,7 @@ const getRuntimeConfigMock = vi.hoisted(() =>
   vi.fn<() => import("../config/config.js").OpenClawConfig>(() => ({})),
 );
 
+// mock-isolation: MCP supervision fixtures provide config without starting a real config owner.
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: getRuntimeConfigMock,
   captureRuntimeConfigAsyncReader: () => async () => getRuntimeConfigMock(),

@@ -164,7 +164,7 @@ export const reefPlugin: ChannelPlugin<ReefAccount, unknown, unknown, 2> = {
       const config = resolveReefConfig(cfg as ReefCoreConfig);
       return listTrustedPeersCurrent(config);
     },
-    resolveAllowFromAsync: ({ cfg }) => listTrustedPeers(resolveReefConfig(cfg as ReefCoreConfig)),
+    resolveAllowFromAsync: ({ cfg }) => listTrustedPeers(resolveAccount(cfg).config),
     formatAllowFrom: ({ allowFrom }) =>
       allowFrom.map(String).map((entry) => normalizeReefTarget(entry) ?? entry),
     /** @deprecated Retained for released hosts without describeAccountAsync. */

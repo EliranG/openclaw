@@ -31,6 +31,7 @@ function mockPluginListSnapshot(
     diagnostics?: Array<{ level: "warn"; code: "workspace-scope-omitted"; message: string }>;
   },
 ): void {
+  // mock-isolation: Each plugin-list fixture supplies its config without loading operator state.
   vi.doMock("../config/config.js", () => ({
     getRuntimeConfig: () => config,
     loadConfig: () => config,

@@ -20,7 +20,7 @@ import { createUpdateRun, getUpdateRun } from "../infra/update-run-ledger.js";
 import { ABANDONED_UPDATE_RUN_MS } from "../infra/update-run-timeouts.js";
 import { resetLogger, setLoggerOverride } from "../logging/logger.js";
 import { loggingState } from "../logging/state.js";
-import { readPersistedInstalledPluginIndexInstallRecords } from "../plugins/installed-plugin-index-records.js";
+import { readPersistedInstalledPluginIndexInstallRecordsAsync } from "../plugins/installed-plugin-index-records.js";
 import { seedInstalledPluginIndex } from "../plugins/test-helpers/installed-plugin-index.js";
 import { readConfigMachineState } from "../state/config-machine-state.js";
 import type { DB as OpenClawAgentKyselyDatabase } from "../state/openclaw-agent-db.generated.js";
@@ -254,7 +254,9 @@ describe("runDoctorConfigPreflight", () => {
 
         await expect(runDoctorConfigPreflight(options)).rejects.toThrow(/plugins\.installs/);
         expect(await fs.readFile(configPath, "utf8")).toBe(restored);
-        expect(readPersistedInstalledPluginIndexInstallRecords()).toEqual({ existing: canonical });
+        expect(await readPersistedInstalledPluginIndexInstallRecordsAsync()).toEqual({
+          existing: canonical,
+        });
         expect(await fs.readFile(`${configPath}.bak`, "utf8").catch(() => undefined)).toBe(
           backupBefore,
         );

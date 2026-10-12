@@ -31,6 +31,7 @@ const providerThinkingMocks = vi.hoisted(() => ({
     vi.fn<typeof import("../plugins/provider-thinking.js").resolveEffectiveThinkingProfile>(),
 }));
 
+// mock-isolation: Patch projection fixtures provide ACP metadata without opening real session stores.
 vi.mock("../acp/runtime/session-meta-readonly.js", () => ({
   readAcpSessionMetaForEntryAsync: acpSessionMetaMocks.readAcpSessionMetaForEntryAsync,
 }));

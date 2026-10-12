@@ -5,6 +5,7 @@ import type { SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { projectSessionsPatchEntry } from "./sessions-patch.js";
 
+// mock-isolation: Model-policy fixtures intentionally have no ACP metadata and must not open real session stores.
 vi.mock("../acp/runtime/session-meta-readonly.js", () => ({
   readAcpSessionMetaForEntryAsync: async () => undefined,
 }));

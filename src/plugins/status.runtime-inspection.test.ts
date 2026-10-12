@@ -19,7 +19,7 @@ import { setGatewayPluginMetadataSnapshot } from "./current-plugin-metadata-snap
 import { getGatewayPluginMetadataSnapshot } from "./current-plugin-metadata-state.js";
 import { selectInstallMutationWriteOptions } from "./install-config-mutation.js";
 import { persistPluginInstall } from "./install-persistence.js";
-import { readPersistedInstalledPluginIndexInstallRecords } from "./installed-plugin-index-records.js";
+import { readPersistedInstalledPluginIndexInstallRecordsAsync } from "./installed-plugin-index-records.js";
 import { readPersistedInstalledPluginIndex } from "./installed-plugin-index-store.js";
 import { loadAndActivateRootPluginRegistry, loadPluginRegistryHandle } from "./loader.js";
 import {
@@ -346,7 +346,9 @@ describe("plugin runtime inspection", () => {
         const persisted = JSON.parse(fs.readFileSync(configPath, "utf8"));
         expect(persisted.plugins?.slots).toEqual(expectedSlots);
         expect(persisted.plugins?.load?.paths).toBeUndefined();
-        expect(readPersistedInstalledPluginIndexInstallRecords()?.[pluginId]).toMatchObject({
+        expect(
+          (await readPersistedInstalledPluginIndexInstallRecordsAsync())?.[pluginId],
+        ).toMatchObject({
           source: testCase.source,
           installPath: pluginDir,
         });
@@ -517,7 +519,9 @@ module.exports = { id: ${JSON.stringify(`${pluginId}/${entry}`)}, kind: ${JSON.s
           );
           expect(fs.existsSync(path.join(stateDir, "second.txt"))).toBe(false);
           expect(fs.readFileSync(configPath, "utf8")).toBe(previousConfig);
-          expect(readPersistedInstalledPluginIndexInstallRecords()?.[pluginId]).toBeUndefined();
+          expect(
+            (await readPersistedInstalledPluginIndexInstallRecordsAsync())?.[pluginId],
+          ).toBeUndefined();
         });
       });
     },

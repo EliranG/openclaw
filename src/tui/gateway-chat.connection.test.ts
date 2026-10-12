@@ -13,6 +13,7 @@ const readActiveGatewayLockPortMock = vi.hoisted(() => vi.fn());
 const loadDeviceIdentityIfPresentMock = vi.hoisted(() => vi.fn());
 const loadOriginDeviceTokenMock = vi.hoisted(() => vi.fn());
 
+// mock-isolation: Gateway connection fixtures control config and state paths without reading operator state.
 vi.mock("../config/config.js", async () => {
   const mocks = await import("../gateway/gateway-connection.test-mocks.js");
   return {

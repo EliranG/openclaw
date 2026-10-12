@@ -32,6 +32,7 @@ vi.mock("../infra/tailnet.js", async () => {
   };
 });
 
+// mock-isolation: DNS fixtures use empty config without loading operator state.
 vi.mock("../config/config.js", async () => {
   return { getRuntimeConfig: () => ({}), loadConfig: () => ({}) };
 });

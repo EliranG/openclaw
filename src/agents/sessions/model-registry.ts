@@ -39,7 +39,11 @@ import {
   initializeModelRegistryRuntime,
   resetModelRegistryRuntime,
 } from "./model-registry-runtime.js";
-import { formatValidationPath, validateModelsConfig } from "./model-registry-schema.js";
+import {
+  formatValidationPath,
+  validateModelsConfig,
+  type ProviderAuthMode,
+} from "./model-registry-schema.js";
 import {
   captureProviderSource,
   cloneMapValues,

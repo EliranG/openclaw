@@ -45,6 +45,7 @@ vi.mock("./local-state-owner.js", async (importOriginal) => ({
 }));
 vi.mock("../proxy-capture/ca.js", () => ({ ensureDebugProxyCa: ensureCa }));
 vi.mock("../proxy-capture/coverage.js", () => ({ buildDebugProxyCoverageReport: vi.fn() }));
+// mock-isolation: Proxy cleanup fixtures use empty config without preparing a real config owner.
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: vi.fn(),
   captureRuntimeConfigAsyncReader: () => async () => ({}),

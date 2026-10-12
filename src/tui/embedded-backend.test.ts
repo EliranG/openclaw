@@ -234,6 +234,7 @@ vi.mock("../gateway/server-methods/models-list-result.js", () => ({
     buildModelsListResultMock(...args),
 }));
 
+// mock-isolation: Embedded-backend fixtures own config publication and listeners without loading operator state.
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: () => getRuntimeConfigMock(),
   captureRuntimeConfigAsyncReader: () => async () => getRuntimeConfigMock(),

@@ -13,7 +13,6 @@ export {
   clearLoadInstalledPluginIndexInstallRecordsCache,
   loadInstalledPluginIndexInstallRecords,
   loadInstalledPluginIndexInstallRecordsSync,
-  readPersistedInstalledPluginIndexInstallRecords,
   readPersistedInstalledPluginIndexInstallRecordsAsync,
 } from "./installed-plugin-index-record-reader.js";
 

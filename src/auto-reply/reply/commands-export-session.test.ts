@@ -42,6 +42,7 @@ const hoisted = await vi.hoisted(async () => {
 });
 const generatedVendorAssets = generateExportHtmlVendorAssets();
 
+// mock-isolation: Export fixtures supply ACP metadata without opening a real session database.
 vi.mock("../../acp/runtime/session-meta-readonly.js", () => ({
   readAcpSessionMetaForEntryAsync: hoisted.readAcpSessionMetaForEntryAsyncMock,
 }));

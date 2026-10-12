@@ -14,6 +14,7 @@ vi.mock("../cli/gateway-rpc.js", () => ({
   callGatewayFromCliWithTransport: mocks.callGateway,
 }));
 
+// mock-isolation: Session lifecycle fixtures supply config without reading operator state.
 vi.mock("../config/config.js", () => ({
   getRuntimeConfig: mocks.getRuntimeConfig,
   loadConfig: mocks.getRuntimeConfig,
