@@ -12,10 +12,10 @@ import type { SessionTranscriptReadScope } from "../config/sessions/session-acce
 import { readSessionTranscriptHistoryEventPage } from "../config/sessions/session-accessor.sqlite-history-events.js";
 import { SessionTranscriptColdError } from "../config/sessions/session-cold-storage-state.js";
 import { withSessionEntryReadOnlyInWorker } from "../config/sessions/session-entry-read-runtime.js";
+import { readSessionHistoryPageInWorker } from "../config/sessions/session-history-worker-runtime.js";
 import { resolveSessionStorePathForScope } from "../config/sessions/session-store-path.js";
 import type { SessionEntry } from "../config/sessions/types.js";
 import { redactToolPayloadText } from "../logging/redact.js";
-import { warnPluginSdkDeprecation } from "../plugins/sdk-deprecation.js";
 import { isAssistantTextContentType } from "./chat-display-projection.helpers.js";
 import { projectChatDisplayMessages } from "./chat-display-projection.js";
 import { isSuppressedControlReplyText } from "./control-reply-text.js";
@@ -56,35 +56,18 @@ const CursorSchema = z.strictObject({
 });
 type CatalogCursor = z.infer<typeof CursorSchema>;
 
-function readCatalogHistoryPage(
+async function readCatalogHistoryPage(
   scope: SessionTranscriptReadScope,
   options: { offset: number; maxMessages: number },
 ) {
-  const page = readSessionTranscriptHistoryEventPage(scope, {
-    ...options,
-    maxBytes: MAX_CATALOG_READ_BYTES,
-    readOnly: true,
+  const page = await readSessionHistoryPageInWorker({
+    kind: "history-event-page",
+    params: {
+      target: scope,
+      options: { ...options, maxBytes: MAX_CATALOG_READ_BYTES },
+    },
   });
   if (page.omittedOversized) {
-    throw new Error(
-      "A transcript entry is too large to share. Open the session on the source Gateway to inspect it.",
-    );
-  }
-  return page;
-}
-
-async function readCatalogHistoryPageAsync(
-  scope: SessionTranscriptReadScope,
-  options: { offset: number; maxMessages: number },
-  rejectOversized = true,
-) {
-  const { readSessionHistoryPageInWorker } =
-    await import("../config/sessions/session-history-worker-runtime.js");
-  const page = await readSessionHistoryPageInWorker({
-    kind: "catalog-page",
-    params: { target: scope, options: { ...options, maxBytes: MAX_CATALOG_READ_BYTES } },
-  });
-  if (rejectOversized && page.omittedOversized) {
     throw new Error(
       "A transcript entry is too large to share. Open the session on the source Gateway to inspect it.",
     );
@@ -192,8 +175,9 @@ export async function readSessionTranscriptCatalogPage(
   if (!Number.isSafeInteger(params.limit) || params.limit < 1 || params.limit > MAX_CATALOG_ITEMS) {
     throw new Error(`Session transcript limit must be an integer from 1 to ${MAX_CATALOG_ITEMS}.`);
   }
+  const storePath = resolveSessionStorePathForScope(params);
   return withSessionEntryReadOnlyInWorker(
-    { ...params, storePath: resolveSessionStorePathForScope(params) },
+    { ...params, storePath },
     () => {},
     async (read, owner) => {
       if (!read.ok) {
@@ -202,23 +186,23 @@ export async function readSessionTranscriptCatalogPage(
       if (!read.value) {
         throw new Error("Session not found; refresh the session catalog.");
       }
-      return readSessionTranscriptCatalogPageForEntry(
-        params,
-        cursor,
+      return readCatalogPageFromEntry(
+        { ...params, storePath },
         read.value,
+        cursor,
         owner.assertCurrent,
       );
     },
   );
 }
 
-async function readSessionTranscriptCatalogPageForEntry(
-  params: CatalogReadParams,
-  cursor: CatalogCursor | undefined,
+async function readCatalogPageFromEntry(
+  params: CatalogReadParams & { storePath: string },
   entry: SessionEntry,
+  cursor: CatalogCursor | undefined,
   assertSourceCurrent: () => void,
 ): Promise<SessionTranscriptCatalogPage> {
-  const storePath = resolveSessionStorePathForScope(params);
+  const storePath = params.storePath;
   const scope = {
     agentId: params.agentId,
     sessionKey: params.sessionKey,
@@ -238,7 +222,7 @@ async function readSessionTranscriptCatalogPageForEntry(
       ]),
     )
     .digest("base64url");
-  const snapshot = await readCatalogHistoryPageAsync(scope, {
+  const snapshot = await readCatalogHistoryPage(scope, {
     offset: 0,
     maxMessages: 1,
   });
@@ -258,7 +242,7 @@ async function readSessionTranscriptCatalogPageForEntry(
   // Appends retain this active-path anchor; leaf rewinds can preserve the rewrite
   // generation, so source hashes alone cannot fence a cursor onto its original branch.
   if (cursor) {
-    const anchoredPage = await readCatalogHistoryPageAsync(scope, {
+    const anchoredPage = await readCatalogHistoryPage(scope, {
       offset: snapshot.totalMessages - cursor.anchor.seq,
       maxMessages: 1,
     });
@@ -278,7 +262,7 @@ async function readSessionTranscriptCatalogPageForEntry(
     Awaited<ReturnType<typeof prepareSessionCatalogSourceParticipantProjector>>
   >();
   while (before > 0 && items.length < limit && scanned < MAX_CATALOG_SCAN_MESSAGES) {
-    const page = await readCatalogHistoryPageAsync(scope, {
+    const page = await readCatalogHistoryPage(scope, {
       offset: snapshot.totalMessages - before,
       maxMessages: Math.min(before, limit + 1),
     });
@@ -353,18 +337,13 @@ async function readSessionTranscriptCatalogPageForEntry(
   return { items, ...(nextCursor ? { nextCursor } : {}) };
 }
 
-/** @deprecated Use readSessionTranscriptCatalogTitleAsync for worker-backed transcript reads. */
-export function readSessionTranscriptCatalogTitle(params: {
+/** Legacy SDK title contract; bundled callers use the worker-backed async replacement. */
+export function readLegacySessionTranscriptCatalogTitle(params: {
   agentId: string;
   sessionKey: string;
   storePath?: string;
   entry: SessionEntry;
 }): string | undefined {
-  warnPluginSdkDeprecation({
-    family: "session-transcript",
-    method: "readSessionTranscriptCatalogTitle",
-    replacement: "readSessionTranscriptCatalogTitleAsync",
-  });
   const title = deriveSessionTitle(params.entry);
   if (title) {
     return boundedText(title).text;
@@ -376,24 +355,18 @@ export function readSessionTranscriptCatalogTitle(params: {
     sessionEntry: params.entry,
   };
   try {
-    const snapshot = readCatalogHistoryPage(scope, { offset: 0, maxMessages: 0 });
+    const snapshot = readSessionTranscriptHistoryEventPage(scope, {
+      offset: 0,
+      maxMessages: 0,
+      readOnly: true,
+    });
     const page = readSessionTranscriptHistoryEventPage(scope, {
       offset: Math.max(0, snapshot.totalMessages - 100),
       maxMessages: 100,
       maxBytes: MAX_CATALOG_READ_BYTES,
       readOnly: true,
     });
-    // A clipped prefix cannot establish the first user message's title.
-    if (page.olderOffset !== undefined || page.omittedOversized) {
-      return undefined;
-    }
-    for (const event of page.events) {
-      const message = projectSessionDisplayMessage(sqliteMessageEventWithSeq(event));
-      if (message?.role === "user") {
-        const derived = deriveSessionTitle(params.entry, message.text);
-        return derived ? boundedText(derived).text : undefined;
-      }
-    }
+    return deriveCatalogHistoryTitle(params.entry, page);
   } catch (error) {
     if (!(error instanceof SessionTranscriptColdError)) {
       throw error;
@@ -402,9 +375,9 @@ export function readSessionTranscriptCatalogTitle(params: {
   return undefined;
 }
 
-/** Matches local title precedence using the existing bounded history worker. */
+/** Matches title precedence without opening SQLite on the Gateway thread. */
 export async function readSessionTranscriptCatalogTitleAsync(
-  params: Parameters<typeof readSessionTranscriptCatalogTitle>[0],
+  params: Parameters<typeof readLegacySessionTranscriptCatalogTitle>[0],
 ): Promise<string | undefined> {
   const title = deriveSessionTitle(params.entry);
   if (title) {
@@ -417,25 +390,40 @@ export async function readSessionTranscriptCatalogTitleAsync(
     sessionEntry: params.entry,
   };
   try {
-    const snapshot = await readCatalogHistoryPageAsync(scope, { offset: 0, maxMessages: 0 });
-    const page = await readCatalogHistoryPageAsync(
-      scope,
-      { offset: Math.max(0, snapshot.totalMessages - 100), maxMessages: 100 },
-      false,
-    );
-    if (page.olderOffset !== undefined || page.omittedOversized) {
-      return undefined;
-    }
-    for (const event of page.events) {
-      const message = projectSessionDisplayMessage(sqliteMessageEventWithSeq(event));
-      if (message?.role === "user") {
-        const derived = deriveSessionTitle(params.entry, message.text);
-        return derived ? boundedText(derived).text : undefined;
-      }
-    }
+    const page = await readSessionHistoryPageInWorker({
+      kind: "history-event-page",
+      params: {
+        target: scope,
+        options: {
+          offset: 0,
+          beforeSeq: 101,
+          maxMessages: 100,
+          maxBytes: MAX_CATALOG_READ_BYTES,
+        },
+      },
+    });
+    return deriveCatalogHistoryTitle(params.entry, page);
   } catch (error) {
     if (!(error instanceof SessionTranscriptColdError)) {
       throw error;
+    }
+  }
+  return undefined;
+}
+
+function deriveCatalogHistoryTitle(
+  entry: SessionEntry,
+  page: Awaited<ReturnType<typeof readCatalogHistoryPage>>,
+): string | undefined {
+  // A clipped prefix cannot establish the first user message's title.
+  if (page.olderOffset !== undefined || page.omittedOversized) {
+    return undefined;
+  }
+  for (const event of page.events) {
+    const message = projectSessionDisplayMessage(sqliteMessageEventWithSeq(event));
+    if (message?.role === "user") {
+      const derived = deriveSessionTitle(entry, message.text);
+      return derived ? boundedText(derived).text : undefined;
     }
   }
   return undefined;

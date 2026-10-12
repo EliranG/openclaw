@@ -141,6 +141,12 @@ export function createReadonlySessionHistoryReader(
     () => (sourceDatabases ??= resolveSourceDatabases?.()),
   );
   return {
+    readHistoryEventPage: (
+      options: Parameters<typeof readSessionTranscriptHistoryEventPageFromProjection>[1],
+    ) =>
+      readSnapshot((projection) =>
+        readSessionTranscriptHistoryEventPageFromProjection(projection, options),
+      ),
     readHistoryRevision: () =>
       readSnapshot((projection) => ({
         database: projection.database.db,
@@ -155,12 +161,6 @@ export function createReadonlySessionHistoryReader(
     readBoundedMessageTail: (options: SessionTranscriptBoundedMessageTailOptions) =>
       readSnapshot((projection) =>
         readSessionTranscriptBoundedMessageTailPageFromProjection(projection, options),
-      ),
-    readCatalogPage: (
-      options: Parameters<typeof readSessionTranscriptHistoryEventPageFromProjection>[1],
-    ) =>
-      readSnapshot((projection) =>
-        readSessionTranscriptHistoryEventPageFromProjection(projection, options),
       ),
     readRecentConversationText: (options: ReadRecentSessionConversationTextOptions) =>
       readSnapshot((projection) =>

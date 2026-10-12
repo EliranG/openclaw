@@ -16,10 +16,7 @@ import type { OpenClawConfig } from "../../../config/types.openclaw.js";
 import type { DispatchGatewayMethodInProcessOptions } from "../../../gateway/server-plugin-in-process-dispatch.types.js";
 import { withOpenClawTestState } from "../../../test-utils/openclaw-test-state.js";
 import { resolveUserPath } from "../../../utils.js";
-import {
-  resolveSandboxRuntimeStatus,
-  withSandboxRuntimeStatusInWorker,
-} from "../../sandbox/runtime-status.js";
+import { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
 import { installAcceptedSubagentGatewayMock } from "../../test-helpers/subagent-gateway.js";
 import type { RegisterSubagentRunOptions } from "../registry/subagent-registry.types.js";
 import { testing as swarmSchedulerTesting } from "../swarm/swarm-scheduler.test-support.js";
@@ -948,9 +945,6 @@ describe("spawnSubagentDirect seam flow", () => {
           },
         });
 
-        const workerRead = vi
-          .spyOn(await import("./subagent-spawn.runtime.js"), "withSandboxRuntimeStatusInWorker")
-          .mockImplementation(withSandboxRuntimeStatusInWorker);
         const sql = observeHostDataSql();
         try {
           const result = await spawn(
@@ -966,7 +960,6 @@ describe("spawnSubagentDirect seam flow", () => {
           expect(sql.queries.filter(isSessionEntryDataSql)).toEqual([]);
         } finally {
           sql.restore();
-          workerRead.mockRestore();
         }
       });
     },
@@ -1016,16 +1009,13 @@ describe("spawnSubagentDirect seam flow", () => {
     },
   );
 
-  it("uses requester agent thinkingDefault after a failed preference read", async () => {
+  it("uses requester agent thinkingDefault without a stored requester", async () => {
     // Import after the spawn helper installs the mocked session runtime.
-    const { readRequesterPreferences } = await import("./subagent-spawn-requester-prefs.js");
-    hoisted.loadSessionStoreMock.mockImplementation(() => {
-      throw new Error("preference read unavailable");
-    });
+    const { resolveRequesterPreferences } = await import("./subagent-spawn-requester-prefs.js");
 
-    const preferences = await readRequesterPreferences({
+    const preferences = resolveRequesterPreferences({
       cfg: { agents: { entries: { main: { thinkingDefault: "high" } } } },
-      requesterInternalKey: "agent:main:main",
+      requesterEntry: undefined,
       requesterAgentId: "main",
     });
     expect(preferences.thinkingLevel).toBe("high");

@@ -39,10 +39,10 @@ export async function readSessionHistoryRequest(
     deferProfileDisplay: true,
     resolveCronJobName: () => undefined,
   };
-  if (request.kind === "catalog-page") {
+  if (request.kind === "history-event-page") {
     return {
-      kind: "catalog-page",
-      result: options.readers.readCatalogPage(request.params.options),
+      kind: "history-event-page",
+      result: options.readers.readHistoryEventPage(request.params.options),
     };
   }
   if (request.kind === "active-accounting") {

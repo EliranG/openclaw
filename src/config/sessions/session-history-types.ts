@@ -10,6 +10,7 @@ import type {
   ReadSessionMessagesResult,
   SessionTranscriptDisplayDeltaResult,
   SessionTranscriptMessageByIdOptions,
+  SessionTranscriptPageOptions,
   SessionTranscriptReader,
 } from "../../gateway/session-transcript-read.types.js";
 import type {
@@ -186,10 +187,10 @@ export type ChatHistoryDisplayResult =
 
 export type SessionHistoryWorkerRequest =
   | {
-      kind: "catalog-page";
+      kind: "history-event-page";
       params: {
         target: SessionTranscriptReadScope;
-        options: { offset: number; maxMessages: number; maxBytes: number };
+        options: SessionTranscriptPageOptions;
       };
     }
   | {
@@ -290,7 +291,7 @@ export type SessionHistoryWorkerRequest =
   | { kind: "http"; params: SessionHistoryReadParams };
 
 export type SessionHistoryWorkerResult =
-  | { kind: "catalog-page"; result: SessionTranscriptMessageEventPage }
+  | { kind: "history-event-page"; result: SessionTranscriptMessageEventPage }
   | { kind: "recent-text"; result: SessionRecentConversationText[] }
   | { kind: "active-accounting"; result: SessionTranscriptAccountingSnapshot }
   | { kind: "bounded-tail"; result: SessionTranscriptBoundedMessageTailPage }
