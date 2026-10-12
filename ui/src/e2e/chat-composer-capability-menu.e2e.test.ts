@@ -762,6 +762,11 @@ suite.define(() => {
         });
       expect(await gateway.getRequests("sessions.patch")).toHaveLength(1);
       await expect.poll(() => webSearchItem(menu).isDisabled()).toBe(true);
+      expect(
+        await webSearchItem(menu).evaluate(
+          (node) => (node as HTMLElement & { checked: boolean }).checked,
+        ),
+      ).toBe(false);
     });
   });
 

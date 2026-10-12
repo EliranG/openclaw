@@ -1,9 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
-  createNativeSessionCommitFinalizer,
-  getNativeSessionDeletionParticipant,
-} from "../agents/harness/native-session/deletion-participant.js";
-import {
   composeSessionSourceAssertion,
   type SessionSourceAssertion,
 } from "../config/sessions/session-source-authority.js";
@@ -240,15 +236,4 @@ export function commitSessionInitializationRollback(handle: SessionInitializatio
   if (owner?.handle === handle) {
     owner.committed();
   }
-}
-
-/** Settle initialization in its host owner only when the worker actually deleted its row. */
-export function createSessionInitializationDeletionParticipant(handle: SessionInitialization) {
-  const runInOwner = AsyncLocalStorage.snapshot();
-  const finalizer = createNativeSessionCommitFinalizer({
-    commit: () => runInOwner(() => commitSessionInitializationRollback(handle)),
-    rollback() {},
-  });
-  // The commit-finalizer factory always binds its participant.
-  return getNativeSessionDeletionParticipant(finalizer)!;
 }
