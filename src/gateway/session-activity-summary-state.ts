@@ -11,10 +11,25 @@ import {
 } from "../config/sessions/session-accessor.js";
 import type { SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { parseAgentSessionKey } from "../routing/session-key.js";
 import { sessionChanges } from "../sessions/session-row-changes.js";
 import { resolveSessionStoreKey } from "./session-store-key.js";
 
 export type ActivitySummaryTarget = { key: string; agentId: string };
+
+export function resolveActivitySummaryEventTarget(
+  cfg: OpenClawConfig,
+  key?: string,
+  agentId?: string,
+): ActivitySummaryTarget | undefined {
+  const agentOwner = agentId ?? (key ? parseAgentSessionKey(key)?.agentId : undefined);
+  return key && agentOwner
+    ? {
+        key: resolveSessionStoreKey({ cfg, sessionKey: key, storeAgentId: agentOwner }),
+        agentId: agentOwner,
+      }
+    : undefined;
+}
 type PendingState = {
   sessionId: string;
   storePath: string;

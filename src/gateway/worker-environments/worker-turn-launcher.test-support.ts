@@ -14,7 +14,7 @@ import { waitForEmbeddedAgentRunEnd } from "../../agents/embedded-agent-runner/r
 import type { SessionPlacementTurnParams } from "../../agents/session-placement-admission.js";
 import { SessionManager } from "../../agents/sessions/session-manager.js";
 import { CORE_WORKER_LAUNCH_TOOL_NAMES } from "../../agents/tool-catalog.js";
-import { clearRuntimeConfigSnapshot } from "../../config/io.js";
+import { clearRuntimeConfigSnapshot, setRuntimeConfigSnapshot } from "../../config/io.js";
 import { patchSessionEntryCore } from "../../config/sessions/session-accessor.js";
 import { readTranscriptStorageRows } from "../../config/sessions/session-accessor.sqlite-read.js";
 import {
@@ -186,6 +186,7 @@ export async function setupWorkerTurnLauncherTest(): Promise<void> {
     skipMaintenance: true,
   });
   await SessionManager.openAsync(sessionTarget);
+  setRuntimeConfigSnapshot({ session: { store: sessionTarget.storePath } });
   sessionFile = SESSION_KEY;
 }
 

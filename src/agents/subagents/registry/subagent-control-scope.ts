@@ -141,6 +141,8 @@ export type ExecRequestSubagentSelection = {
   ownsRoot: (entry: SubagentRunRecord) => boolean;
   selectPublishedRoot?: (entry: SubagentRunRecord) => boolean;
   sessionGeneration?: SubagentRequestSessionOrigin["target"];
+  /** Resolve exact authority after the existing kill scope holds its candidates. */
+  prepare?: () => Promise<void>;
 };
 
 /** Freeze native owners before cancellation yields; routed IDs never grant control. */
@@ -150,9 +152,17 @@ export function captureExecRequestSubagentSelection(params: {
   requesterTurnRunId?: string;
   owners: readonly ExecRequestOwner[];
   sessionOrigin?: SubagentRequestSessionOrigin;
+  /** Logical candidates reserve dispatch only; preparation replaces them before effects. */
+  candidateOrigin?: {
+    target: Pick<SubagentRequestSessionOrigin["target"], "sessionKey" | "agentId">;
+    acceptsRequest: SubagentRequestSessionOrigin["acceptsRequest"];
+  };
 }): ExecRequestSubagentSelection {
   const owners = new Set(params.owners);
-  const origin = params.requesterTurnRunId === undefined ? params.sessionOrigin : undefined;
+  const origin =
+    params.requesterTurnRunId === undefined
+      ? (params.sessionOrigin ?? params.candidateOrigin)
+      : undefined;
   if (
     origin &&
     (origin.target.sessionKey !== params.controller.controllerSessionKey ||
@@ -230,7 +240,7 @@ export function captureExecRequestSubagentSelection(params: {
     runs: [...selected.values()].map(({ entry }) => entry),
     // Late publication must prove the captured request object, never a new session match.
     selectPublishedRoot: owners.size > 0 ? selectPublishedRoot : undefined,
-    sessionGeneration: selectedByOrigin ? origin?.target : undefined,
+    sessionGeneration: selectedByOrigin ? params.sessionOrigin?.target : undefined,
     ownsRoot(entry) {
       const captured = selected.get(getSubagentRunRuntimeKey(entry));
       return Boolean(

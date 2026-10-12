@@ -252,14 +252,17 @@ async function defaultRun(params: SessionCompanionRunParams): Promise<string> {
       abortSignal.throwIfAborted();
       params.assertSourceCurrent?.();
     };
-    await withSessionTranscriptWriteAssertion(target, assertSeedCurrent, () =>
-      withSessionManagerWrite(sessionManager, async () => {
-        assertSeedCurrent();
-        for (const message of params.messages.slice(0, -1)) {
+    await withSessionTranscriptWriteAssertion(
+      { ...target, expectedOwner: expectedSeedOwner },
+      assertSeedCurrent,
+      () =>
+        withSessionManagerWrite(sessionManager, async () => {
           assertSeedCurrent();
-          await sessionManager.appendMessageAsync(toRunnerHistoryMessage(message, selectedModel));
-        }
-      }),
+          for (const message of params.messages.slice(0, -1)) {
+            assertSeedCurrent();
+            await sessionManager.appendMessageAsync(toRunnerHistoryMessage(message, selectedModel));
+          }
+        }),
     );
     abortSignal.throwIfAborted();
     params.assertInputCurrent?.();

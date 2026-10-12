@@ -19,13 +19,20 @@ export async function abortControlledSubagents(params: {
   sessionOrigin?: SubagentRequestSessionOrigin;
   assertCurrent?: () => void;
   beforeKill?: Parameters<typeof killAllControlledSubagentRuns>[0]["beforeKill"];
+  prepareSelection?: {
+    acceptsRequest: SubagentRequestSessionOrigin["acceptsRequest"];
+    prepare: () => Promise<{
+      execCancellation: ReturnType<typeof captureExecRequestCancellation>;
+      sessionOrigin?: SubagentRequestSessionOrigin;
+    }>;
+  };
 }) {
   const controller = resolveSubagentController({
     cfg: params.cfg,
     agentSessionKey: params.sessionKey,
     agentId: params.agentId,
   });
-  const commands =
+  let commands =
     params.execCancellation ??
     captureExecRequestCancellation({
       runId: params.requesterTurnRunId,
@@ -33,11 +40,45 @@ export async function abortControlledSubagents(params: {
       agentId: params.agentId,
       sessionId: params.sessionId,
     });
-  const requestSelection = captureExecRequestSubagentSelection({
+  let selected = captureExecRequestSubagentSelection({
     ...params,
     controller,
     owners: commands.owners,
+    candidateOrigin: params.prepareSelection
+      ? {
+          target: {
+            sessionKey: controller.controllerSessionKey,
+            agentId: controller.controllerAgentId,
+          },
+          acceptsRequest: params.prepareSelection.acceptsRequest,
+        }
+      : undefined,
   });
+  const preparation = params.prepareSelection;
+  const prepare = preparation
+    ? async () => {
+        const prepared = await preparation.prepare();
+        commands = prepared.execCancellation;
+        selected = captureExecRequestSubagentSelection({
+          ...params,
+          controller,
+          owners: commands.owners,
+          sessionOrigin: prepared.sessionOrigin,
+        });
+      }
+    : undefined;
+  const requestSelection = {
+    runs: selected.runs,
+    ownsRoot: (entry: (typeof selected.runs)[number]) => selected.ownsRoot(entry),
+    selectPublishedRoot:
+      preparation || selected.selectPublishedRoot
+        ? (entry: (typeof selected.runs)[number]) => selected.selectPublishedRoot?.(entry) === true
+        : undefined,
+    get sessionGeneration() {
+      return selected.sessionGeneration;
+    },
+    prepare,
+  };
   let execAborted = false;
   const commandErrors: unknown[] = [];
   const beforeKill = async (sealRootSelection = () => {}) => {
@@ -62,7 +103,7 @@ export async function abortControlledSubagents(params: {
   let descendants: Awaited<ReturnType<typeof killAllControlledSubagentRuns>> | undefined;
   let failure: { error: unknown } | undefined;
   try {
-    if (requestSelection.runs.length === 0) {
+    if (requestSelection.runs.length === 0 && !prepare) {
       await beforeKill();
     } else {
       descendants = await killAllControlledSubagentRuns({

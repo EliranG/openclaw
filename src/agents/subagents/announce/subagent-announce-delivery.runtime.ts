@@ -174,7 +174,7 @@ export async function captureRequesterSessionEntryCurrent(
       storePath,
       agentId,
       sessionKeys: [storageKey],
-      snapshotFields: ["sessionId", "lifecycleRevision"],
+      snapshotFields: [],
       includeAuthorization: true,
     },
     async ({ result }) => {

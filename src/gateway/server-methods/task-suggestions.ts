@@ -140,7 +140,7 @@ async function sendSuggestedTaskPrompt(
   };
   let sessionMutationAuthorization = params.options.sessionMutationAuthorization;
   if (params.source) {
-    const authorization = await resolveSessionMutationAuthorization({
+    const authorization = resolveSessionMutationAuthorization({
       client: params.options.client,
       context: params.options.context,
       method: "chat.send",

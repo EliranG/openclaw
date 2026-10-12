@@ -66,6 +66,7 @@ vi.mock("../session-sharing.js", () => ({
     error: null,
   }),
   resolveSessionSharingTarget: () => edge.target,
+  resolveSessionSharingTargetAsync: async () => edge.target,
   SessionMutationAuthorizationChangedError: class extends Error {},
 }));
 vi.mock("./gateway-client-identity.js", () => ({

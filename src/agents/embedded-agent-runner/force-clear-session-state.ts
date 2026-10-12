@@ -1,7 +1,7 @@
 import { getRuntimeConfig } from "../../config/io.js";
 import { resolveSessionStorePathCore } from "../../config/sessions/paths.js";
 import { patchSessionEntryCore } from "../../config/sessions/session-accessor.js";
-import { readSessionEntryInWorker } from "../../config/sessions/session-entry-read-runtime.js";
+import { readSessionEntryReadOnlyInWorker } from "../../config/sessions/session-entry-read-runtime.js";
 import {
   captureIncognitoSessionSource,
   withIncognitoSessionBinding,
@@ -42,7 +42,7 @@ export async function tryLoadForceClearSessionSnapshot(
     // Cancellation must not queue behind the run whose settlement it is waiting for.
     const entry = source
       ? source.actor.sessions.readSteering(sessionKey)
-      : await readSessionEntryInWorker({ agentId, sessionKey, storePath });
+      : await readSessionEntryReadOnlyInWorker({ agentId, sessionKey, storePath });
     if (
       !entry ||
       entry.status !== undefined ||

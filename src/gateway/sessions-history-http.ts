@@ -219,7 +219,7 @@ async function serveAuthorizedSessionHistory(
   assertSourceCurrent: () => void,
 ): Promise<boolean> {
   const { cfg, requestAuth, operatorScopes } = authResult;
-  let target: ReturnType<typeof resolveGatewaySessionStoreTargetWithStore>;
+  let target: Awaited<ReturnType<typeof resolveGatewaySessionStoreTargetInWorker>>;
   let entry: ReturnType<typeof resolveCanonicalSessionEntryFromStoreKeys>;
   try {
     if (source) {

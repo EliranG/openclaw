@@ -8,7 +8,7 @@ import {
   loadRequesterSessionEntry,
 } from "./subagent-announce-delivery.runtime.js";
 
-it("updates prepared requester guards after the session writer commits", async () => {
+it("retires prepared requester guards when the session writer replaces the lifecycle", async () => {
   await withOpenClawTestState({ label: "requester-current" }, async () => {
     const agentId = "main";
     const sessionKey = "agent:main:main";
@@ -31,7 +31,7 @@ it("updates prepared requester guards after the session writer commits", async (
         lifecycleRevision: "replacement",
         updatedAt: 2,
       });
-      expect(current.readCurrent()?.lifecycleRevision).toBe("replacement");
+      expect(current.readCurrent()).toBeUndefined();
       expect((await loadRequesterSessionEntry(sessionKey, agentId)).entry?.lifecycleRevision).toBe(
         "replacement",
       );

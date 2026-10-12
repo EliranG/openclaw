@@ -401,7 +401,7 @@ export async function resolveSandboxRuntimeStatusesForPersistedSessions(
   }[],
 ) {
   const results = await Promise.all(
-    requests.map((params) =>
+    requests.map(async (params) =>
       params.sessionKeys.length === 0
         ? { entries: [] }
         : readSessionEntriesFromStoreInWorker({

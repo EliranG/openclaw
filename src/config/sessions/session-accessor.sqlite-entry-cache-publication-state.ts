@@ -355,9 +355,11 @@ export function retainPreparedSessionEntryPredicate(params: {
   });
   let active = true;
   const canRefresh = () => active && predicate.state !== "changed";
+  const isCurrent = () =>
+    canRefresh() && predicate.state === "current" && !retained.hasPendingPublication();
   return {
-    isCurrent: () =>
-      canRefresh() && predicate.state === "current" && !retained.hasPendingPublication(),
+    isCurrent,
+    readCurrent: () => (isCurrent() ? { entry: structuredClone(predicate.entry) } : undefined),
     canRefresh,
     captureRevision: () => predicate.revision,
     acknowledge: (entry: SessionEntry | undefined, revision: number) => {

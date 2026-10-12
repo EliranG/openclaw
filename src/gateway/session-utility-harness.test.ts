@@ -7,6 +7,7 @@ import {
   persistSessionTranscriptTurn,
   upsertSessionEntryCore,
 } from "../config/sessions/session-accessor.js";
+import { readSessionEntryReadOnlyInWorker } from "../config/sessions/session-entry-read-runtime.js";
 import { prewarmSessionHistoryWorker } from "../config/sessions/session-transcript-worker-runtime.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { createEmptyPluginMetadataSnapshot } from "../plugins/plugin-metadata-empty.test-support.js";
@@ -176,7 +177,7 @@ describe("utility completion with an unavailable implicit harness", () => {
       completeModel: complete,
     });
     try {
-      recaps.ensure(target);
+      recaps.ensure(target, await readSessionEntryReadOnlyInWorker(scope));
       await vi.waitFor(() => expect(complete).toHaveBeenCalledOnce());
       await expect(complete.mock.results[0]?.value).resolves.toMatchObject({
         owner: { kind: "harness", id: "openclaw" },

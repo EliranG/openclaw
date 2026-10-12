@@ -26,7 +26,7 @@ import {
   readWorkspaceFile,
   resolveWorkspacePath,
 } from "./server-methods/workspace-fs.js";
-import { loadGatewaySessionEntryReadOnlyInWorker } from "./session-utils-store-worker.js";
+import { withGatewaySessionEntryReadOnly } from "./session-utils-read-lifetime.js";
 import { loadGatewaySessionEntryReadOnly } from "./session-utils.js";
 import { WORKSPACE_PREVIEW_MAX_BYTES } from "./workspace-file-limits.js";
 
@@ -85,21 +85,18 @@ export async function prepareMcpAppHostFile(
 ): Promise<McpAppHostFile> {
   const session = captureHostFileSession(options, target);
   const cfg = options.context.getRuntimeConfig();
-  const loaded = await loadGatewaySessionEntryReadOnlyInWorker({
-    cfg,
-    key: target.sessionKey,
-    agentId: target.agentId,
-    projection: "list",
-  });
+  const entry = await withGatewaySessionEntryReadOnly(
+    { cfg, key: target.sessionKey, agentId: target.agentId, projection: "list" },
+    async (loaded) => loaded.entry,
+  );
   const read = retainSessionScopedRead(options, target.sessionKey, target.agentId, {
     requireMaterialized: true,
   });
   try {
     const rootDir = resolveLocalSessionWorkspaceRoot({
       ...target,
-      source: { entry: loaded.entry, cfg },
+      source: { entry, cfg },
     });
-    const entry = loaded.entry;
     if (!rootDir || !entry?.sessionId) {
       throw new Error("Local workspace file access is unavailable");
     }
@@ -475,17 +472,15 @@ export async function canOpenMcpAppFiles(view: McpAppViewLease): Promise<boolean
     return false;
   }
   const cfg = getRuntimeConfig();
-  const loaded = await loadGatewaySessionEntryReadOnlyInWorker({
-    cfg,
-    key: sessionKey,
-    agentId: view.agentId,
-    projection: "list",
-  });
+  const entry = await withGatewaySessionEntryReadOnly(
+    { cfg, key: sessionKey, agentId: view.agentId, projection: "list" },
+    async (loaded) => loaded.entry,
+  );
   return Boolean(
     resolveLocalSessionWorkspaceRoot({
       sessionKey,
       agentId: view.agentId,
-      source: { entry: loaded.entry, cfg },
+      source: { entry, cfg },
     }),
   );
 }

@@ -33,7 +33,6 @@ import {
   isCronSessionKey,
   isIncognitoSessionKey,
   isSubagentSessionKey,
-  parseAgentSessionKey,
 } from "../routing/session-key.js";
 import { isSessionLifecycleMutationActive } from "../sessions/session-lifecycle-admission.js";
 import {
@@ -42,10 +41,12 @@ import {
 } from "../sessions/session-lifecycle-events.js";
 import type { InternalSessionTranscriptUpdate } from "../sessions/transcript-events.js";
 import { runInDetachedAsyncContext } from "../shared/detached-async-context.js";
+import { subscribeActivitySummaryEntryReceipts } from "./session-activity-summary-entry-receipts.js";
 import { readActivitySummarySource } from "./session-activity-summary-source.js";
 import {
   activitySummaryScope,
   projectSessionActivitySummary,
+  resolveActivitySummaryEventTarget,
   sessionActivitySummaryOwnerIsCurrent,
   setSessionActivitySummaryState,
   type ActivitySummaryTarget,
@@ -54,7 +55,6 @@ import { readSessionListSelectionFacts } from "./session-list-target.js";
 import type { SessionObserverEvent } from "./session-observer-contract.js";
 import { defaultCompleteModel, defaultPrepareModel } from "./session-observer-model.js";
 import type { SessionRowProjection } from "./session-row-projection.js";
-import { resolveSessionStoreKey } from "./session-store-key.js";
 
 const log = createSubsystemLogger("gateway/activity-summary");
 const REFRESH_MS = 90_000;
@@ -135,13 +135,6 @@ export function createSessionActivitySummaries(deps: {
       agentId: target.agentId,
     }),
   });
-  const read = async (target: ActivitySummaryTarget, storePath = scope(target).storePath) => {
-    const projection = deps.getSessionRowProjection?.();
-    if (projection?.sharingRevision) {
-      return projection.sharingTarget(target)?.entry;
-    }
-    return readSessionEntryReadOnlyInWorker({ ...scope(target), storePath, projection: "list" });
-  };
   const current = (state: Tracked) =>
     !disposed &&
     states.get(activitySummaryScope(state)) === state &&
@@ -370,6 +363,7 @@ export function createSessionActivitySummaries(deps: {
               throw controller.signal.reason ?? new ActivitySummaryCancelledError();
             }
             assertCurrentOwner(state, ref);
+            assertCurrentEntry(state, state.entry);
           };
           const execute = async () => {
             const prepared = await (deps.prepareModel ?? defaultPrepareModel)({
@@ -580,19 +574,8 @@ export function createSessionActivitySummaries(deps: {
       running.add(work);
     }
   };
-  const eventTarget = (key?: string, agentId?: string): ActivitySummaryTarget | undefined => {
-    const agentOwner = agentId ?? (key ? parseAgentSessionKey(key)?.agentId : undefined);
-    return key && agentOwner
-      ? {
-          key: resolveSessionStoreKey({
-            cfg: deps.getConfig(),
-            sessionKey: key,
-            storeAgentId: agentOwner,
-          }),
-          agentId: agentOwner,
-        }
-      : undefined;
-  };
+  const eventTarget = (key?: string, agentId?: string) =>
+    resolveActivitySummaryEventTarget(deps.getConfig(), key, agentId);
   const unsubscribeIdentity = onSessionIdentityMutation((mutation) => {
     for (const key of mutation.previous.sessionKeys) {
       const state = states.get(activitySummaryScope({ key, agentId: mutation.agentId }));
@@ -601,6 +584,7 @@ export function createSessionActivitySummaries(deps: {
       }
     }
   });
+  const unsubscribeFacts = subscribeActivitySummaryEntryReceipts(states, drop);
   const ensure = (requested: ActivitySummaryTarget, entry: SessionEntry | undefined) => {
     const target = eventTarget(requested.key, requested.agentId)!;
     if (isCronSessionKey(target.key)) {
@@ -640,8 +624,17 @@ export function createSessionActivitySummaries(deps: {
       consume(projection.sharingTarget(target)?.entry);
       return;
     }
+    const retained = states.get(activitySummaryScope(target));
+    if (retained?.storePath === storePath) {
+      consume(retained.entry);
+      return;
+    }
     void runInDetachedAsyncContext(() =>
-      trackAdmission(read(target, storePath).then(consume)),
+      trackAdmission(
+        readSessionEntryReadOnlyInWorker({ ...scope(target), storePath, projection: "list" }).then(
+          consume,
+        ),
+      ),
     ).catch((error: unknown) => {
       log.debug("Activity recap admission failed", { error: formatErrorMessage(error) });
     });
@@ -697,6 +690,7 @@ export function createSessionActivitySummaries(deps: {
       pumpJob = undefined;
       modelBackoffs.clear();
       unsubscribeIdentity();
+      unsubscribeFacts();
       for (const state of states.values()) {
         drop(state);
       }

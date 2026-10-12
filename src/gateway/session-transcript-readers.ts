@@ -1,3 +1,4 @@
+import { asOptionalRecord } from "@openclaw/normalization-core/record-coerce";
 import { readSessionTranscriptBoundedMessageTailPageFromProjection } from "../config/sessions/session-accessor.sqlite-active-events-read.js";
 import {
   isSessionTranscriptProjectionUnavailableError,
@@ -307,7 +308,10 @@ const readRecentSessionUsage = createHistoryPageReader(
         maxBytes,
         maxLines: 1000,
         maxMessages: 1000,
-      }).events.map(({ event }) => (event.type === "message" ? event.message : undefined)),
+      }).events.map(({ event }) => {
+        const record = asOptionalRecord(event);
+        return record?.type === "message" ? record.message : undefined;
+      }),
     ),
   async (read, target, maxBytes) => read({ kind: "recent-usage", params: { target, maxBytes } }),
   async (reader, target, maxBytes) =>

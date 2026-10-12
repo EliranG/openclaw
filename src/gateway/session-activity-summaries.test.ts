@@ -114,14 +114,17 @@ describe("Activity recap lifecycle with the canonical session store", () => {
       completeModel: complete,
     });
 
-  const awaitPublication = (start: () => void, ready = () => view()?.state === "current") => {
+  const awaitPublication = async (
+    start: () => void | Promise<unknown>,
+    ready = () => view()?.state === "current",
+  ) => {
     const published = createDeferred();
     changed.mockImplementation(() => {
       if (ready()) {
         published.resolve();
       }
     });
-    start();
+    await start();
     return withinTest(published.promise, testSignal);
   };
 
@@ -759,7 +762,8 @@ describe("Activity recap lifecycle with the canonical session store", () => {
     await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
     const oldService = service;
     service = createService(async () => prepared);
-    const published = awaitPublication(() => ensureRecap(target));
+    const entry = await readSessionEntryReadOnlyInWorker(scope);
+    const published = awaitPublication(() => service.ensure(target, entry));
     const oldDisposal = oldService.dispose();
     expect(view()?.state).toBe("updating");
     preparation.resolve(prepared);

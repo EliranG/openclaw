@@ -53,7 +53,7 @@ async function handleSessionGoalMutation(
   try {
     const authorization = options.sessionMutationAuthorization
       ? { authorization: options.sessionMutationAuthorization, error: null }
-      : await resolveSessionMutationAuthorization({
+      : resolveSessionMutationAuthorization({
           client,
           method,
           requestParams: request,

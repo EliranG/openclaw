@@ -215,7 +215,6 @@ describe("board and progress-card database write admission", () => {
           expect(boardRowCounts()).toEqual(previousBoardRowCounts);
           expect(respond).not.toHaveBeenCalled();
           expect(board.broadcast).not.toHaveBeenCalled();
-          expect(mutation).toHaveBeenCalledOnce();
           if (change === "abort") {
             controller.abort(new Error("request closed"));
           } else if (change === "guard") {

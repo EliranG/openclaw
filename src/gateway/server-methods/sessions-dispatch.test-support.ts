@@ -10,6 +10,7 @@ import { getRuntimeConfig } from "../../config/io.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import { NODE_WORKER_SUPERVISOR_PROTOCOL_FEATURE } from "../../infra/node-runner-inventory.js";
 import type { NodeWorkerSupervisorNodeProof } from "../node-registry-private.js";
+import * as sessionStoreLookup from "../session-utils-store-lookup.js";
 import { findCanonicalStoreMatch } from "../session-utils-store-selection.js";
 import * as sessionStoreWorker from "../session-utils-store-worker.js";
 import { bindDeviceWorkerAvailability } from "../worker-environments/device-provider.js";
@@ -27,6 +28,9 @@ export function getDispatchTestMocks() {
 }
 
 beforeEach(() => {
+  vi.spyOn(sessionStoreLookup, "resolveGatewaySessionStoreTargetWithStore").mockImplementation(
+    (params) => dispatchTestMocks.resolveTarget(params),
+  );
   vi.spyOn(sessionStoreWorker, "loadGatewaySessionEntryReadOnlyInWorker").mockImplementation(
     async (params) => {
       params.assertActive?.();

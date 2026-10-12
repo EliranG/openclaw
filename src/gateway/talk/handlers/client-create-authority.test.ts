@@ -559,6 +559,12 @@ describe("voice creation authority", () => {
         original.sessionTarget.storePath,
       ).path;
       const changed = vi.fn();
+      const changeRequested = createDeferred();
+      fixture.context.broadcastToConnIds.mockImplementation((event) => {
+        if (event === "talk.voice.change") {
+          changeRequested.resolve();
+        }
+      });
       const change = Promise.resolve(
         talkVoiceHandlers["talk.voice.set"]!({
           req: { type: "req", id: "change", method: "talk.voice.set", params: {} },
@@ -568,6 +574,11 @@ describe("voice creation authority", () => {
           client: fixture.client,
           isWebchatConnect: () => false,
         } as never),
+      );
+      await awaitGateBeforeSettlement(
+        changeRequested.promise,
+        change,
+        "Voice change settled before requesting a replacement",
       );
       const changeId = fixture.context.broadcastToConnIds.mock.calls.find(
         ([event]) => event === "talk.voice.change",

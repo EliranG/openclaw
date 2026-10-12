@@ -27,7 +27,7 @@ import {
 } from "../../config/sessions/session-lineage.test-support.js";
 import { runExclusiveSessionStoreWrite } from "../../config/sessions/store-writer.js";
 import { resolveWorkerPlacementSessionTarget } from "../../gateway/server-worker-placement-session-target.js";
-import { resolveGatewaySessionStoreTargetWithStore } from "../../gateway/session-utils-store-lookup.js";
+import { resolveGatewaySessionStoreTargetInWorker } from "../../gateway/session-utils-store-worker.js";
 import { resolveCanonicalSessionEntryFromStoreKeys } from "../../gateway/session-utils-store.js";
 import {
   testing as sessionBindingTesting,
@@ -1331,7 +1331,7 @@ describe("initSessionState RawBody", () => {
     // entry against its live worktree.
     const placement = await resolveWorkerPlacementSessionTarget({
       sessionRuntime: {
-        resolveGatewaySessionStoreTargetWithStore,
+        resolveGatewaySessionStoreTargetInWorker,
         resolveCanonicalSessionEntryFromStoreKeys,
         managedWorktrees: {
           findLiveByOwner: async (_kind, ownerId) => ({

@@ -659,15 +659,15 @@ export function startGatewayEventSubscriptions(params: GatewayEventSubscriptionP
     const publication = createDeferredCore();
     const dispatch = runOutsideAsyncWorkScope(() =>
       dispatchEventHandler({
-        loadHandler: agentHandler
-          ? () =>
-              agentHandler
-                .then(
-                  (handler) => handler.retireTranscript(evt, publication.promise),
-                  () => undefined,
-                )
-                .then(getTranscriptUpdateHandler)
-          : getTranscriptUpdateHandler,
+        loadHandler: async () => {
+          if (agentHandler) {
+            await agentHandler.then(
+              (handler) => handler.retireTranscript(evt, publication.promise),
+              () => undefined,
+            );
+          }
+          return getTranscriptUpdateHandler();
+        },
         event: evt,
         log: params.log,
         failureMessage: "Transcript update dispatch failed",

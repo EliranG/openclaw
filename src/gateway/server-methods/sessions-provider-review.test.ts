@@ -28,7 +28,7 @@ vi.mock("../session-sharing.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../session-sharing.js")>();
   return {
     ...actual,
-    resolveSessionSharingTarget: mocks.resolveTarget,
+    resolveSessionSharingTargetAsync: mocks.resolveTarget,
     resolveSessionMutationAuthorization: mocks.resolveAuthorization,
   };
 });

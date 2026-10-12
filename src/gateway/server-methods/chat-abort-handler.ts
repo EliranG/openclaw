@@ -162,10 +162,9 @@ export async function handleChatAbortRequestWithLifecycle(
   const requiredSessionId = narrow ? admittedTarget?.sessionId : undefined;
   const ops = createChatAbortOps(context);
 
-  const abortSession: Result<
-    Awaited<ReturnType<typeof loadGatewaySessionEntryReadOnlyInWorker>>,
-    unknown
-  > = await (async () => {
+  const prepareAbortSession = async (): Promise<
+    Result<Awaited<ReturnType<typeof loadGatewaySessionEntryReadOnlyInWorker>>, unknown>
+  > => {
     try {
       return {
         ok: true,
@@ -179,29 +178,30 @@ export async function handleChatAbortRequestWithLifecycle(
     } catch (error) {
       return { ok: false, error };
     }
-  })();
-  const abortSessionEntry = abortSession.ok ? abortSession.value.entry : undefined;
+  };
   if (!runId) {
-    const res = await abortChatRunsForSessionKeyWithPartials({
-      context,
-      ops,
-      sessionKey: canonicalAbortSessionKey,
-      sessionKeyAliases: canonicalAbortSessionKey === rawSessionKey ? undefined : [rawSessionKey],
-      agentId: abortAgentId,
-      sessionId: abortSessionEntry?.sessionId,
-      requiredSessionId,
-      session: abortSession,
-      defaultAgentId: compatibilityDefaultAgentId,
-      abortOrigin: "rpc",
-      stopReason: "rpc",
-      requester,
-      assertCurrent,
-      stopEmbeddedRun: true,
-      preserveSideRuns,
-      onAuthorizedBeforeEmbeddedAbort: lifecycle.onAuthorizedBeforeEmbeddedAbort,
-      onAuthorizedAfterQueuedAbort: lifecycle.onAuthorizedAfterQueuedAbort,
-      cascadeDescendants: lifecycle.cascadeDescendants,
-    });
+    const res = await abortChatRunsForSessionKeyWithPartials(
+      {
+        context,
+        ops,
+        sessionKey: canonicalAbortSessionKey,
+        sessionKeyAliases: canonicalAbortSessionKey === rawSessionKey ? undefined : [rawSessionKey],
+        agentId: abortAgentId,
+        sessionId: requiredSessionId,
+        requiredSessionId,
+        defaultAgentId: compatibilityDefaultAgentId,
+        abortOrigin: "rpc",
+        stopReason: "rpc",
+        requester,
+        assertCurrent,
+        stopEmbeddedRun: true,
+        preserveSideRuns,
+        onAuthorizedBeforeEmbeddedAbort: lifecycle.onAuthorizedBeforeEmbeddedAbort,
+        onAuthorizedAfterQueuedAbort: lifecycle.onAuthorizedAfterQueuedAbort,
+        cascadeDescendants: lifecycle.cascadeDescendants,
+      },
+      prepareAbortSession,
+    );
     if (res.unauthorized) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unauthorized"));
       return;
@@ -222,6 +222,8 @@ export async function handleChatAbortRequestWithLifecycle(
     });
     return;
   }
+  const abortSession = await prepareAbortSession();
+  const abortSessionEntry = abortSession.ok ? abortSession.value.entry : undefined;
   const normalizedAgentIdOverride = normalizeAgentId(abortAgentId);
   const authorizeRunTarget = (target: ChatAbortTarget): boolean => {
     let error: string | undefined;

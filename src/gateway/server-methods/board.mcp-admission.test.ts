@@ -225,14 +225,7 @@ describe("MCP App source authority at board write admission", () => {
         const putEntered = createDeferredCore();
         const resumePut = createDeferredCore();
         const putQueued = createDeferredCore();
-        const removeQueued = createDeferredCore();
-        const applyOps = boardStore.applyOps.bind(boardStore);
         const putWidget = boardStore.putWidget.bind(boardStore);
-        const remove = vi.spyOn(boardStore, "applyOps").mockImplementation((...args) => {
-          const pending = applyOps(...args);
-          removeQueued.resolve();
-          return pending;
-        });
         const put = vi.spyOn(boardStore, "putWidget").mockImplementation(async (...args) => {
           putEntered.resolve();
           await resumePut.promise;
@@ -259,26 +252,20 @@ describe("MCP App source authority at board write admission", () => {
             testSignal,
           );
           expect(put).toHaveBeenCalledOnce();
+          if (revoke) {
+            // Revoke after source preflight, before the pending pin reaches its write.
+            // The registered request now prepares its reads before entering that queue.
+            revocation = invoke("board.update", {
+              ops: [{ kind: "widget_remove", name: "source" }],
+            });
+            expect((await revocation).mock.calls[0]?.[0]).toBe(true);
+          }
           // Source preflight reads share the writer queue; finish them before holding it.
           reservation = runOpenClawAgentWorkerWrite(database, async () => {
             entered.resolve();
             await release.promise;
           });
           await withinTest(entered.promise, testSignal);
-          if (revoke) {
-            revocation = invoke("board.update", {
-              ops: [{ kind: "widget_remove", name: "source" }],
-            });
-            await withinTest(
-              awaitGateBeforeSettlement(
-                removeQueued.promise,
-                revocation,
-                "source removal did not queue",
-              ),
-              testSignal,
-            );
-            expect(remove).toHaveBeenCalledOnce();
-          }
           destinationBefore = boardStore.readWidgetMcpApp(target, "destination");
           void destinationBefore.catch(() => {});
           resumePut.resolve();

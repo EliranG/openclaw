@@ -1,4 +1,7 @@
 import { ErrorCodes, errorShape } from "../../packages/gateway-protocol/src/index.js";
+import { AgentSelectionRequiredError } from "../agents/agent-scope-config.js";
+import { errorShapeFromError } from "./error-shape.js";
+import { SessionMutationAuthorizationChangedError } from "./session-mutation-authorization-error.js";
 import { resolveRequestedSessionAgentInput } from "./session-request-agent.js";
 import { withSessionSharingTarget } from "./session-sharing-policy.js";
 import { captureSessionMutationRouting } from "./session-sharing-preparation.js";
@@ -69,37 +72,49 @@ export async function resolveSessionMutationAuthorizationAsync(
   if (!input.ok) {
     return { error: input.error };
   }
-  const cfg = params.context.getRuntimeConfig();
-  const assertRoutingCurrent = captureSessionMutationRouting(cfg, undefined, [target]);
-  const preparedProfiles = await prepareSessionSharingProfiles(params.client);
-  params.assertInvocationCurrent?.();
-  return withSessionSharingTarget(
-    { cfg, sessionKey: target.sessionKey, agentId: input.value },
-    (read) => {
-      const selectedSource = read.selection?.source;
-      const selection = read.selection &&
-        selectedSource && {
-          ...read.selection,
-          source: {
-            ...selectedSource,
-            assertCurrent() {
-              selectedSource.assertCurrent();
-              assertRoutingCurrent(params.context.getRuntimeConfig());
+  try {
+    const cfg = params.context.getRuntimeConfig();
+    const assertRoutingCurrent = captureSessionMutationRouting(cfg, undefined, [target]);
+    const preparedProfiles = await prepareSessionSharingProfiles(params.client);
+    params.assertInvocationCurrent?.();
+    return await withSessionSharingTarget(
+      { cfg, sessionKey: target.sessionKey, agentId: input.value },
+      (read) => {
+        const selectedSource = read.selection?.source;
+        const selection = read.selection &&
+          selectedSource && {
+            ...read.selection,
+            source: {
+              ...selectedSource,
+              assertCurrent() {
+                selectedSource.assertCurrent();
+                assertRoutingCurrent(params.context.getRuntimeConfig());
+              },
             },
-          },
+          };
+        const assertCurrent = () => {
+          params.assertInvocationCurrent?.();
+          preparedProfiles.readCurrent();
+          read.assertCurrent();
+          assertRoutingCurrent(params.context.getRuntimeConfig());
         };
-      const assertCurrent = () => {
-        params.assertInvocationCurrent?.();
-        preparedProfiles.readCurrent();
-        read.assertCurrent();
-        assertRoutingCurrent(params.context.getRuntimeConfig());
-      };
-      assertCurrent();
-      return resolveSessionMutationAuthorization({
-        ...params,
-        preparedProfiles,
-        preparedSharing: { ...read, selection, assertCurrent },
-      });
-    },
-  );
+        assertCurrent();
+        return resolveSessionMutationAuthorization({
+          ...params,
+          preparedProfiles,
+          preparedSharing: { ...read, selection, assertCurrent },
+        });
+      },
+    );
+  } catch (error) {
+    if (!talk && !(error instanceof AgentSelectionRequiredError)) {
+      throw error;
+    }
+    return {
+      error:
+        error instanceof SessionMutationAuthorizationChangedError
+          ? error.error
+          : errorShapeFromError(ErrorCodes.INVALID_REQUEST, error),
+    };
+  }
 }

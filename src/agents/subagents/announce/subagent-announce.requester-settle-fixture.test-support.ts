@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, vi } from "vitest";
 import type { SubagentRunRecord } from "../registry/subagent-registry.types.js";
+import * as deliveryRuntime from "./subagent-announce-delivery.runtime.js";
 import * as announceOutput from "./subagent-announce-output.js";
 import type { createRequesterDescendantReader } from "./subagent-announce.requester-settle-descendants.js";
 import type { maybeWakeRequesterAfterAllChildrenSettled } from "./subagent-announce.requester-settle-wake.js";
@@ -117,6 +118,15 @@ function wakeParams(
 }
 
 beforeEach(() => {
+  vi.spyOn(deliveryRuntime, "captureRequesterSessionEntryCurrent").mockImplementation(
+    async (sessionKey) => ({
+      readCurrent: () => {
+        const entry = sessionStore[sessionKey];
+        return entry?.sessionId ? { ...entry, sessionId: entry.sessionId } : undefined;
+      },
+      release() {},
+    }),
+  );
   vi.spyOn(announceOutput, "readChildCompletionFindings").mockImplementation((children) =>
     readChildCompletionFindings(children, (runId) =>
       listedRequesterRuns(children[0]?.requesterSessionKey).find((entry) => entry.runId === runId),
@@ -135,7 +145,10 @@ beforeEach(() => {
     .mockReturnValue(undefined);
 });
 
-afterEach(() => vi.mocked(announceOutput.readChildCompletionFindings).mockRestore());
+afterEach(() => {
+  vi.mocked(announceOutput.readChildCompletionFindings).mockRestore();
+  vi.mocked(deliveryRuntime.captureRequesterSessionEntryCurrent).mockRestore();
+});
 
 function setSessionStore(store: typeof sessionStore): void {
   sessionStore = store;

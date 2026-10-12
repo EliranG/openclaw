@@ -477,6 +477,9 @@ export async function killAllControlledSubagentRuns(params: {
     }
 > {
   if (params.controller.controlScope !== "children") {
+    if (params.requestSelection?.prepare) {
+      await params.requestSelection.prepare();
+    }
     await params.beforeKill?.(() => {});
     return {
       status: "forbidden" as const,
@@ -494,8 +497,7 @@ export async function killAllControlledSubagentRuns(params: {
         selectPublishedRoot: params.requestSelection.selectPublishedRoot,
       }
     : params;
-  const origin = params.requestSelection?.sessionGeneration;
-  if (!origin) {
+  if (!params.requestSelection?.sessionGeneration && !params.requestSelection?.prepare) {
     return killSelectedSubagentRuns(selection);
   }
   let generation: Awaited<ReturnType<typeof prepareSessionGenerationFacts>> | undefined;
@@ -511,7 +513,13 @@ export async function killAllControlledSubagentRuns(params: {
       beforeKill: async (sealRootSelection) => {
         // The native scope already holds every selected root. Retain the fresh
         // source generation before its first effect, independently of old turns.
-        generation = await prepareSessionGenerationFacts(origin);
+        if (params.requestSelection?.prepare) {
+          await params.requestSelection.prepare();
+        }
+        const origin = params.requestSelection?.sessionGeneration;
+        if (origin) {
+          generation = await prepareSessionGenerationFacts(origin);
+        }
         assertCurrent();
         return params.beforeKill ? await params.beforeKill(sealRootSelection) : true;
       },

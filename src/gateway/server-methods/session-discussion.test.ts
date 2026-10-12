@@ -35,6 +35,10 @@ vi.mock("../../config/sessions/session-accessor.js", () => ({
   patchSessionEntryCore: mocks.updateSessionEntry,
   loadSessionEntry: () => mocks.loadSessionTarget()?.entry,
 }));
+// mock-isolation: The title owner reads the same synthetic session through its worker API.
+vi.mock("../../config/sessions/session-entry-read-runtime.js", () => ({
+  readSessionEntryReadOnlyInWorker: async () => mocks.loadSessionTarget()?.entry,
+}));
 vi.mock("../dashboard-session-title.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../dashboard-session-title.js")>();
   mocks.maybeGenerateSessionTitle.mockImplementation(actual.maybeGenerateSessionTitle);

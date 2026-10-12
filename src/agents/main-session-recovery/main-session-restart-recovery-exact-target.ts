@@ -5,8 +5,8 @@ import {
 } from "../../config/sessions/restart-recovery-state.js";
 import { loadExactSessionEntry } from "../../config/sessions/session-accessor.js";
 import {
-  readSessionEntriesFromStoreInWorker,
   readSessionEntryReadOnlyInWorker,
+  withSessionStoreReaderInWorker,
 } from "../../config/sessions/session-entry-read-runtime.js";
 import { captureIncognitoSessionSource } from "../../config/sessions/session-incognito-binding.js";
 import type { InternalSessionEntry as SessionEntry } from "../../config/sessions/types.js";
@@ -86,7 +86,13 @@ export async function loadExpectedRestartRecoveryTarget(
   const source = captureIncognitoSessionSource(target);
   const exact = source
     ? undefined
-    : await readSessionEntriesFromStoreInWorker({ ...target, sessionKeys: [target.sessionKey] });
+    : await withSessionStoreReaderInWorker(target, ({ reader, database, continuation }) =>
+        reader.readExactEntries({
+          sessionKeys: [target.sessionKey],
+          env: database.env,
+          continuation,
+        }),
+      );
   const entry = source
     ? await readSessionEntryReadOnlyInWorker(target)
     : exact?.entries.find(({ sessionKey }) => sessionKey === target.sessionKey)?.entry;

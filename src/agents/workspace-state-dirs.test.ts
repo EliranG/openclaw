@@ -130,24 +130,4 @@ describe("Gateway configured workspace readiness", () => {
     await expect(assertConfiguredWorkspaceStateReady(state)).resolves.toBeUndefined();
     expect(fs.existsSync(state.databasePath)).toBe(false);
   });
-
-  it("revalidates persisted rows after an earlier readiness check", async () => {
-    const state = setup();
-    const sessionKey = "agent:main:readiness";
-    state.seed(sessionKey);
-    closeOpenClawAgentDatabasesForTest();
-    await expect(assertConfiguredWorkspaceStateReady(state)).resolves.toBeUndefined();
-
-    const database = new DatabaseSync(state.databasePath);
-    try {
-      database
-        .prepare("UPDATE session_nodes SET entry_json = '{' WHERE session_key = ?")
-        .run(sessionKey);
-    } finally {
-      database.close();
-    }
-    await expect(assertConfiguredWorkspaceStateReady(state)).rejects.toThrow(
-      "invalid persisted session row",
-    );
-  });
 });

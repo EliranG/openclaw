@@ -3,6 +3,7 @@ import { observeHostDataSql } from "../../../test/helpers/sqlite-statement-execu
 import { clearRuntimeAuthProfileStoreSnapshots } from "../../agents/auth-profiles/runtime-snapshots.js";
 import { registerAgentHarness } from "../../agents/harness/registry.js";
 import type { AgentHarness } from "../../agents/harness/types.js";
+import { clearRuntimeConfigSnapshot, setRuntimeConfigSnapshot } from "../../config/io.js";
 import { upsertSessionEntryCore } from "../../config/sessions/session-accessor.js";
 import { createEmptyPluginRegistry } from "../../plugins/registry-empty.js";
 import {
@@ -32,6 +33,7 @@ describe("worker placement runtime capabilities", () => {
 
   afterEach(() => {
     clearRuntimeAuthProfileStoreSnapshots();
+    clearRuntimeConfigSnapshot();
     if (originalPluginRegistry) {
       setActivePluginRegistry(originalPluginRegistry, "placement-runtime-test-restore", "default");
       return;
@@ -149,6 +151,7 @@ describe("worker placement runtime capabilities", () => {
         sessionKey: "agent:main:child-runtime",
         entry: { sessionId: "child-runtime", updatedAt: 1, parentSessionKey: parent.sessionKey },
       };
+      setRuntimeConfigSnapshot({});
       const observed = observeHostDataSql();
       try {
         expect(await resolveWorkerPlacementSessionRuntimeAsync(input)).toBe("codex");
@@ -291,6 +294,7 @@ describe("resolveWorkerPlacementSessionRuntimeCapabilities", () => {
 
   afterEach(() => {
     clearRuntimeAuthProfileStoreSnapshots();
+    clearRuntimeConfigSnapshot();
     if (originalPluginRegistry) {
       setActivePluginRegistry(originalPluginRegistry, "placement-runtime-test-restore", "default");
       return;
