@@ -19,7 +19,7 @@ import {
   writeCronStoreSnapshot,
 } from "./service.test-harness.js";
 import { waitForCronRunQueue } from "./service/run-queue.js";
-import { tickCronScheduler } from "./service/scheduler-actor.js";
+import { captureCronSchedulerWakeForTest } from "./service/scheduler-actor.test-support.js";
 
 const noopLogger = createNoopLogger();
 const { makeStorePath } = createCronStoreHarness();
@@ -34,7 +34,7 @@ async function startEveryJob(text: string) {
     storePath: store.storePath,
     logger,
   });
-  await fixture.cron.start();
+  const { wake } = await captureCronSchedulerWakeForTest(() => fixture.cron.start());
   const job = await fixture.cron.add({
     name: text,
     enabled: true,
@@ -43,7 +43,7 @@ async function startEveryJob(text: string) {
     wakeMode: "next-heartbeat",
     payload: { kind: "systemEvent", text },
   });
-  return { ...fixture, store, logger, clock, job };
+  return { ...fixture, store, logger, clock, job, wake };
 }
 
 describe("CronService interval/cron jobs fire on time", () => {
@@ -63,7 +63,7 @@ describe("CronService interval/cron jobs fire on time", () => {
   };
 
   it("resumes due cron work after a busy suspension attempt", async () => {
-    const { cron, state, enqueueSystemEvent, finished, store, clock, job } =
+    const { cron, state, enqueueSystemEvent, finished, store, clock, job, wake } =
       await startEveryJob("recovered-tick");
     resetGatewayWorkAdmission();
 
@@ -80,7 +80,7 @@ describe("CronService interval/cron jobs fire on time", () => {
 
       const finishedRun = finished.waitForOk(job.id);
       clock.setTime(job.state.nextRunAtMs! + 5);
-      await tickCronScheduler(state);
+      await wake(state);
       await finishedRun;
       await waitForCronRunQueue(state);
       expectMainSystemEvent(enqueueSystemEvent, "recovered-tick");
@@ -92,8 +92,16 @@ describe("CronService interval/cron jobs fire on time", () => {
   });
 
   it("keeps a due timer pending when restart signal admission rolls back", async () => {
-    const { cron, state, enqueueSystemEvent, finished, store, clock, job } =
-      await startEveryJob("rollback-tick");
+    const {
+      cron,
+      state,
+      enqueueSystemEvent,
+      finished,
+      store,
+      clock,
+      job,
+      wake: wakeScheduler,
+    } = await startEveryJob("rollback-tick");
     resetGatewayWorkAdmission();
     let wake: Promise<void> | undefined;
 
@@ -102,7 +110,7 @@ describe("CronService interval/cron jobs fire on time", () => {
       expect(pendingSignal).not.toBeNull();
       const finishedRun = finished.waitForOk(job.id);
       clock.setTime(job.state.nextRunAtMs! + 5);
-      wake = tickCronScheduler(state);
+      wake = wakeScheduler(state);
       expect(enqueueSystemEvent).not.toHaveBeenCalled();
 
       expect(pendingSignal?.rollback()).toBe(true);

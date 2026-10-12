@@ -15,7 +15,7 @@ import {
 import { createCronServiceWithStateForTest } from "../service.test-harness.js";
 import { saveCronStore } from "../store.js";
 import { waitForCronRunQueue } from "./run-queue.js";
-import { tickCronScheduler } from "./scheduler-actor.js";
+import { captureCronSchedulerWakeForTest } from "./scheduler-actor.test-support.js";
 
 const gateway = vi.hoisted(() => ({ state: undefined as GatewayCronState | undefined }));
 vi.mock("../../gateway/server-cron.js", () => ({
@@ -78,24 +78,26 @@ it.each([false, true])(
       scheduler,
     });
     try {
-      if (failWrite) {
-        await expect(cron.start()).rejects.toThrow("injected terminal write failure");
-      } else {
-        await cron.start();
-      }
+      const { wake } = await captureCronSchedulerWakeForTest(async () => {
+        if (failWrite) {
+          await expect(cron.start()).rejects.toThrow("injected terminal write failure");
+        } else {
+          await cron.start();
+        }
+      });
       database.exec("DROP TRIGGER IF EXISTS reject_startup_terminal_write");
       expect(enqueueSystemEvent.mock.calls.map(([text]) => text)).toEqual(["overdue"]);
       cron.pauseScheduling();
       clock.setTime(clock.clock.now() + 15_000);
-      await tickCronScheduler(state);
+      await wake(state);
       expect(enqueueSystemEvent.mock.calls.map(([text]) => text)).toEqual(["overdue"]);
       cron.resumeScheduling();
       clock.setTime(clock.clock.now() + 15_000);
-      await tickCronScheduler(state);
+      await wake(state);
       await waitForCronRunQueue(state);
       expect(enqueueSystemEvent.mock.calls.map(([text]) => text)).toEqual(["overdue", "upcoming"]);
       clock.setTime(clock.clock.now() + 60_000);
-      await tickCronScheduler(state);
+      await wake(state);
       await waitForCronRunQueue(state);
       expect(enqueueSystemEvent.mock.calls.map(([text]) => text)).toEqual(["overdue", "upcoming"]);
     } finally {

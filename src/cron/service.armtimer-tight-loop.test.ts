@@ -10,7 +10,8 @@ import {
 } from "../test-utils/gateway-scheduler-clock.js";
 import { createNoopLogger, createCronStoreHarness } from "./service.test-harness.js";
 import { stop } from "./service/ops-lifecycle.js";
-import { startCronScheduler, tickCronScheduler } from "./service/scheduler-actor.js";
+import { startCronScheduler } from "./service/scheduler-actor.js";
+import { captureCronSchedulerWakeForTest } from "./service/scheduler-actor.test-support.js";
 import { createCronServiceState, type CronServiceState } from "./service/state.js";
 import { saveCronStore } from "./store.js";
 import type { CronJob } from "./types.js";
@@ -70,14 +71,16 @@ describe("cron scheduled wakes", () => {
     const state = createState(store.storePath, clock);
     state.store = { version: 1, jobs: [job(now + 1_000)] };
     await saveCronStore(store.storePath, state.store);
-    await startCronScheduler(state, new Set());
+    const { wake: wakeScheduler } = await captureCronSchedulerWakeForTest(() =>
+      startCronScheduler(state, new Set()),
+    );
     const suspension = tryBeginGatewaySuspendAdmission(() => {});
     expect(suspension?.commit()).toBe(true);
     const releaseSuspension = () => {
       suspension?.release();
     };
     signal.addEventListener("abort", releaseSuspension, { once: true });
-    const wake = tickCronScheduler(state);
+    const wake = wakeScheduler(state);
 
     try {
       state.deps.scheduler.beginClose();

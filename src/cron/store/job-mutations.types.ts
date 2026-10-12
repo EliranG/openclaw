@@ -7,7 +7,7 @@ import type { CronRunRecoveryOutcome } from "./run-recovery.types.js";
 import type { CronSchedulerSnapshot } from "./scheduler-actor.types.js";
 
 /** Only captured facts cross this boundary; callbacks and live authority stay on the host. */
-export type CronJobMutationOptions = Pick<
+type CronJobMutationOptions = Pick<
   CronAddOptions,
   | "enabledExplicit"
   | "systemOwned"

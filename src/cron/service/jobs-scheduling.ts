@@ -241,7 +241,7 @@ function isStaggeredCronRunAtMs(job: CronJob, runAtMs: number): boolean {
   return previous === runAtMs;
 }
 
-export function isStaleFutureCronSlot(job: CronJob, nowMs: number): boolean {
+function isStaleFutureCronSlot(job: CronJob, nowMs: number): boolean {
   const nextRun = job.state.nextRunAtMs;
   if (
     job.schedule.kind !== "cron" ||

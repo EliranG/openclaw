@@ -13,7 +13,7 @@ import type { CliDeps } from "../cli/deps.types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { isCronJobActive } from "../cron/active-jobs.js";
 import { waitForActiveCronTaskRuns } from "../cron/service/active-run-cancellation.js";
-import { tickCronScheduler } from "../cron/service/scheduler-actor.js";
+import { captureCronSchedulerWakeForTest } from "../cron/service/scheduler-actor.test-support.js";
 import * as cronServiceState from "../cron/service/state.js";
 import * as cronStore from "../cron/store.js";
 import { trackAsyncWork } from "../shared/async-work-scope.js";
@@ -301,7 +301,9 @@ describe("gateway cron stop-and-drain automation ownership", () => {
       ownedState = createState(deps);
       return ownedState;
     });
-    const original = await startGatewayCron("timer-scope");
+    const { result: original, wake } = await captureCronSchedulerWakeForTest(() =>
+      startGatewayCron("timer-scope"),
+    );
     const cronState = expectDefined(ownedState, "constructed cron state");
     const entered = createDeferred();
     const release = createDeferred();
@@ -328,11 +330,10 @@ describe("gateway cron stop-and-drain automation ownership", () => {
         }
         return snapshot;
       });
+    // A commit notice makes maintenance cross the reload boundary held above.
+    cronStore.noteCronJobsStoreCommit(original.state.storePath);
     original.clock.setTime(original.clock.clock.now() + 1_000);
-    const runTick = () => tickCronScheduler(cronState);
-    const tick = cronState.deps.runSchedulerOwned
-      ? cronState.deps.runSchedulerOwned(runTick)
-      : runTick();
+    const tick = wake(cronState);
     let drain: Promise<void> | undefined;
     try {
       await withinTest(

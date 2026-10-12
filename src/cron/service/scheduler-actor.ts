@@ -163,7 +163,7 @@ export async function startCronScheduler(
 }
 
 /** The worker decides which slots are due; the host only launches committed requests. */
-export function tickCronScheduler(state: CronServiceState): Promise<void> {
+function tickCronScheduler(state: CronServiceState): Promise<void> {
   const connection = connections.get(state);
   if (!connection || state.stopped || state.schedulingPaused) {
     return Promise.resolve();
