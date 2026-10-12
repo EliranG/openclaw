@@ -52,7 +52,7 @@ import type {
   SessionTranscriptUpdateMode,
 } from "../config/sessions/transcript.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import { readSessionTranscriptCatalogTitle as readLegacySessionTranscriptCatalogTitle } from "../gateway/session-transcript-catalog.js";
+import { readLegacySessionTranscriptCatalogTitle } from "../gateway/session-transcript-catalog.js";
 import { warnPluginSdkDeprecation } from "../plugins/sdk-deprecation.js";
 import { normalizeAgentId, resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 import type { AgentMessage } from "./agent-core.js";
