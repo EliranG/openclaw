@@ -449,8 +449,10 @@ it("returns a reply tail and its current watermark from one projection snapshot"
           .prepare("DELETE FROM session_transcript_cold_archives WHERE session_id = ?")
           .run(scope.sessionId);
       });
+      const beforeRestoredRead = { ...statements.counts };
       expect(read().watermark).toEqual(updated.watermark);
-      expect(statements.counts.watermark).toBe(0);
+      expect(statements.counts.projection - beforeRestoredRead.projection).toBe(1);
+      expect(statements.counts.watermark - beforeRestoredRead.watermark).toBe(0);
     } finally {
       statements.restore();
     }
