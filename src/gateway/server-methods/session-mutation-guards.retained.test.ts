@@ -14,7 +14,7 @@ import {
 } from "./session-mutation-guards.js";
 import type { GatewayClient, GatewayRequestContext, GatewayRequestOptions } from "./types.js";
 
-function roleConfig(scopes = ["operator.admin"]): OpenClawConfig {
+function roleConfig(scopes: "operator.admin"[] = ["operator.admin"]): OpenClawConfig {
   return {
     gateway: {
       roles: {

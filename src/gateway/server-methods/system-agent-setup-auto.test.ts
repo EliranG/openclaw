@@ -274,7 +274,9 @@ describe("Gateway automatic inference setup", () => {
     });
     let current = true;
     const run = runGatewayAutomaticSetup(context(), () => {
-      if (!current) throw new Error("Requester authority revoked");
+      if (!current) {
+        throw new Error("Requester authority revoked");
+      }
     });
     const rejection = expect(run).rejects.toThrow("Requester authority revoked");
     await awaitGateBeforeSettlement(started.promise, run, "setup ended before discovery");
