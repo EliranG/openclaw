@@ -115,7 +115,10 @@ describe("channel-final transcript mirrors", () => {
   });
 
   it("retains distinct unkeyed media identities and suppresses an exact repeat", async () => {
-    const mediaUrls = ["https://example.com/one/chart.png", "https://example.com/two/chart.png"];
+    const mediaUrls: [string, string] = [
+      "https://example.com/one/chart.png",
+      "https://example.com/two/chart.png",
+    ];
     const results = [];
     for (const mediaUrl of [...mediaUrls, mediaUrls[1]]) {
       results.push(
