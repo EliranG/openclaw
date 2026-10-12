@@ -3,7 +3,13 @@ import { createRequireRecord } from "openclaw/plugin-sdk/test-fixtures";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDeferred } from "../../../../test/helpers/promise.js";
 import { upsertSessionEntryCore } from "../../../config/sessions/session-accessor.js";
+import {
+  captureExternalSessionCommitGuard,
+  prepareSessionSourceAuthority,
+  type PreparedSessionSourceAuthority,
+} from "../../../config/sessions/session-source-authority.js";
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
+import type { DispatchGatewayMethodInProcessOptions } from "../../../gateway/server-plugin-in-process-dispatch.types.js";
 import { withOpenClawTestState } from "../../../test-utils/openclaw-test-state.js";
 import { resolveUserPath } from "../../../utils.js";
 import { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
@@ -145,6 +151,46 @@ describe("spawnSubagentDirect seam flow", () => {
     swarmSchedulerTesting.reset();
     vi.unstubAllEnvs();
   });
+
+  it.each([false, true])(
+    "preserves native source requirement %s through child launch",
+    async (nativeSource) => {
+      let current = true;
+      const assertCurrent = () => {
+        if (!current) {
+          throw new Error("parent authority retired");
+        }
+      };
+      let forwarded: PreparedSessionSourceAuthority | undefined;
+      hoisted.hasInProcessGatewayContextMock.mockReturnValue(true);
+      hoisted.dispatchGatewayMethodInProcessMock.mockImplementation(
+        async (
+          _method: string,
+          _params: Record<string, unknown>,
+          options?: DispatchGatewayMethodInProcessOptions,
+        ) => {
+          forwarded = await prepareSessionSourceAuthority(
+            captureExternalSessionCommitGuard(options?.sessionMutationCommitGuard),
+          );
+          return { runId: "run-1", status: "accepted" };
+        },
+      );
+      const result = await spawn(
+        { task: "preserve parent authority" },
+        {
+          assertActive: Object.assign(assertCurrent, {
+            nativeSource,
+            prepareSessionSource: async () => ({ nativeSource, checks: [], assertCurrent }),
+          }),
+        },
+      );
+      expect(result.status).toBe("accepted");
+      expect(forwarded?.nativeSource).toBe(nativeSource);
+      current = false;
+      expect(() => forwarded?.assertCurrent()).toThrow("parent authority retired");
+      await forwarded?.release?.();
+    },
+  );
 
   it.each([{ collect: true }])(
     "rejects unsupported private completion combinations before child effects: %j",
