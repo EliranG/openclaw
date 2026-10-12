@@ -3,12 +3,13 @@
 import { html, nothing, type TemplateResult } from "lit";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { GatewayBrowserClient } from "../../../api/gateway.ts";
-import "../../../components/resizable-divider.ts";
 import { createControlUiPluginHost } from "../../../plugins/control-ui-host.ts";
+import "../../../components/resizable-divider.ts";
 import {
   ControlUiPluginRuntime,
   type ControlUiPluginOwner,
 } from "../../../plugins/control-ui-runtime.ts";
+import { flush } from "../../../test-helpers/solid-settle.ts";
 import { sidebarPanelDefinitions } from "../chat-pane-embedded-panels.ts";
 import { createInitializationContext } from "../chat-pane.test-support.ts";
 import { createPageState } from "../chat-state-page.ts";
@@ -482,6 +483,8 @@ describe("chat sidebar region", () => {
             : null,
       }));
       await region.updateComplete;
+      root(region).querySelector(".side-panel-type-menu")?.dispatchEvent(new Event("wa-show"));
+      flush();
       const menuItem = Array.from(
         root(region).querySelectorAll<HTMLElement>("wa-dropdown-item"),
       ).find((item) => Reflect.get(item, "value") === slot);
@@ -549,6 +552,9 @@ describe("chat sidebar region", () => {
     }));
     await region.updateComplete;
 
+    expect(root(region).querySelector(".side-panel-type-menu__item")).toBeNull();
+    root(region).querySelector(".side-panel-type-menu")?.dispatchEvent(new Event("wa-show"));
+    flush();
     expect(
       Array.from(root(region).querySelectorAll(".side-panel-type-menu__item"), (item) =>
         item.textContent?.replace(/\s+/gu, " ").trim(),

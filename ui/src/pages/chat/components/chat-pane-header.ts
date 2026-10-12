@@ -9,6 +9,7 @@ import {
   SHELL_NAV_DRAWER_TOGGLE_EVENT,
   type ShellNavDrawerToggleDetail,
 } from "../../../components/command-palette-contract.ts";
+import { lazyDropdownContent } from "../../../components/dropdown-menu-controller.ts";
 import { icons } from "../../../components/icons.ts";
 import { renderKeyboardShortcut } from "../../../components/kbd.ts";
 import {
@@ -270,12 +271,14 @@ function renderProjectCrumb(props: ChatPaneHeaderProps): TemplateResult | null {
           >${copied ? t("chat.sessionHeader.copied") : props.workspaceLabel}</span
         >
       </button>
-      ${[
-        [props.canReveal && props.workspaceRoot, "reveal", revealLabel(props.platform)],
-        [props.workspaceRoot, "copy-path", copyPathLabel],
-        [props.branch, "copy-branch", copyBranchLabel],
-      ].map(([visible, value, label]) =>
-        visible ? html`<wa-dropdown-item value=${value}>${label}</wa-dropdown-item>` : nothing,
+      ${lazyDropdownContent(() =>
+        [
+          [props.canReveal && props.workspaceRoot, "reveal", revealLabel(props.platform)],
+          [props.workspaceRoot, "copy-path", copyPathLabel],
+          [props.branch, "copy-branch", copyBranchLabel],
+        ].map(([visible, value, label]) =>
+          visible ? html`<wa-dropdown-item value=${value}>${label}</wa-dropdown-item>` : nothing,
+        ),
       )}
     </wa-dropdown>
   `;
@@ -605,14 +608,18 @@ function renderChatPaneLayoutMenu(props: ChatPaneHeaderProps) {
     >
       <span aria-hidden="true">${icons.columns2}</span>${t("chat.sessionHeader.layout")}
     </button>
-    ${actions.map(renderAction)}
-    ${
-      panelActions.length
-        ? html`<div class="session-menu__separator" role="separator"></div>
-            ${panelActions.map(renderAction)}`
-        : nothing
-    }
-    ${mainDefinition?.headerAction ?? nothing} ${sideDefinition?.headerAction ?? nothing}
+    ${lazyDropdownContent(
+      () => html`
+        ${actions.map(renderAction)}
+        ${
+          panelActions.length
+            ? html`<div class="session-menu__separator" role="separator"></div>
+                ${panelActions.map(renderAction)}`
+            : nothing
+        }
+        ${mainDefinition?.headerAction ?? nothing} ${sideDefinition?.headerAction ?? nothing}
+      `,
+    )}
   </wa-dropdown>`;
 }
 

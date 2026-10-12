@@ -6,6 +6,7 @@ import {
   renderBoardWidgetMenuItems,
   type BoardWidgetPageMenu,
 } from "../../../components/board/board-widget-cell-render.ts";
+import { lazyDropdownContent } from "../../../components/dropdown-menu-controller.ts";
 import { icons } from "../../../components/icons.ts";
 import { activateMenuShortcut } from "../../../components/menu-shortcuts.ts";
 import {
@@ -472,11 +473,11 @@ class ChatHeaderSessionMenu extends OpenClawLightDomElement {
         >
           ${icons.moreHorizontal}
         </button>
-        ${
+        ${lazyDropdownContent(() =>
           this.compact && this.compactView !== "root"
             ? this.renderCompactView()
-            : this.renderRootView()
-        }
+            : this.renderRootView(),
+        )}
       </wa-dropdown>
     `;
   }

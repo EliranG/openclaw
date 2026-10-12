@@ -18,6 +18,7 @@ import {
   createTestChatPane,
 } from "../chat-pane.test-support.ts";
 import type { ChatPageHost } from "../chat-state-host.ts";
+import { openSlot } from "../sidebar-layout.ts";
 import {
   chatPaneHeaderSessionRow as row,
   mountChatPaneHeader,
@@ -133,6 +134,8 @@ describe("chat pane header", () => {
       [...actions.querySelectorAll("button")].map((button) => button.textContent?.trim()),
     ).toEqual(["Share", "Layout", "…"]);
     const menu = actions.querySelector(".chat-pane__layout-menu")!;
+    expect(menu.querySelector("wa-dropdown-item")).toBeNull();
+    menu.dispatchEvent(new Event("wa-show"));
     expect(
       [...menu.querySelectorAll("wa-dropdown-item")].map((item) => item.textContent?.trim()),
     ).toEqual(["Open split view", "Split down", "Split right", "Close pane"]);
@@ -169,6 +172,7 @@ describe("chat pane header", () => {
       onSplitDown: vi.fn(),
       onSplitRight: vi.fn(),
     });
+    container.querySelector(".chat-pane__layout-menu")!.dispatchEvent(new Event("wa-show"));
     expect(container.querySelector('.chat-pane__layout-menu [value="terminal"]')).not.toBeNull();
     expect(container.querySelector(".chat-pane__split-down")).toBeNull();
     expect(container.querySelector(".chat-pane__split-right")).toBeNull();
@@ -596,6 +600,7 @@ describe("chat pane header", () => {
       "Session title",
     );
     expect(container.querySelector(".chat-pane__workspace-chip")).toBeNull();
+    container.querySelector(".chat-pane__layout-menu")!.dispatchEvent(new Event("wa-show"));
     expect(container.querySelector('.chat-pane__layout-menu [value="terminal"]')).not.toBeNull();
   });
 
@@ -612,6 +617,28 @@ describe("chat pane header", () => {
     );
   });
 
+  it("defers panel docking choices until opening and applies the selected dock", () => {
+    const onLayoutChange = vi.fn();
+    const { container } = mountHeader({
+      sidebarLayout: openSlot({ columns: [] }, "detail"),
+      onLayoutChange,
+    });
+    const menu = container.querySelector(".chat-panel-layout-menu")!;
+    expect(menu.querySelector("wa-dropdown-item")).toBeNull();
+    menu.dispatchEvent(new Event("wa-show"));
+    expect(
+      Array.from(menu.querySelectorAll("wa-dropdown-item"), (item) => item.getAttribute("value")),
+    ).toContain("dock-bottom");
+    menu.dispatchEvent(
+      new CustomEvent("wa-select", { detail: { item: { value: "dock-bottom" } } }),
+    );
+    expect(onLayoutChange).not.toHaveBeenCalled();
+    menu.dispatchEvent(new Event("wa-after-hide"));
+    expect(onLayoutChange).toHaveBeenCalledWith(expect.objectContaining({ dock: "bottom" }), {
+      geometryOnly: true,
+    });
+  });
+
   it("shows copied feedback on the workspace chip", () => {
     const { container } = mountHeader({ copiedAction: "copy-path" });
     expect(container.querySelector(".chat-pane__workspace-chip")?.textContent).toContain("Copied");
@@ -625,6 +652,9 @@ describe("chat pane header", () => {
       canReveal: false,
     });
     expect(container.querySelector(".chat-pane__placement-chip")).not.toBeNull();
+    const menu = container.querySelector(".chat-pane__workspace-menu")!;
+    expect(menu.querySelector("wa-dropdown-item")).toBeNull();
+    menu.dispatchEvent(new Event("wa-show"));
     expect(container.querySelector('wa-dropdown-item[value="reveal"]')).toBeNull();
     expect(container.querySelector('wa-dropdown-item[value="copy-path"]')).not.toBeNull();
   });

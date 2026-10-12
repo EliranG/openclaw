@@ -5,6 +5,7 @@ import type {
   SessionMembersListEvidenceResult,
   SessionVisibility,
 } from "../../../api/types.ts";
+import { lazyDropdownContent } from "../../../components/dropdown-menu-controller.ts";
 import { icons } from "../../../components/icons.ts";
 import {
   personActivityLink,
@@ -165,7 +166,7 @@ export function renderChatSessionSharing(props: ChatSessionSharingProps, inline 
   const shouldCapMembers =
     membersAvailable &&
     visibilityOptions.length + identities.length + (canPublish ? 1 : 0) + (owner ? 1 : 0) > 12;
-  const content = html`
+  const content = () => html`
     ${
       canPublish
         ? html`<wa-dropdown-item
@@ -363,7 +364,7 @@ export function renderChatSessionSharing(props: ChatSessionSharingProps, inline 
     }
   `;
   if (inline) {
-    return content;
+    return content();
   }
   return html`
     ${renderChatSessionPublicIndicator(props)}
@@ -395,7 +396,7 @@ export function renderChatSessionSharing(props: ChatSessionSharingProps, inline 
       >
         ${sharingIcon(visibility)}<span>${t("chat.sessionSharing.share")}</span>
       </button>
-      ${content}
+      ${lazyDropdownContent(content)}
     </wa-dropdown>
   `;
 }
