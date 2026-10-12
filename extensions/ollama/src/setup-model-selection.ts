@@ -1,7 +1,6 @@
-import { getOllamaLatestDedupeKey } from "./model-id.js";
-export { findAvailableOllamaModelName } from "./model-id.js";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { selectPreferredLocalModelId } from "openclaw/plugin-sdk/provider-model-shared";
+import { getOllamaLatestDedupeKey } from "./model-id.js";
 import {
   buildOllamaModelDefinition,
   enrichOllamaModelsWithContext,
@@ -14,6 +13,8 @@ import {
   resolveOllamaApiBase,
   type OllamaModelWithContext,
 } from "./provider-models.js";
+
+export { findAvailableOllamaModelName } from "./model-id.js";
 
 const OLLAMA_CONTEXT_ENRICH_LIMIT = 200;
 const OLLAMA_TOOLS_SCAN_CONCURRENCY = 8;

@@ -30,8 +30,7 @@ import {
   prepareLmstudioModelForInference,
   type LmstudioPreparedModel,
 } from "./models.fetch.js";
-import { normalizeLmstudioModelKey } from "./models.js";
-import { resolveLmstudioInferenceBase } from "./models.js";
+import { normalizeLmstudioModelKey, resolveLmstudioInferenceBase } from "./models.js";
 import { resolveLmstudioProviderHeaders, resolveLmstudioRuntimeApiKey } from "./runtime.js";
 
 const log = createSubsystemLogger("extensions/lmstudio/stream");
