@@ -115,40 +115,36 @@ describe("onepassword list with SQLite grants", () => {
     expect(getItem).not.toHaveBeenCalled();
   });
 
-  it.each(["selected", "unrelated"])(
-    "validates %s corrupt JSON before caching grants",
-    async (corrupt) => {
-      const { db } = openOpenClawStateDatabase({ env });
-      const insert = db.prepare(
-        "INSERT INTO plugin_state_entries (plugin_id, namespace, entry_key, value_json, created_at, expires_at) VALUES ('onepassword', 'grants', ?, ?, ?, NULL)",
-      );
-      // Seed corruption before any keyed-store write receipt can cache valid values.
-      insert.run(
-        grantKey(invocation.agentId, "selected"),
-        corrupt === "selected" ? "{" : JSON.stringify(grant("selected")),
-        NOW,
-      );
-      insert.run(
-        "unrelated",
-        corrupt === "unrelated" ? "{" : JSON.stringify(grant("unrelated", "other")),
-        NOW,
-      );
-      await closeOpenClawStateDatabaseAsync();
-      const grants = openGrants();
-      expect((await setup(["selected"], grants).list()).details).toMatchObject(
-        corrupt === "selected"
-          ? { ok: false, error: { code: "PLUGIN_STATE_CORRUPT" } }
-          : { ok: true, items: [{ slug: "selected", standingGrantActive: true }] },
-      );
-      const { lookupMany: _lookupMany, ...olderStore } = grants;
-      expect((await setup(["selected"], olderStore).list()).details).toMatchObject({
+  it.each([false, true])("validates stored corruption (selected: %s)", async (selected) => {
+    const grants = openGrants();
+    const key = grantKey(invocation.agentId, "selected");
+    const { db } = openOpenClawStateDatabase({ env });
+    // Seed malformed storage before reads or writes can publish a cached postimage.
+    const insert = db.prepare(
+      "INSERT INTO plugin_state_entries (plugin_id, namespace, entry_key, value_json, created_at, expires_at) VALUES ('onepassword', 'grants', ?, ?, ?, NULL)",
+    );
+    insert.run(key, selected ? "{" : JSON.stringify(grant("selected")), NOW);
+    insert.run("unrelated", "{", NOW);
+    if (selected) {
+      expect((await setup(["selected"], grants).list()).details).toMatchObject({
         ok: false,
         error: { code: "PLUGIN_STATE_CORRUPT" },
       });
-    },
-  );
+      return;
+    }
+    expect((await setup(["selected"], grants).list()).details).toMatchObject({
+      ok: true,
+      items: [{ slug: "selected", standingGrantActive: true }],
+    });
+    const { lookupMany: _lookupMany, ...olderStore } = grants;
+    expect((await setup(["selected"], olderStore).list()).details).toMatchObject({
+      ok: false,
+      error: { code: "PLUGIN_STATE_CORRUPT" },
+    });
+  });
 
   it("treats null and expired rows as inactive without changing stored rows", async () => {
+    const grants = openGrants();
     const { db } = openOpenClawStateDatabase({ env });
     const insert = db.prepare(
       "INSERT INTO plugin_state_entries (plugin_id, namespace, entry_key, value_json, created_at, expires_at) VALUES ('onepassword', 'grants', ?, ?, ?, ?)",
@@ -157,12 +153,11 @@ describe("onepassword list with SQLite grants", () => {
     insert.run(
       grantKey(invocation.agentId, "expired-row"),
       JSON.stringify(grant("expired-row")),
-      NOW,
+      NOW - 1,
       NOW,
     );
-    const before = db.prepare("SELECT * FROM plugin_state_entries ORDER BY entry_key").all();
-    await closeOpenClawStateDatabaseAsync();
-    const grants = openGrants();
+    const rows = () => db.prepare("SELECT * FROM plugin_state_entries ORDER BY entry_key").all();
+    const before = rows();
     expect((await setup(["null-value", "expired-row"], grants).list()).details).toMatchObject({
       ok: true,
       items: [
@@ -170,11 +165,7 @@ describe("onepassword list with SQLite grants", () => {
         { slug: "null-value", standingGrantActive: false },
       ],
     });
-    await closeOpenClawStateDatabaseAsync();
-    const { db: reopened } = openOpenClawStateDatabase({ env });
-    expect(reopened.prepare("SELECT * FROM plugin_state_entries ORDER BY entry_key").all()).toEqual(
-      before,
-    );
+    expect(rows()).toEqual(before);
   });
 
   it("skips grant reads without an agent and never retries a rejected bulk read", async () => {
