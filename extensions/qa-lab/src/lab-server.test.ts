@@ -13,10 +13,11 @@ import {
   withinTest,
 } from "openclaw/plugin-sdk/test-fixtures";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { postLabJson, writeQaLabSuiteResultFixture } from "./lab-server-suite.test-support.js";
+import { writeQaLabSuiteResultFixture } from "./lab-server-suite.test-support.js";
 import { resolveUiAssetVersion } from "./lab-server-ui.js";
 import { startQaLabServer, type QaLabServerStartParams } from "./lab-server.js";
 import * as runConfig from "./run-config.js";
+import { postLabJson } from "./test-support/lab-http.js";
 
 const qaChannelMock = vi.hoisted(() => ({
   resolveAccount: vi.fn(),

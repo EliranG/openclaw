@@ -1,10 +1,11 @@
 import { useAutoCleanupTempDirTracker } from "openclaw/plugin-sdk/test-env";
 import { withinTest } from "openclaw/plugin-sdk/test-fixtures";
 import { afterEach, expect, it, vi } from "vitest";
-import { postLabJson, writeQaLabSuiteResultFixture } from "./lab-server-suite.test-support.js";
+import { writeQaLabSuiteResultFixture } from "./lab-server-suite.test-support.js";
 import { startQaLabServer } from "./lab-server.js";
 import { loadQaRunnerModelOptions } from "./model-catalog.runtime.js";
 import * as suiteSummary from "./suite-summary.js";
+import { postLabJson } from "./test-support/lab-http.js";
 
 const suiteLaunchMock = vi.hoisted(() => ({ runQaSuite: vi.fn() }));
 
