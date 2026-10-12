@@ -39,7 +39,6 @@ import {
   requesterWakeDriver,
   observeRequesterOutcomePublication,
   admitCompletionFixtureDatabase,
-  readCompletionSystemEvents,
   seedSubagentCompletionDelivery,
   seedSubagentCompletionOwner,
 } from "./subagent-completion-admission.test-helpers.js";
