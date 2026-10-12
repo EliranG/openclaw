@@ -18,7 +18,10 @@ export type ChatActivityHeadlineProps = {
 
 /** One disclosure owns its readable cadence; fast calls replace pending copy, not a queue. */
 export function ChatActivityHeadline(props: ChatActivityHeadlineProps) {
-  const [shown, setShown] = createSignal<ActivityHeadline>();
+  // Retained Lit ranges can initialize this presentation state during their parent's commit.
+  const [shown, setShown] = createSignal<ActivityHeadline | undefined>(undefined, {
+    ownedWrite: true,
+  });
   const presented = useContext(SolidContentPresentation);
   let scope: string | undefined;
   let wasPresented = true;

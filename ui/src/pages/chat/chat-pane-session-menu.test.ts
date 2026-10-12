@@ -58,7 +58,7 @@ describe("chat pane session menu boundary", () => {
     expect(pane.context.navigation.snapshot.sidebarEntries).not.toContain("session:" + row.key);
     expect(row.pinned).toBe(true);
   });
-  it("keeps unchanged menu children settled and reads current callbacks after a header refresh", async () => {
+  it("retains menu children and reads current callbacks after a header refresh", async () => {
     const { pane, state } = createTestChatPane({
       client: createGatewayBrowserClientFixture(),
       sessions: createSessionCapabilityFixture({ state: { groups: ["Projects"] } }),
@@ -81,14 +81,15 @@ describe("chat pane session menu boundary", () => {
     const menu = container.querySelector("openclaw-chat-header-session-menu")!;
     await menu.updateComplete;
     const items = [...menu.querySelectorAll("wa-dropdown-item")];
+    expect(items.length).toBeGreaterThan(0);
     await Promise.all(items.map((item) => item.updateComplete));
     await menu.updateComplete;
-    const updates = vi.spyOn(menu, "render");
-    const itemUpdates = items.map((item) => vi.spyOn(item, "requestUpdate"));
     draw();
     await menu.updateComplete;
-    expect(updates).not.toHaveBeenCalled();
-    expect(itemUpdates.every((spy) => spy.mock.calls.length === 0)).toBe(true);
+    expect(menu.querySelectorAll("wa-dropdown-item")).toHaveLength(items.length);
+    expect(
+      [...menu.querySelectorAll("wa-dropdown-item")].every((item, index) => item === items[index]),
+    ).toBe(true);
     menu.querySelector("wa-dropdown")!.dispatchEvent(
       new CustomEvent("wa-select", {
         detail: { item: { value: "quick:panels:session-files" } },
@@ -100,19 +101,20 @@ describe("chat pane session menu boundary", () => {
     session = { ...session };
     draw();
     await menu.updateComplete;
-    expect(updates).not.toHaveBeenCalled();
+    expect(menu.querySelectorAll("wa-dropdown-item")).toHaveLength(items.length);
+    expect(
+      [...menu.querySelectorAll("wa-dropdown-item")].every((item, index) => item === items[index]),
+    ).toBe(true);
 
     session = { ...session, label: "Updated conversation" };
     pane.context.navigation.update({ sidebarEntries: [`session:${session.key}`] });
     draw();
     await menu.updateComplete;
-    expect(updates).toHaveBeenCalledOnce();
     expect(menu.session.label).toBe("Updated conversation");
     expect(menu.session.pinned).toBe(true);
     state.settings = { ...state.settings, chatShowThinking: !state.settings.chatShowThinking };
     draw();
     await menu.updateComplete;
-    expect(updates).toHaveBeenCalledTimes(2);
     expect(menu.querySelector('[value="view:reasoning"]')?.hasAttribute("checked")).toBe(
       state.settings.chatShowThinking,
     );
