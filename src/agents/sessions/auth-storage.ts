@@ -40,10 +40,8 @@ import {
   createAuthProfileStoreReadScopeAsync,
   saveAuthProfileStoreWithPreparedOwner,
 } from "../auth-profiles/store-runtime.js";
-import {
-  publishAuthProfileStoreUpdate,
-  runAuthProfileStoreUpdate,
-} from "../auth-profiles/store-update.js";
+import { publishAuthProfileStoreUpdate } from "../auth-profiles/store-update-publication.js";
+import { runAuthProfileStoreUpdate } from "../auth-profiles/store-update.js";
 import type {
   AuthProfileCredentialSource,
   AuthProfileStore,
