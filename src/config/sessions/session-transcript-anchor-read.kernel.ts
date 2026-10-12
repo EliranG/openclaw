@@ -26,10 +26,7 @@ import {
   readTranscriptHeaderFromDatabase,
 } from "./session-accessor.sqlite-transcript-metadata-read.js";
 import { readSessionTranscriptWatermarkInDatabase } from "./session-accessor.sqlite-transcript-watermark.js";
-import type {
-  SessionExactEntriesWorkerRequest,
-  SessionExactEntriesWorkerResult,
-} from "./session-entry-read.types.js";
+import type { SessionEntrySummary } from "./session-accessor.types.js";
 import type {
   SessionTranscriptAnchorEntry,
   SessionTranscriptAnchorFacts,
@@ -66,9 +63,15 @@ type AnchorMessageReader = (projection: CurrentTranscriptProjection, entryId: st
 
 export function readSessionEntryTranscriptFacts(
   database: Pick<OpenClawAgentDatabase, "agentId" | "db" | "path">,
-  request: Pick<SessionExactEntriesWorkerRequest, "transcript" | "env">,
-  entries: SessionExactEntriesWorkerResult["entries"],
-): Pick<SessionExactEntriesWorkerResult, "transcript"> {
+  request: {
+    transcript?: Omit<SessionTranscriptAnchorSelection, "afterSeq" | "includeMessagesForRunId"> & {
+      sessionKey: string;
+      agentId?: string;
+    };
+    env: NodeJS.ProcessEnv;
+  },
+  entries: readonly SessionEntrySummary[],
+): { transcript?: SessionTranscriptAnchorFacts } {
   const selection = request.transcript;
   if (!selection) {
     return {};
