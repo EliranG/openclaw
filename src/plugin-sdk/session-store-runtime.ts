@@ -258,7 +258,7 @@ export const loadTranscriptEventsSync: (params: {
 }) => SessionStoreTranscriptEvent[] = loadAccessorTranscriptEventsSync;
 
 /** @deprecated Use readTranscriptStatsAsync; removed in the next Plugin SDK major. */
-export function readTranscriptStatsSync(params: {
+function readSessionStoreTranscriptStatsSync(params: {
   agentId?: string;
   env?: NodeJS.ProcessEnv;
   sessionId: string;
@@ -277,8 +277,11 @@ export function readTranscriptStatsSync(params: {
 
 /** Reads transcript statistics through the existing session worker. */
 export const readTranscriptStatsAsync: (
-  params: Parameters<typeof readTranscriptStatsSync>[0],
-) => Promise<ReturnType<typeof readTranscriptStatsSync>> = readAccessorTranscriptStatsAsync;
+  params: Parameters<typeof readSessionStoreTranscriptStatsSync>[0],
+) => Promise<ReturnType<typeof readSessionStoreTranscriptStatsSync>> =
+  readAccessorTranscriptStatsAsync;
+
+export { readSessionStoreTranscriptStatsSync as readTranscriptStatsSync };
 
 /** Resolves the persisted session key for one SQLite transcript identity. */
 export { resolveTranscriptSessionKeyBySessionId } from "../config/sessions/session-accessor.js";

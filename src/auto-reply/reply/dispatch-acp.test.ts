@@ -904,6 +904,13 @@ describe("tryDispatchAcpReplyCore", () => {
         storePath: path.join(state.sessionsDir("codex-acp"), "sessions.json"),
       };
       await upsertSessionEntryCore(target, { sessionId: target.sessionId, updatedAt: 1 });
+      managerMocks.resolveSessionAsync.mockResolvedValueOnce({
+        kind: "ready",
+        sessionKey,
+        agentId: target.agentId,
+        entry: { sessionId: target.sessionId, updatedAt: 1 },
+        meta: createAcpSessionMeta(),
+      });
       const text = "Completed output awaiting transcript persistence.";
       mockVisibleTextTurn(text);
       const controller = new AbortController();

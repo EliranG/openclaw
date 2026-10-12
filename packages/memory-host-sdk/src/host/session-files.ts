@@ -529,12 +529,13 @@ export function statSessionEntrySync(
 export async function statSessionEntry(
   absPath: string,
   opts: BuildSessionEntryOptions = {},
+  transcriptStats?: ReturnType<typeof readTranscriptStatsSync>,
 ): Promise<SessionFileState | null> {
   const identity = resolveBuildSessionSqliteIdentity(absPath, opts);
   if (!identity) {
     return statSessionEntrySync(absPath, opts);
   }
-  const stats = opts.transcriptStats ?? (await readTranscriptStatsAsync(identity));
+  const stats = transcriptStats ?? (await readTranscriptStatsAsync(identity));
   return sqliteSessionFileState(absPath, identity, stats, opts.updatedAtMs);
 }
 

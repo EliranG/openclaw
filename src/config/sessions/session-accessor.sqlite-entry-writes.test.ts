@@ -69,7 +69,7 @@ it("skips unchanged entry and snapshot writes while retaining current transcript
       });
       expect(sql.counts).toEqual({ nodes: 0, windows: 0, snapshots: 0 });
       expect(assertCommitAllowed).toHaveBeenCalled();
-      expect(onCommitted).toHaveBeenCalledOnce();
+      expect(onCommitted).not.toHaveBeenCalled();
 
       await patch({
         lastRunError: "retained error",

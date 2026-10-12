@@ -49,6 +49,7 @@ const cleanupRecord = {
 vi.mock("../../config/sessions/session-accessor.entry.js", () => ({
   readResolvedSessionEntriesInWorker: mocks.readResolvedSessionEntriesInWorker,
 }));
+// mock-isolation: Keep placement ownership synthetic while exercising real worktree policy.
 vi.mock("../../gateway/session-worker-placement-context.js", () => ({
   resolveSessionWorkerPlacementContext: () => ({
     workerSessionPlacementService: {

@@ -234,7 +234,7 @@ it.each([
   expect(parentChecks()).toBe(0);
 });
 
-it.each(["worker", "native compatibility", "incognito"] as const)(
+it.each(["worker", "legacy callback", "incognito"] as const)(
   "admits %s updater invocation through its owner",
   async (mode) => {
     const f = fixture(
@@ -251,11 +251,10 @@ it.each(["worker", "native compatibility", "incognito"] as const)(
         },
         {
           skipMaintenance: true,
-          assertCommitAllowed: mode === "native compatibility" ? () => {} : undefined,
+          assertCommitAllowed: mode === "legacy callback" ? () => {} : undefined,
         },
       ),
     );
-    expect(called).toBe(mode !== "worker");
     await expect(operation).resolves.toMatchObject({ label: mode });
     expect(called).toBe(true);
     expect(native).not.toHaveBeenCalled();

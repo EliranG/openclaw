@@ -191,7 +191,8 @@ const defaultPublicDeprecatedExportsByEntrypointBudget = Object.freeze({
   "security-runtime": 1,
   // +2: approved released upstream-link writes retained during worker migration.
   "session-catalog": 2,
-  "session-store-runtime": 7,
+  // +1: readTranscriptStatsSync remains while plugins adopt readTranscriptStatsAsync.
+  "session-store-runtime": 8,
   // +2: shipped Slack and Discord setup helpers retained through their package migration window.
   "setup-runtime": 2,
   "reply-history": 6,
@@ -239,7 +240,9 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +7: approved async session, command-menu, model-override, TTS-path, and list replacements.
       // +1: preview adapters strip only normalization-owned response decoration.
       // +1: shared stale-read cache replaces board, preview, search, and credential cache policies.
-      3696,
+      // +2: approved readTranscriptStatsAsync and PreparedAgentRunStart replacements;
+      // the released synchronous stats reader and onAgentRunStart callback remain compatible.
+      3698,
       env,
     ),
     publicFunctionExports: readPluginSdkSurfaceBudgetEnv(
@@ -264,7 +267,8 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +7: the same session, command-menu, model-override, TTS-path, and list replacements.
       // +1: stripReplyPayloadResponsePrefix preserves durable text while assembling previews.
       // +1: the same bounded stale-read cache factory on collection-runtime.
-      2157,
+      // +1: readTranscriptStatsAsync replaces the retained synchronous stats reader.
+      2158,
       env,
     ),
     publicDeprecatedExports: readPluginSdkSurfaceBudgetEnv(
@@ -277,7 +281,8 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +3: released synchronous skill-command list helpers during async migration.
       // +15: retained synchronous auth, model, and TTS compatibility exports.
       // +7: retained synchronous session, command-menu, model-override, TTS-path, and list exports.
-      183,
+      // +1: readTranscriptStatsSync remains until the next Plugin SDK major.
+      184,
       env,
     ),
     publicWildcardReexports: readPluginSdkSurfaceBudgetEnv(
