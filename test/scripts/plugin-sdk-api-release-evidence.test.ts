@@ -167,7 +167,11 @@ describe("Plugin SDK API release evidence", () => {
     const beta = evidence([{ declaration: "beta" }]);
     const latest = evidence([{ declaration: "latest" }]);
     const logical = createPluginSdkApiReleaseEvidenceSet({ beta, latest });
-    logical.diffs[latest.digest].exports.push({ declaration: "tampered unselected comparison" });
+    const latestDiff = logical.diffs[latest.digest];
+    if (!latestDiff) {
+      throw new Error("Missing latest comparison fixture");
+    }
+    latestDiff.exports.push({ declaration: "tampered unselected comparison" });
     expect(() =>
       selectPluginSdkApiReleaseEvidence({
         evidence: encodePluginSdkApiArtifact(logical),
