@@ -33,6 +33,41 @@ export function serverUiPrefProvenanceHint(provenance: ServerUiPrefProvenance): 
   }
   return t("configView.syncedHint");
 }
+type LocalToggle =
+  | "chatShowTaskProgress"
+  | "chatCollapseTaskProgress"
+  | "composerHoldToRecord"
+  | "sidebarLiveActivity"
+  | "sessionDeleteConfirm";
+
+function LocalToggleRow(props: {
+  config: ConfigProps;
+  setting: LocalToggle;
+  title: string;
+  hint: string;
+  disabled?: boolean;
+}) {
+  return (
+    <SettingsToggleRow
+      title={t(props.title)}
+      description={
+        <>
+          {t(props.hint)}
+          <br />
+          <SettingsDefaultDescription
+            value={t(UI_APPEARANCE_DEFAULTS[props.setting] ? "common.enabled" : "common.disabled")}
+            overridden={props.config[props.setting] !== UI_APPEARANCE_DEFAULTS[props.setting]}
+          />{" "}
+          {t("quickSettings.personal.browserOnly")}
+        </>
+      }
+      checked={props.config[props.setting]}
+      onChange={(enabled) => props.config.onAppearanceChange({ [props.setting]: enabled })}
+      disabled={props.disabled}
+    />
+  );
+}
+
 export function LanguageSection(props: ConfigProps) {
   const defaultDescription = (
     <SettingsDefaultDescription
@@ -213,26 +248,7 @@ export function ChatPreferencesSection(props: ConfigProps) {
       overridden={props.catalogOpenTarget !== UI_APPEARANCE_DEFAULTS.catalogOpenTarget}
     />
   );
-  const holdToRecordDefaultDescription = (
-    <SettingsDefaultDescription
-      value={t("common.enabled")}
-      overridden={props.composerHoldToRecord !== UI_APPEARANCE_DEFAULTS.composerHoldToRecord}
-    />
-  );
-  const showTaskProgressDefaultDescription = (
-    <SettingsDefaultDescription
-      value={t("common.enabled")}
-      overridden={props.chatShowTaskProgress !== UI_APPEARANCE_DEFAULTS.chatShowTaskProgress}
-    />
-  );
-  const collapseTaskProgressDefaultDescription = (
-    <SettingsDefaultDescription
-      value={t("common.disabled")}
-      overridden={
-        props.chatCollapseTaskProgress !== UI_APPEARANCE_DEFAULTS.chatCollapseTaskProgress
-      }
-    />
-  );
+
   return (
     <>
       <section id={APPEARANCE_SETTINGS_TARGET_IDS.chat} class="settings-section">
@@ -279,39 +295,19 @@ export function ChatPreferencesSection(props: ConfigProps) {
             />
           }
           {
-            <SettingsToggleRow
-              title={t("configView.chatPrefs.showTaskProgress")}
-              description={
-                <>
-                  {t("configView.chatPrefs.showTaskProgressHint")}
-                  <br />
-                  {showTaskProgressDefaultDescription} {t("quickSettings.personal.browserOnly")}
-                </>
-              }
-              checked={props.chatShowTaskProgress}
-              onChange={(enabled) =>
-                props.onAppearanceChange({
-                  chatShowTaskProgress: enabled,
-                })
-              }
+            <LocalToggleRow
+              config={props}
+              setting="chatShowTaskProgress"
+              title="configView.chatPrefs.showTaskProgress"
+              hint="configView.chatPrefs.showTaskProgressHint"
             />
           }
           {
-            <SettingsToggleRow
-              title={t("configView.chatPrefs.collapseTaskProgress")}
-              description={
-                <>
-                  {t("configView.chatPrefs.collapseTaskProgressHint")}
-                  <br />
-                  {collapseTaskProgressDefaultDescription} {t("quickSettings.personal.browserOnly")}
-                </>
-              }
-              checked={props.chatCollapseTaskProgress}
-              onChange={(enabled) =>
-                props.onAppearanceChange({
-                  chatCollapseTaskProgress: enabled,
-                })
-              }
+            <LocalToggleRow
+              config={props}
+              setting="chatCollapseTaskProgress"
+              title="configView.chatPrefs.collapseTaskProgress"
+              hint="configView.chatPrefs.collapseTaskProgressHint"
               disabled={!props.chatShowTaskProgress}
             />
           }
@@ -441,21 +437,11 @@ export function ChatPreferencesSection(props: ConfigProps) {
           {<MediaDeviceField config={props} kind="microphone" />}
           {<MediaDeviceField config={props} kind="camera" />}
           {
-            <SettingsToggleRow
-              title={t("chat.composer.holdToRecordSetting")}
-              description={
-                <>
-                  {t("chat.composer.holdToRecordSettingDescription")}
-                  <br />
-                  {holdToRecordDefaultDescription} {t("quickSettings.personal.browserOnly")}
-                </>
-              }
-              checked={props.composerHoldToRecord}
-              onChange={(enabled) =>
-                props.onAppearanceChange({
-                  composerHoldToRecord: enabled,
-                })
-              }
+            <LocalToggleRow
+              config={props}
+              setting="composerHoldToRecord"
+              title="chat.composer.holdToRecordSetting"
+              hint="chat.composer.holdToRecordSettingDescription"
             />
           }
         </div>
@@ -465,21 +451,10 @@ export function ChatPreferencesSection(props: ConfigProps) {
 }
 export function SidebarPreferencesSection(props: ConfigProps) {
   const hiddenCatalogIds = createMemo(() => [...props.hiddenSessionCatalogIds].toSorted());
-  const liveActivityDefaultDescription = (
-    <SettingsDefaultDescription
-      value={t("common.enabled")}
-      overridden={props.sidebarLiveActivity !== UI_APPEARANCE_DEFAULTS.sidebarLiveActivity}
-    />
-  );
+
   // The delete dialog's "Don't ask me again" writes this off; this row is where
   // the operator turns it back on, so it has to stay next to the session prefs.
-  const sessionDeleteConfirm = createMemo(() => props.sessionDeleteConfirm);
-  const deleteConfirmDefaultDescription = (
-    <SettingsDefaultDescription
-      value={t("common.enabled")}
-      overridden={sessionDeleteConfirm() !== UI_APPEARANCE_DEFAULTS.sessionDeleteConfirm}
-    />
-  );
+
   return (
     <>
       <section id={APPEARANCE_SETTINGS_TARGET_IDS.sidebar} class="settings-section">
@@ -487,39 +462,19 @@ export function SidebarPreferencesSection(props: ConfigProps) {
         <p class="settings-section__desc">{t("configView.sidebarPrefs.hint")}</p>
         <div class="settings-group">
           {
-            <SettingsToggleRow
-              title={t("configView.sidebarPrefs.liveActivity")}
-              description={
-                <>
-                  {t("configView.sidebarPrefs.liveActivityHint")}
-                  <br />
-                  {liveActivityDefaultDescription} {t("quickSettings.personal.browserOnly")}
-                </>
-              }
-              checked={props.sidebarLiveActivity}
-              onChange={(enabled) =>
-                props.onAppearanceChange({
-                  sidebarLiveActivity: enabled,
-                })
-              }
+            <LocalToggleRow
+              config={props}
+              setting="sidebarLiveActivity"
+              title="configView.sidebarPrefs.liveActivity"
+              hint="configView.sidebarPrefs.liveActivityHint"
             />
           }
           {
-            <SettingsToggleRow
-              title={t("configView.sidebarPrefs.deleteConfirm")}
-              description={
-                <>
-                  {t("configView.sidebarPrefs.deleteConfirmHint")}
-                  <br />
-                  {deleteConfirmDefaultDescription} {t("quickSettings.personal.browserOnly")}
-                </>
-              }
-              checked={sessionDeleteConfirm()}
-              onChange={(enabled) =>
-                props.onAppearanceChange({
-                  sessionDeleteConfirm: enabled,
-                })
-              }
+            <LocalToggleRow
+              config={props}
+              setting="sessionDeleteConfirm"
+              title="configView.sidebarPrefs.deleteConfirm"
+              hint="configView.sidebarPrefs.deleteConfirmHint"
             />
           }
         </div>
