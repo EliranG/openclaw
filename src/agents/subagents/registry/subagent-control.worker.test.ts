@@ -471,7 +471,6 @@ it.each([
     }
     await fixture.settle();
     registryState.clearSubagentRunsReadCacheForTest();
-    const beforeStop = structuredClone(subagentRuns.get(runId));
     // Warm initialization ends here. Count all eight host APIs through Stop and
     // its owned settlement; independent durable readbacks begin after restore.
     const sql = observeParentSqlite();
@@ -499,11 +498,8 @@ it.each([
       const result = await cancellation;
       expect(result.details, JSON.stringify(result.details)).toMatchObject({
         found: true,
-        killed: !earlierSuccess && !missingStore,
+        killed: !earlierSuccess,
         runId,
-        ...(missingStore
-          ? { error: expect.stringContaining("original session incarnation is unresolved") }
-          : {}),
         ...(earlierSuccess ? { targetState: { task: { status: "succeeded" } } } : {}),
       });
       // Include required native finalization work, including tails the baseline fails to await.
@@ -531,13 +527,10 @@ it.each([
     try {
       const persisted = loadSubagentRegistryFromSqlite();
       if (missingStore) {
-        expect(persisted.get(runId)).toEqual(beforeStop);
-        expect(persisted.get(siblingId)?.execution.endedAt).toBeUndefined();
-        expect(handles.find(({ id }) => id === siblingId)?.abort).not.toHaveBeenCalled();
-        unexpectedHold = holdQueuedSwarmRun(runId);
-        expect(unexpectedHold).toBeDefined();
-        expect(counts).toEqual(emptySqliteCounts());
-        return;
+        expect(persisted.get(runId)?.childSessionIdentity).toBeUndefined();
+        expect(persisted.get(runId)).toMatchObject({
+          execution: { suppressSessionEffects: true },
+        });
       }
       expect(persisted.get(runId)).toMatchObject({
         execution: {
